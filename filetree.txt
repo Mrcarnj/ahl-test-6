@@ -1,0 +1,19 @@
+src/
+├─ app/
+│  ├─ (auth)/
+│  │  └─ login.tsx
+│  ├─ (protected)/
+│  │  ├─ _layout.tsx
+│  │  ├─ home/
+│  │  │  ├─ [id].tsx
+│  │  │  ├─ _layout.tsx
+│  │  │  └─ index.tsx
+│  │  └─ profile.tsx
+│  ├─ _layout.tsx
+│  └─ index.tsx
+├─ components/
+├─ lib/
+│  └─ supabase.ts
+└─ providers/
+   ├─ AuthProvider.tsx
+   └─ RosterProvider.tsx

@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useRoster } from "./RosterProvider";
+import { format, parse } from "date-fns";
 
 // Import or define interfaces
 export interface Roster {
@@ -160,6 +161,49 @@ export const useSchedule = () => {
         throw new Error('useSchedule must be used within a ScheduleProvider');
     }
     return context;
+};
+
+// Helper Functions
+export const formatGameDate = (dateString: string) => {
+    const date = parse(dateString, 'yyyy-MM-dd', new Date());
+    return format(date, 'EEE. MMMM d, yyyy');
+};
+
+export const formatGameTime = (timetz: string, gameDate: string) => {
+    const [time, offset] = timetz.split(/[+-]/);
+    const [hours, minutes] = time.split(':');
+    
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+
+    const date = parse(gameDate, 'yyyy-MM-dd', new Date());
+    const isDST = (() => {
+        const year = date.getFullYear();
+        const dstStart = new Date(year, 2, year === 2024 ? 10 : 9);
+        const dstEnd = new Date(year, 10, year === 2024 ? 3 : 2);
+        return date >= dstStart && date < dstEnd;
+    })();
+    
+    const getTimezoneAbbr = (offset: string) => {
+        const gmtOffset = timetz.includes('+') ? `+${offset}` : `-${offset}`;
+        switch (gmtOffset) {
+            case '-04':
+                return isDST ? 'EDT' : 'EST';
+            case '-05':
+                return isDST ? 'EDT' : 'EST';
+            case '-06':
+                return isDST ? 'CDT' : 'CST';
+            case '-07':
+                return isDST ? 'MDT' : 'MST';
+            case '-08':
+                return isDST ? 'PDT' : 'PST';
+            default:
+                return `GMT${gmtOffset}`;
+        }
+    };
+
+    return `${hour12}:${minutes} ${ampm} ${getTimezoneAbbr(offset)}`;
 };
 
 // Helper function to format game date and time

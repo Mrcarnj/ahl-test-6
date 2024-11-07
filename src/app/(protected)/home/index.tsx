@@ -1,12 +1,15 @@
-import { View, Text, StyleSheet, ScrollView, Button, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity } from 'react-native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { useSchedule } from '@/src/providers/ScheduleProvider';
+import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { format, parse, isBefore, isToday as checkIsToday, differenceInDays, addDays } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 
 const TestScheduleScreen = () => {
+    const router = useRouter();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
 
@@ -15,6 +18,13 @@ const TestScheduleScreen = () => {
         await refreshSchedule();
         setRefreshing(false);
     }, [refreshSchedule]);
+
+    const handleGamePress = (gameId: string) => {
+        router.push({
+            pathname: "/(protected)/home/[gameId]",
+            params: { gameId }
+        });
+    };
 
     const todayEvent = useMemo(() => {
         const today = format(new Date(), 'yyyy-MM-dd');
@@ -37,6 +47,11 @@ const TestScheduleScreen = () => {
             })
             .slice(0, 3);
     }, [myGames]);
+   
+    const formatGameDate = (dateString: string) => {
+        const date = parse(dateString, 'yyyy-MM-dd', new Date());
+        return format(date, 'EEEE, MMMM d, yyyy');
+    };
 
     const getNextExpenseReportDue = useCallback(() => {
         const startDate = new Date(2024, 9, 21);
@@ -111,7 +126,7 @@ const TestScheduleScreen = () => {
                     <Text style={styles.sectionTitle}>Today</Text>
                     {todayEvent ? (
                         <View style={styles.gameCard}>
-                            <Text style={styles.gameId}>Game #{todayEvent.gameid}</Text>
+                            <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
                             <Text style={styles.matchup}>
                                 {todayEvent.awayteam} @ {todayEvent.hometeam}
                             </Text>
@@ -152,20 +167,31 @@ const TestScheduleScreen = () => {
                 <View style={styles.separator} />
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Upcoming Games</Text>
-                    {upcomingEvents.length > 0 ? (
-                        upcomingEvents.map(game => (
-                            <View key={game.id} style={styles.gameCard}>
-                                <Text style={styles.gameId}>Game #{game.gameid}</Text>
-                                <Text style={styles.matchup}>
-                                    {game.awayteam} @ {game.hometeam}
-                                </Text>
-                            </View>
-                        ))
-                    ) : (
-                        <Text style={styles.noGamesText}>No upcoming games</Text>
-                    )}
-                </View>
+            <Text style={styles.sectionTitle}>Upcoming Games</Text>
+            {upcomingEvents.length > 0 ? (
+                upcomingEvents.map(game => (
+                    <TouchableOpacity 
+                        key={game.id} 
+                        style={styles.gameCard}
+                        onPress={() => handleGamePress(game.gameid)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.gameContent}>
+                            <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
+                            <Text style={styles.matchup}>
+                                {game.awayteam} @ {game.hometeam}
+                            </Text>
+                            <Text style={styles.gameDetails}>
+                                {formatGameTime(game.gametime, game.gamedate)} // {game.homeTeamData?.arenaname}
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                    </TouchableOpacity>
+                ))
+            ) : (
+                <Text style={styles.noGamesText}>No upcoming games</Text>
+            )}
+        </View>
 
                 <View style={styles.section}>
                     <Button title="Sign Out" onPress={() => supabase.auth.signOut()} />
@@ -194,15 +220,23 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 8,
         marginBottom: 12,
+        flexDirection: 'row',  // Add this to align content and arrow
+        alignItems: 'center',  // Add this to center vertically
+        justifyContent: 'space-between', // Add this to put arrow on right
+    },
+    gameContent: {
+        flex: 1,  // Add this to take up remaining space
     },
     gameId: {
         fontSize: 16,
         color: '#ff6600',
         marginBottom: 4,
+        fontWeight: 'bold',
     },
     matchup: {
         fontSize: 18,
         color: '#fff',
+        padding: 2,
     },
     separator: {
         height: 1,
@@ -218,6 +252,12 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#fff',
+    },
+    gameDetails: {
+        fontSize: 14,
+        fontStyle: 'italic',
+        color: '#999',
+        paddingTop: 4,
     },
     expenseReportText: {
         fontSize: 18,

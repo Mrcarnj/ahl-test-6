@@ -14,8 +14,8 @@ const stackLayout = () => {
             headerTintColor: '#ffffff',
           }}
         />
-        {/* <Stack.Screen 
-          name="[id]" 
+        <Stack.Screen 
+          name="[gameId]" 
           options={{
             headerTitle: "Game Details",
             headerStyle: {
@@ -23,7 +23,7 @@ const stackLayout = () => {
             },
             headerTintColor: '#ffffff',
           }}
-        /> */}
+        />
     </Stack>
   );
 };

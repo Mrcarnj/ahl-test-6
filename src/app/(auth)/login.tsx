@@ -39,7 +39,13 @@ export default function Auth() {
 
   return (
     <View style={styles.container}>
-      <Image source={require('../../../assets/images/icon.png')} style={{ width: 100, height: 100, borderRadius: 25, alignItems: 'flex-start' }} />
+      <View style={styles.imageContainer}>
+        <Image 
+          source={require('../../../assets/images/icon.png')} 
+          style={styles.logo} 
+        />
+      </View>
+      <View style={styles.formContainer}>
         <TextInput 
           style={styles.inputField}
           onChangeText={(text) => setEmail(text)}
@@ -48,7 +54,8 @@ export default function Auth() {
           placeholder="email@address.com"
           autoCapitalize={'none'}
         />
-        <TextInput style={styles.inputField}
+        <TextInput 
+          style={styles.inputField}
           onChangeText={(text) => setPassword(text)}
           value={password}
           secureTextEntry={true}
@@ -57,9 +64,14 @@ export default function Auth() {
           autoCapitalize={'none'}
         />
 
-        <TouchableOpacity disabled={loading} onPress={() => signInWithEmail()} style={styles.button}>
-           <Text>Sign In</Text> 
-           </TouchableOpacity>
+        <TouchableOpacity 
+          disabled={loading} 
+          onPress={() => signInWithEmail()} 
+          style={styles.button}
+        >
+          <Text style={styles.buttonText}>Sign In</Text> 
+        </TouchableOpacity>
+      </View>
     </View>
   )
 }
@@ -69,6 +81,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 8,
+  },
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: 40,  // This adds space between the image and login form
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 25,
+  },
+  formContainer: {
+    width: '100%',
   },
   inputField: {
     marginVertical: 4,
@@ -83,7 +107,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff6600',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 15,
+    marginTop: 10,
     alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

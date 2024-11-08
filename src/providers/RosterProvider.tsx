@@ -19,6 +19,7 @@ type Roster = {
 
 type RosterContext = {
     roster: Roster | null;
+    allRosters: Roster[]; // Add this
     loading: boolean;
     error: string | null;
     refreshRoster: () => Promise<void>;
@@ -26,6 +27,7 @@ type RosterContext = {
 
 const RosterContext = createContext<RosterContext>({
     roster: null,
+    allRosters: [],
     loading: false,
     error: null,
     refreshRoster: async () => {},
@@ -36,29 +38,39 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const [roster, setRoster] = useState<Roster | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [allRosters, setAllRosters] = useState<Roster[]>([]); // Add this
 
     const fetchRoster = async () => {
-        setError(null);
         if (!user?.id) {
-
-        
-        return;
+            return;
         }
+
         try {
             setLoading(true);
             setError(null);
 
-            const { data, error } = await supabase
+            // First get the logged-in user's roster (keep this as it was)
+            const { data: userRosterData, error: userRosterError } = await supabase
                 .from('roster')
                 .select('*')
                 .eq('auth_id', user.id)
                 .single();
 
-            if (error) throw error;
-            setRoster(data);
+            setRoster(userRosterData);
+
+            // Then fetch all rosters in a separate query
+            const { data: allRostersData, error: allRostersError } = await supabase
+                .from('roster')
+                .select('*');
+
+            setAllRosters(allRostersData || []);
+
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'An error occurred');
+            const errorMessage = e instanceof Error ? e.message : 'An error occurred';
+            console.error('Fetch roster error:', errorMessage);
+            setError(errorMessage);
             setRoster(null);
+            setAllRosters([]);
         } finally {
             setLoading(false);
         }
@@ -69,7 +81,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         }, [user?.id]);
 
     return (
-        <RosterContext.Provider value={{ roster, loading, error, refreshRoster: fetchRoster }}>
+        <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster: fetchRoster }}>
             {children}
         </RosterContext.Provider>
     );

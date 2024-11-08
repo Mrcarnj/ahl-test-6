@@ -103,7 +103,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         city, 
                         abbreviation, 
                         logo,
-                        headcoachname
+                        headcoachname,
+                        eqname,
+                        eqphone
                     )
                 `)
                 .order('gamedate', { ascending: true })

@@ -6,12 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { Entypo, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useRoster } from '@/src/providers/RosterProvider';
 
 
 const TestScheduleScreen = () => {
     const router = useRouter();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
+    const { roster } = useRoster();
 
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
@@ -134,7 +136,7 @@ const TestScheduleScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}
-            edges={['left', 'right']}>
+            edges={['left', 'right', 'top']}>
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
@@ -147,6 +149,9 @@ const TestScheduleScreen = () => {
                     />
                 }
             >
+                <View style={styles.header}>
+                    <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
+                    </View>
                 {todayEvent && (
                 <>
                     <View style={styles.section}>
@@ -217,6 +222,13 @@ const TestScheduleScreen = () => {
                     ) : (
                         <Text style={styles.noGamesText}>No upcoming games</Text>
                     )}
+                    <TouchableOpacity
+    style={styles.gameCard}
+    onPress={() => router.push("/(protected)/home/AllGames")}
+>
+    <Text style={styles.link}>View All Games</Text>
+    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+</TouchableOpacity>
                 </View>
                 <View style={styles.separator} />
 
@@ -269,6 +281,19 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 16,
         color: '#fff',
+    },
+    header: {
+        alignItems: 'center',
+        fontSize: 20,
+        marginBottom: 16,
+    },
+    headerText: {
+        color: '#ffffff',
+        fontSize: 20,
+    },
+    headericon: {
+        color: '#ff6600',
+        fontSize: 26,
     },
     gameCard: {
         backgroundColor: '#1a1a1a',

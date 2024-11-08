@@ -75,6 +75,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(false);
         }
     };
+    
 
         useEffect(() => {
             fetchRoster();
@@ -86,5 +87,16 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         </RosterContext.Provider>
     );
 }
+
+export const getOfficialPhoto = (lastfirstfullname: string) => {
+    if (lastfirstfullname) {
+        // Simplified path - assuming logos are directly in the logos bucket
+        const formattedName = lastfirstfullname.toLowerCase();
+        const filePath = `roster/${formattedName}.png`;
+        const { data: { publicUrl } } = supabase.storage.from('headshots').getPublicUrl(filePath);
+        return publicUrl || 'https://via.placeholder.com/150';
+    }
+    return 'https://via.placeholder.com/150';
+};
 
 export const useRoster = () => useContext(RosterContext);

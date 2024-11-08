@@ -3,7 +3,7 @@ import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { useRoster } from '@/src/providers/RosterProvider';
+import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 
 const Profile = () => {
@@ -24,7 +24,7 @@ const Profile = () => {
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
                 <Image
                     source={{ 
-                        uri: roster.photo || 'https://via.placeholder.com/150'
+                        uri: getOfficialPhoto(roster.lastfirstfullname) || 'https://via.placeholder.com/150'
                     }}
                     style={styles.profileImage}
                 />

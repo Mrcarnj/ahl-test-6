@@ -1,5 +1,5 @@
 // app/(protected)/_layout.tsx
-import { router, Tabs } from "expo-router";
+import { router, Tabs, useNavigation } from "expo-router";
 import { useAuth } from "../../providers/AuthProvider";
 import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
@@ -26,32 +26,22 @@ export default function ProtectedLayout() {
           <Tabs.Screen
             name="home"
             options={{
+              headerTitle: "Home",
               tabBarLabel: "Home",
               tabBarIcon: ({ color }) => (
                 <FontAwesome name="home" size={24} color={color} />
               ),
             }}
-            listeners={{
-                tabPress: (e) => {
-                  e.preventDefault(); // Prevent default navigation
-                  router.replace("/(protected)/home"); // Reset to home index
-                },
-              }}
           />
           <Tabs.Screen
             name="calendar"
             options={{
+              headerShown: false,
               tabBarLabel: "Calendar",
               tabBarIcon: ({ color }) => (
                 <FontAwesome name="calendar" size={24} color={color} />
               ),
             }}
-            listeners={{
-                tabPress: (e) => {
-                  e.preventDefault(); // Prevent default navigation
-                  router.replace("/(protected)/"); // Reset to calendar index
-                },
-              }}
           />
           <Tabs.Screen
             name="profile"

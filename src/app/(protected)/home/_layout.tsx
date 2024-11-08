@@ -28,8 +28,9 @@ export default function HomeLayout() {
         <Stack.Screen 
           name="index" 
           options={{
-            headerShown: true,
-            headerTitle: HeaderTitle,
+            headerShown: false,
+            headerTitle: "Home",
+            headerLeft: () => null,
             headerStyle: {
               backgroundColor: '#000000',
             },
@@ -40,6 +41,19 @@ export default function HomeLayout() {
           name="[gameId]" 
           options={{
             headerTitle: "Game Details",
+            //headerBackTitle: "Home",  // This is the correct property
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#000000',
+            },
+            headerTintColor: '#ffffff',
+          }}
+        />
+        <Stack.Screen 
+          name="AllGames/index"  // This handles the AllGames route
+          options={{
+            headerTitle: "All Games",
+            headerBackTitle: "Home",  // This is the correct property
             headerShown: true,
             headerStyle: {
               backgroundColor: '#000000',
@@ -51,6 +65,7 @@ export default function HomeLayout() {
           name="rulebook" 
           options={{
             headerTitle: "Rulebook",
+            headerBackTitle: "Home",  // This is the correct property
             headerShown: true,
             headerStyle: {
               backgroundColor: '#000000',
@@ -62,6 +77,7 @@ export default function HomeLayout() {
           name="SituationBook" 
           options={{
             headerTitle: "Situation Book",
+            headerBackTitle: "Home",  // This is the correct property
             headerShown: true,
             headerStyle: {
               backgroundColor: '#000000',

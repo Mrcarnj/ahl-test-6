@@ -171,6 +171,27 @@ export const formatGameDate = (dateString: string) => {
     return format(date, 'EEE. MMMM d, yyyy');
 };
 
+// Updated getTeamLogo function
+export const getTeamLogo = (team?: Team) => {
+    if (team?.abbreviation) {
+        // Simplified path - assuming logos are directly in the logos bucket
+        const filePath = `${team.abbreviation}.png`;
+        const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(filePath);
+        return publicUrl || 'https://via.placeholder.com/150';
+    }
+    return 'https://via.placeholder.com/150';
+};
+
+export const getTeamCoach = (team?: Team) => {
+    if (team?.abbreviation) {
+        // Simplified path - assuming logos are directly in the logos bucket
+        const filePath = `headCoaches/${team.abbreviation}.png`;
+        const { data: { publicUrl } } = supabase.storage.from('headshots').getPublicUrl(filePath);
+        return publicUrl || 'https://via.placeholder.com/150';
+    }
+    return 'https://via.placeholder.com/150';
+};
+
 export const formatGameTime = (timetz: string, gameDate: string) => {
     const [time, offset] = timetz.split(/[+-]/);
     const [hours, minutes] = time.split(':');
@@ -224,6 +245,3 @@ export const getAssignmentRole = (game: Schedule, lastfirstfullname: string) => 
 };
 
 // Helper function to get team logo URL or fallback
-export const getTeamLogo = (team?: Team) => {
-    return team?.logo || '/default-team-logo.png'; // Replace with your default logo path
-};

@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking } from 'react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { format, parse, isBefore, isToday as checkIsToday, differenceInDays, addDays } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import { Entypo, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 
@@ -12,6 +12,30 @@ const TestScheduleScreen = () => {
     const router = useRouter();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
+
+    const externalLinks = [
+        { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
+        { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
+        { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
+        { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
+        { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
+    ];
+
+    const openLink = useCallback(async (link: typeof externalLinks[number]) => {
+        if (link.url) {
+            const supported = await Linking.canOpenURL(link.url);
+            if (supported) {
+                await Linking.openURL(link.url);
+            } else {
+                console.log(`Don't know how to open this URL: ${link.url}`);
+            }
+        } else if (link.screenName) {
+            router.push({ pathname: link.screenName as any });
+        }
+    }, [router]);
+
+    const ruleLinks = externalLinks.filter(link => link.screenName);
+    const externalUrlLinks = externalLinks.filter(link => link.url);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -34,7 +58,7 @@ const TestScheduleScreen = () => {
     const upcomingEvents = useMemo(() => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         return myGames
             .filter(game => {
                 const gameDate = parse(game.gamedate, 'yyyy-MM-dd', new Date());
@@ -47,7 +71,7 @@ const TestScheduleScreen = () => {
             })
             .slice(0, 3);
     }, [myGames]);
-   
+
     const formatGameDate = (dateString: string) => {
         const date = parse(dateString, 'yyyy-MM-dd', new Date());
         return format(date, 'EEEE, MMMM d, yyyy');
@@ -84,7 +108,7 @@ const TestScheduleScreen = () => {
 
     const getGamesInDateRange = useCallback((dateRange: string) => {
         if (!dateRange) return [];
-        
+
         const { rangeStartDate, rangeEndDate } = getNextExpenseReportDue();
         if (!rangeStartDate || !rangeEndDate) return [];
 
@@ -109,7 +133,8 @@ const TestScheduleScreen = () => {
 
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container}
+            edges={['left', 'right']}>
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
@@ -122,19 +147,20 @@ const TestScheduleScreen = () => {
                     />
                 }
             >
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Today</Text>
-                    {todayEvent ? (
+                {todayEvent && (
+                <>
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Today</Text>
                         <View style={styles.gameCard}>
                             <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
                             <Text style={styles.matchup}>
                                 {todayEvent.awayteam} @ {todayEvent.hometeam}
                             </Text>
                         </View>
-                    ) : (
-                        <Text style={styles.noGamesText}>No Game Today</Text>
-                    )}
-                </View>
+                    </View>
+                    <View style={styles.separator} />
+                </>
+            )}
 
                 <View style={styles.separator} />
 
@@ -167,34 +193,63 @@ const TestScheduleScreen = () => {
                 <View style={styles.separator} />
 
                 <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Games</Text>
-            {upcomingEvents.length > 0 ? (
-                upcomingEvents.map(game => (
-                    <TouchableOpacity 
-                        key={game.id} 
-                        style={styles.gameCard}
-                        onPress={() => handleGamePress(game.gameid)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.gameContent}>
-                            <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
-                            <Text style={styles.matchup}>
-                                {game.awayteam} @ {game.hometeam}
-                            </Text>
-                            <Text style={styles.gameDetails}>
-                                {formatGameTime(game.gametime, game.gamedate)} // {game.homeTeamData?.arenaname}
-                            </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                    </TouchableOpacity>
-                ))
-            ) : (
-                <Text style={styles.noGamesText}>No upcoming games</Text>
-            )}
-        </View>
+                    <Text style={styles.sectionTitle}>Upcoming Games</Text>
+                    {upcomingEvents.length > 0 ? (
+                        upcomingEvents.map(game => (
+                            <TouchableOpacity
+                                key={game.id}
+                                style={styles.gameCard}
+                                onPress={() => handleGamePress(game.gameid)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={styles.gameContent}>
+                                    <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
+                                    <Text style={styles.matchup}>
+                                        {game.awayteam} @ {game.hometeam}
+                                    </Text>
+                                    <Text style={styles.gameDetails}>
+                                        {formatGameTime(game.gametime, game.gamedate)} // {game.homeTeamData?.arenaname}
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <Text style={styles.noGamesText}>No upcoming games</Text>
+                    )}
+                </View>
+                <View style={styles.separator} />
 
                 <View style={styles.section}>
-                    <Button title="Sign Out" onPress={() => supabase.auth.signOut()} />
+                    {ruleLinks.map((link, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            onPress={() => openLink(link)}
+                            style={styles.gameCard}
+                        >
+                            <View style={styles.linkTitleContainer}>
+                                <Text style={styles.link}>{link.title}</Text>
+                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                            </View>
+                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <View style={styles.separator} />
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>External Links</Text>
+                    {externalUrlLinks.map((link, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            onPress={() => openLink(link)}
+                            style={styles.linkButton}
+                        >
+                            <Text style={styles.link}>{link.title}</Text>
+                        </TouchableOpacity>
+                    ))}
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -217,7 +272,7 @@ const styles = StyleSheet.create({
     },
     gameCard: {
         backgroundColor: '#1a1a1a',
-        padding: 16,
+        padding: 15,
         borderRadius: 8,
         marginBottom: 12,
         flexDirection: 'row',  // Add this to align content and arrow
@@ -241,7 +296,7 @@ const styles = StyleSheet.create({
     separator: {
         height: 1,
         backgroundColor: '#333',
-        marginVertical: 20,
+        marginVertical: 10,
         marginHorizontal: 16,
     },
     expenseReportContainer: {
@@ -294,6 +349,26 @@ const styles = StyleSheet.create({
     },
     contentContainer: {
         flexGrow: 1,
+    },
+    linkButton: {
+        backgroundColor: '#ff6600',
+        borderRadius: 8,
+        padding: 10,
+        marginBottom: 15,
+        alignItems: 'center',
+    },
+    link: {
+        fontSize: 15,
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    linkTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8, // Space between text and icon
+    },
+    bookIcon: {
+        marginLeft: 8, // Backup for gap if not supported
     },
 });
 

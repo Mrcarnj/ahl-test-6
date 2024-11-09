@@ -73,6 +73,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         padding: 20,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     profileImage: {
         width: 150,

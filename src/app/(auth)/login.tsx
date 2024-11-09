@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { Alert, StyleSheet, View, AppState, TextInput, Button, TouchableOpacity, Text, Image } from 'react-native'
 import { supabase } from '../../lib/supabase'
-import { Redirect } from 'expo-router'
+import { Redirect, router } from 'expo-router'
 import { useAuth } from '@/src/providers/AuthProvider'
+import { useRoster } from '@/src/providers/RosterProvider'
 
 // Tells Supabase Auth to continuously refresh the session automatically if
 // the app is in the foreground. When this is added, you will continue to receive
@@ -21,20 +22,49 @@ export default function Auth() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const { session, user } = useAuth();
-
-  if (user) {
-    return <Redirect href="../home" />;
-  }
+  const { roster } = useRoster();
 
   async function signInWithEmail() {
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    })
+    try {
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      })
 
-    if (error) Alert.alert(error.message)
-    setLoading(false)
+      if (error) {
+        Alert.alert(error.message);
+        return;
+      }
+
+      // Use the ID from the sign in response instead of the context
+      const { data: rosterData, error: rosterError } = await supabase
+        .from('roster')
+        .select('changedpassword')
+        .eq('auth_id', authData.user.id)  // Use authData.user.id here
+        .single();
+
+      if (rosterError) {
+        throw rosterError;
+      }
+
+      // Redirect based on changedpassword status
+      if (!rosterData.changedpassword) {
+        router.replace('/(auth)/changepassword');
+      } else {
+        router.replace('/(protected)/home');
+      }
+
+    } catch (error) {
+      console.log('Error details:', error); // Add this for debugging
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message || 'An unknown error occurred');
+      } else {
+        Alert.alert('Error', 'An unknown error occurred');
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

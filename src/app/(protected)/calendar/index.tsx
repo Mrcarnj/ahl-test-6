@@ -90,7 +90,7 @@ export default function CalendarScreen() {
             current={format(currentMonth, 'yyyy-MM-dd')}
             onMonthChange={onMonthChange}
             monthFormat={'MMMM yyyy'}
-            enableSwipeMonths={false}
+            enableSwipeMonths={true}
             hideExtraDays={false}
             firstDay={0}
             showFiveWeeks={true}

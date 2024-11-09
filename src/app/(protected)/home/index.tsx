@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking, Image } from 'react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { format, parse, isBefore, isToday as checkIsToday, differenceInDays, addDays } from 'date-fns';
@@ -16,8 +16,8 @@ const TestScheduleScreen = () => {
     const { roster } = useRoster();
 
     const externalLinks = [
-        { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
-        { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
+        { title: 'Rulebook *Not Working Yet*', screenName: "/(protected)/home/rulebook" },
+        { title: 'Situation Book *Not Working Yet*', screenName: "/(protected)/home/SituationBook" },
         { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
         { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
         { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
@@ -150,6 +150,10 @@ const TestScheduleScreen = () => {
                 }
             >
                 <View style={styles.header}>
+                <Image 
+          source={require('../../../../assets/images/ahlLogo.png')} 
+          style={styles.leagueLogo} 
+        />
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
                     </View>
                 {todayEvent && (
@@ -241,8 +245,8 @@ const TestScheduleScreen = () => {
                         >
                             <View style={styles.linkTitleContainer}>
                                 <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
-                                {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Rulebook *Not Working Yet*' &&   <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Situation Book *Not Working Yet*' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
                             </View>
                             <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                         </TouchableOpacity>
@@ -395,6 +399,12 @@ const styles = StyleSheet.create({
     bookIcon: {
         marginLeft: 8, // Backup for gap if not supported
     },
+    leagueLogo: {
+        width: 80,
+        height: 80,
+        resizeMode: 'contain',
+        marginBottom: 10,
+      },
 });
 
 export default TestScheduleScreen;

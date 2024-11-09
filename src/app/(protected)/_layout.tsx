@@ -44,6 +44,15 @@ export default function ProtectedLayout() {
             }}
           />
           <Tabs.Screen
+            name="roster"
+            options={{
+              tabBarLabel: "Roster",
+              tabBarIcon: ({ color }) => (
+                <FontAwesome name="users" size={24} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="profile"
             options={{
               tabBarLabel: "Profile",

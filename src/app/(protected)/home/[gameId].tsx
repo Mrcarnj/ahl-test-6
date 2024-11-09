@@ -3,7 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { format } from 'date-fns';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
 
 const gameId = () => {
     const { gameId } = useLocalSearchParams<{ gameId: string }>();
@@ -52,6 +52,18 @@ const gameId = () => {
           ]
         );
       };
+
+      const handleGroupChat = (referee1:any, referee2:any, linesperson1:any, linesperson2:any) => {
+        const phoneNumbers = [referee1, referee2, linesperson1, linesperson2]
+            .filter(number => number) // Filters out any null or undefined numbers
+            .join(',');
+    
+        if (phoneNumbers) {
+            Linking.openURL(`sms:${phoneNumbers}?body=`);
+        } else {
+            Alert.alert("No valid phone numbers available for group chat.");
+        }
+    };
 
       const handleArenaPress = (game: Schedule) => {
         // Get arena address from the homeTeamData
@@ -166,6 +178,12 @@ const gameId = () => {
                     <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)}</Text>
                 </View>
             </View>
+
+            <TouchableOpacity onPress={() => handleGroupChat(game.referee1, game.referee2, game.linesperson1, game.linesperson2)}>
+                    <Text style={styles.groupChat}>
+                        Start Group Chat <AntDesign name="message1" size={25}/>
+                    </Text>
+                </TouchableOpacity>
 
             <View style={styles.separator} />
             
@@ -440,6 +458,13 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         color: '#000000',
+    },
+    groupChat: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#ff6600',
+      textAlign: 'center',
+      marginBottom: 10,
     },
   });
 

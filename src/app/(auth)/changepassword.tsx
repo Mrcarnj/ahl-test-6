@@ -91,6 +91,9 @@ export default function ChangePassword() {
         placeholderTextColor="#666"
         secureTextEntry
         autoCapitalize="none"
+        returnKeyType="done"              // Add this
+        blurOnSubmit={true}              // Add this
+        enablesReturnKeyAutomatically     // Add this
       />
       
       <TextInput
@@ -101,6 +104,9 @@ export default function ChangePassword() {
         placeholderTextColor="#666"
         secureTextEntry
         autoCapitalize="none"
+        returnKeyType="done"              // Add this
+        blurOnSubmit={true}              // Add this
+        enablesReturnKeyAutomatically     // Add this
       />
 
       <View style={styles.validationContainer}>

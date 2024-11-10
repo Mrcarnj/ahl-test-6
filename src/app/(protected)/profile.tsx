@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
-import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -8,8 +8,33 @@ import { useSchedule } from '@/src/providers/ScheduleProvider';
 
 const Profile = () => {
     const { user } = useAuth();
-    const { roster } = useRoster();
-    const { myGames } = useSchedule();
+    const { roster, refreshRoster } = useRoster();
+    const { myGames, refreshSchedule } = useSchedule();
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Cache the profile data
+    const profileData = useMemo(() => ({
+        photo: roster ? getOfficialPhoto(roster.lastfirstfullname) : null,
+        name: roster ? `${roster.firstname} ${roster.lastname}` : '',
+        email: roster?.email || '',
+        phone: roster?.phonenumber || '',
+        gameCount: myGames.length
+    }), [roster, myGames]);
+
+    // Handle manual refresh
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                refreshRoster(),
+                refreshSchedule()
+            ]);
+        } catch (error) {
+            console.error('Refresh error:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [refreshRoster, refreshSchedule]);
 
     if (!roster) {
         return (
@@ -21,31 +46,40 @@ const Profile = () => {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
+            <ScrollView 
+                style={styles.scrollView} 
+                contentContainerStyle={styles.container}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#ff6600"
+                        colors={['#ff6600']}
+                    />
+                }
+            >
                 <Image
                     source={{ 
-                        uri: getOfficialPhoto(roster.lastfirstfullname) || 'https://via.placeholder.com/150'
+                        uri: profileData.photo || 'https://via.placeholder.com/150'
                     }}
                     style={styles.profileImage}
                 />
-                <Text style={styles.name}>
-                    {roster.firstname} {roster.lastname}
-                </Text>
+                <Text style={styles.name}>{profileData.name}</Text>
                 <Text style={styles.gameCount}>
-                    Game Count: {myGames.length}
+                    Game Count: {profileData.gameCount}
                 </Text>
                 <View style={styles.infoSection}>
                     <View style={styles.fieldContainer}>
                         <Text style={styles.label}>Email</Text>
                         <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{roster.email}</Text>
+                            <Text style={styles.value}>{profileData.email}</Text>
                         </View>
                     </View>
 
                     <View style={styles.fieldContainer}>
                         <Text style={styles.label}>Phone</Text>
                         <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{roster.phonenumber}</Text>
+                            <Text style={styles.value}>{profileData.phone}</Text>
                         </View>
                     </View>
 

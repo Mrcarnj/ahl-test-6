@@ -70,21 +70,24 @@ export default function Auth() {
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
-        <Image 
-          source={require('../../../assets/images/icon.png')} 
-          style={styles.logo} 
+        <Image
+          source={require('../../../assets/images/icon.png')}
+          style={styles.logo}
         />
       </View>
       <View style={styles.formContainer}>
-        <TextInput 
+        <TextInput
           style={styles.inputField}
           onChangeText={(text) => setEmail(text)}
           value={email}
           placeholderTextColor={'#666'}
           placeholder="email@address.com"
           autoCapitalize={'none'}
+          returnKeyType="done"              // Add this
+          blurOnSubmit={true}              // Add this
+          enablesReturnKeyAutomatically     // Add this
         />
-        <TextInput 
+        <TextInput
           style={styles.inputField}
           onChangeText={(text) => setPassword(text)}
           value={password}
@@ -92,14 +95,17 @@ export default function Auth() {
           placeholderTextColor={'#666'}
           placeholder="Password"
           autoCapitalize={'none'}
+          returnKeyType="done"              // Add this
+          blurOnSubmit={true}              // Add this
+          enablesReturnKeyAutomatically     // Add this
         />
 
-        <TouchableOpacity 
-          disabled={loading} 
-          onPress={() => signInWithEmail()} 
+        <TouchableOpacity
+          disabled={loading}
+          onPress={() => signInWithEmail()}
           style={styles.button}
         >
-          <Text style={styles.buttonText}>Sign In</Text> 
+          <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
       </View>
     </View>

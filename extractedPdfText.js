@@ -1,9 +1,9 @@
 const fs = require('fs');
-const axios = require('axios');
 const pdf = require('pdf-parse');
+const axios = require('axios');
 
-// Replace with your Supabase URL
-const pdfUrl = 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20AHL%20Rule%20Book.pdf?t=2024-11-07T22%3A19%3A04.158Z';
+// URL of the PDF file in Supabase
+const pdfUrl = 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?t=2024-11-11T00%3A19%3A09.244Z';
 
 const extractTextFromPDF = async () => {
     try {
@@ -11,18 +11,18 @@ const extractTextFromPDF = async () => {
         const response = await axios.get(pdfUrl, { responseType: 'arraybuffer' });
         const pdfData = await pdf(response.data);
 
-        // Split text by pages
-        const pages = pdfData.text.split(/\f/);
+        // Split text by the identified separator "\ni"
+        const pages = pdfData.text.split('\n\nNHL Rules  Situation Handbook \n');
 
-        // Create an array of objects with page numbers and text
+        // Map pages to an array of objects with page number and text
         const pageData = pages.map((text, index) => ({
-            page: index + 1,
+            page: index + 4,
             text: text.trim(),
         }));
 
-        // Save extracted text to JSON file
-        fs.writeFileSync('src/lib/pdfText.json', JSON.stringify(pageData, null, 2));
-        console.log('PDF text has been extracted and saved to pdfText.json');
+        // Write the extracted data to a JSON file
+        fs.writeFileSync('src/lib/SituationBookPdfText.json', JSON.stringify(pageData, null, 2));
+        console.log('PDF text has been extracted and saved to RuleBookPdfText.json');
     } catch (error) {
         console.error('Error extracting PDF text:', error);
     }

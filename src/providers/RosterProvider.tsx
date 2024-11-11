@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
+import  AsyncStorage  from "@react-native-async-storage/async-storage";
 
 // Define the Roster type based on your table structure
 type Roster = {
@@ -39,9 +40,51 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [allRosters, setAllRosters] = useState<Roster[]>([]); // Add this
+    const [lastFetch, setLastFetch] = useState<Date | null>(null);
+    
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const CACHE_KEY = 'rosterCache';
 
-    const fetchRoster = async () => {
-        if (!user?.id) {
+    const loadCachedData = async () => {
+        try {
+            const cachedData = await AsyncStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+                const { roster, allRosters, timestamp } = JSON.parse(cachedData);
+                const isExpired = new Date().getTime() - timestamp > CACHE_DURATION;
+                
+                if (!isExpired) {
+                    console.log('Using cached roster data');
+                    setRoster(roster);
+                    setAllRosters(allRosters);
+                    setLastFetch(new Date(timestamp));
+                    return true; // Cache was valid and loaded
+                }
+            }
+        } catch (e) {
+            console.error('Error loading cache:', e);
+        }
+        return false; // No valid cache found
+    };
+
+    const saveToCache = async (rosterData: Roster | null, allRostersData: Roster[]) => {
+        try {
+            const cacheData = {
+                roster: rosterData,
+                allRosters: allRostersData,
+                timestamp: new Date().getTime()
+            };
+            await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+        } catch (e) {
+            console.error('Error saving to cache:', e);
+        }
+    };
+
+    const fetchRoster = async (force = false) => {
+        if (!user?.id) return;
+
+        // Check if we can use cached data
+        if (!force && lastFetch && (new Date().getTime() - lastFetch.getTime() < CACHE_DURATION)) {
+            console.log('Using memory-cached roster data');
             return;
         }
 
@@ -49,21 +92,29 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(true);
             setError(null);
 
-            // First get the logged-in user's roster (keep this as it was)
+            // Fetch user's roster
             const { data: userRosterData, error: userRosterError } = await supabase
                 .from('roster')
                 .select('*')
                 .eq('auth_id', user.id)
                 .single();
 
-            setRoster(userRosterData);
+            if (userRosterError) throw userRosterError;
 
-            // Then fetch all rosters in a separate query
+            // Fetch all rosters
             const { data: allRostersData, error: allRostersError } = await supabase
                 .from('roster')
                 .select('*');
 
+            if (allRostersError) throw allRostersError;
+
+            // Update state
+            setRoster(userRosterData);
             setAllRosters(allRostersData || []);
+            setLastFetch(new Date());
+
+            // Save to cache
+            await saveToCache(userRosterData, allRostersData || []);
 
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'An error occurred';
@@ -75,11 +126,25 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(false);
         }
     };
-    
 
-        useEffect(() => {
-            fetchRoster();
-        }, [user?.id]);
+    // Initial load - try cache first, then fetch if needed
+    useEffect(() => {
+        const initializeData = async () => {
+            const hasCachedData = await loadCachedData();
+            if (!hasCachedData) {
+                fetchRoster();
+            }
+        };
+
+        if (user?.id) {
+            initializeData();
+        }
+    }, [user?.id]);
+
+    // Expose refreshRoster as a way to force fetch new data
+    const refreshRoster = async () => {
+        return fetchRoster(true);
+    };
 
     return (
         <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster: fetchRoster }}>

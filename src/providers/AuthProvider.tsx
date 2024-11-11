@@ -1,3 +1,4 @@
+// AuthProvider.tsx
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
@@ -13,25 +14,37 @@ const AuthContext = createContext<AuthContext>({
 });
 
 export default function AuthProvider({children}: PropsWithChildren) {
-    const [session, setSession] = useState<Session | null>(null)
+    const [session, setSession] = useState<Session | null>(null);
 
     useEffect(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session)
-      })
-  
-      supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session)
-      });
+        // Get initial session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+        });
 
-    }, [])
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
 
+        // Set up auto refresh
+        supabase.auth.startAutoRefresh();
+
+        // Cleanup on unmount
+        return () => {
+            subscription.unsubscribe();
+            supabase.auth.stopAutoRefresh();
+        };
+    }, []);
 
     return (
-        <AuthContext.Provider value={{ session, user: session?.user ?? null }}>
+        <AuthContext.Provider value={{ 
+            session, 
+            user: session?.user ?? null 
+        }}>
             {children}
         </AuthContext.Provider>
-    )
+    );
 }
 
 export const useAuth = () => useContext(AuthContext);

@@ -16,8 +16,8 @@ const TestScheduleScreen = () => {
     const { roster } = useRoster();
 
     const externalLinks = [
-        { title: 'Rulebook *Not Working Yet*', screenName: "/(protected)/home/rulebook" },
-        { title: 'Situation Book *Not Working Yet*', screenName: "/(protected)/home/SituationBook" },
+        { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
+        { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
         { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
         { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
         { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
@@ -245,8 +245,8 @@ const TestScheduleScreen = () => {
                         >
                             <View style={styles.linkTitleContainer}>
                                 <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook *Not Working Yet*' &&   <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
-                                {link.title === 'Situation Book *Not Working Yet*' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Rulebook' &&   <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
                             </View>
                             <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                         </TouchableOpacity>

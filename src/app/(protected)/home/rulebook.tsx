@@ -1,19 +1,32 @@
-// app/(protected)/drawer/rulebook.tsx
-import { View, StyleSheet, Text, Image } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import React from 'react';
+import Pdf from 'react-native-pdf';
 
 export default function Rulebook() {
+    const source = {
+        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20AHL%20Rule%20Book.pdf?t=2024-11-07T22%3A19%3A04.158Z',
+        cache: true
+    };
+
     return (
         <View style={styles.container}>
-            <View style={styles.placeholderContainer}>
-                <Text style={styles.text}>Rulebook PDF will appear here</Text>
-                <Text style={styles.subText}>This is a placeholder for development in Expo Go</Text>
-                {/* Optional: Add a placeholder image */}
-                <Image 
-                    source={{ uri: 'https://via.placeholder.com/300x400?text=PDF+Preview' }}
-                    style={styles.placeholderImage}
-                />
-            </View>
+            <Pdf
+                trustAllCerts={false}
+                source={source}
+                onLoadComplete={(numberOfPages, filePath) => {
+                    console.log(`Number of pages: ${numberOfPages}`);
+                }}
+                onPageChanged={(page, numberOfPages) => {
+                    console.log(`Current page: ${page}`);
+                }}
+                onError={(error) => {
+                    console.log(error);
+                }}
+                onPressLink={(uri) => {
+                    console.log(`Link pressed: ${uri}`);
+                }}
+                style={styles.pdf}
+            />
         </View>
     );
 }
@@ -21,27 +34,13 @@ export default function Rulebook() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        justifyContent: 'flex-start',
+        alignItems: 'center',
         backgroundColor: '#000',
     },
-    placeholderContainer: {
+    pdf: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    text: {
-        color: '#fff',
-        fontSize: 20,
-        marginBottom: 10,
-    },
-    subText: {
-        color: '#666',
-        fontSize: 14,
-        marginBottom: 20,
-    },
-    placeholderImage: {
-        width: 300,
-        height: 400,
-        borderRadius: 8,
+        width: Dimensions.get('window').width,
+        backgroundColor: '#000',
     }
 });

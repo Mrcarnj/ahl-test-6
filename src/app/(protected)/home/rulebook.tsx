@@ -1,4 +1,4 @@
-import { View, StyleSheet, Dimensions, TextInput, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Dimensions, TextInput, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import Pdf from 'react-native-pdf';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -53,7 +53,8 @@ export default function Rulebook() {
     };
 
     return (
-        <View style={styles.container}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}
+        keyboardVerticalOffset={90}>
             <Pdf
                 trustAllCerts={false}
                 source={source}
@@ -107,7 +108,7 @@ export default function Rulebook() {
                     </TouchableOpacity>
                 </View>
             )}
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 

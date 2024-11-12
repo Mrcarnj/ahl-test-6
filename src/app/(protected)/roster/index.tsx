@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
 import { router } from 'expo-router';
 
-// Create a memoized item component
+// RosterItem component remains the same
 const RosterItem = memo(({ item, onPress }: {
     item: { id: number; lastfirstfullname: string },
     onPress: (id: number) => void
@@ -23,14 +23,18 @@ const RosterScreen = () => {
     const { allRosters, loading, error, refreshRoster } = useRoster();
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredRosters, setFilteredRosters] = useState<Roster[]>([]);
-    const inputAccessoryViewID = 'uniqueID';
+    const [adminRosters, setAdminRosters] = useState<Roster[]>([]);
 
     useEffect(() => {
         refreshRoster();
     }, []);
 
     useEffect(() => {
-        // Filter rosters based on search query
+        const sortedAdminRosters = allRosters
+            .filter(roster => roster.ahlAdmin)
+            .sort((b, a) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
+        setAdminRosters(sortedAdminRosters);
+
         const sortedAndFilteredRosters = allRosters
             .filter((roster) =>
                 roster.lastfirstfullname.toLowerCase().includes(searchQuery.toLowerCase())
@@ -70,9 +74,9 @@ const RosterScreen = () => {
                     placeholderTextColor={'#ccc'}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
-                    returnKeyType="search"              // Add this
-                    blurOnSubmit={true}              // Add this
-                    enablesReturnKeyAutomatically     // Add this
+                    returnKeyType="search"
+                    blurOnSubmit={true}
+                    enablesReturnKeyAutomatically
                 />
                 {searchQuery.length > 0 && (
                     <TouchableOpacity
@@ -83,16 +87,37 @@ const RosterScreen = () => {
                     </TouchableOpacity>
                 )}
             </View>
-            <FlatList
-                data={filteredRosters}
-                keyExtractor={keyExtractor}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContainer}
-                initialNumToRender={10}        // Reduce initial render batch
-                maxToRenderPerBatch={10}       // Reduce render batch size
-                windowSize={5}                 // Reduce the window size
-                removeClippedSubviews={true}   // Remove items that are off screen
-            />
+
+            {/* Main Content Container */}
+            <View style={styles.contentContainer}>
+                {/* Filtered Rosters Section */}
+                <View style={styles.filteredRostersContainer}>
+                    <ScrollView style={styles.scrollableRosters}>
+                        <FlatList
+                            data={filteredRosters} // Limit to 15 items
+                            keyExtractor={keyExtractor}
+                            renderItem={renderItem}
+                            scrollEnabled={false} // Disable FlatList scroll since we're using ScrollView
+                            initialNumToRender={15}
+                            contentContainerStyle={styles.listContainer}
+                        />
+                    </ScrollView>
+                </View>
+
+                <View style={styles.separator} />
+                <Text style={styles.sectionTitle}>AHL Front Office</Text>
+
+                {/* AHL Admin Section */}
+                <ScrollView style={styles.adminSection}>
+                    <FlatList
+                        data={adminRosters}
+                        keyExtractor={keyExtractor}
+                        renderItem={renderItem}
+                        scrollEnabled={false}
+                        initialNumToRender={10}
+                    />
+                </ScrollView>
+            </View>
         </View>
     );
 };
@@ -101,6 +126,22 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
+    },
+    contentContainer: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    filteredRostersContainer: {
+        height: 400, // Fixed height for the filtered rosters section
+        paddingHorizontal: 10,
+    },
+    scrollableRosters: {
+        flex: 1,
+    },
+    adminSection: {
+        paddingHorizontal: 10,
+        paddingBottom: 20,
     },
     searchContainer: {
         position: 'relative',
@@ -112,53 +153,43 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: 5,
         paddingHorizontal: 10,
-        paddingRight: 35, // Make room for the clear button
+        paddingRight: 35,
         color: '#fff',
     },
     clearButton: {
         position: 'absolute',
         right: 10,
-        top: 7, // Centers the icon vertically
-        padding: 5, // Larger touch target
+        top: 7,
+        padding: 5,
     },
     listContainer: {
-        padding: 10,
+        paddingVertical: 10,
     },
     itemContainer: {
         backgroundColor: '#1a1a1a',
         padding: 15,
         borderRadius: 8,
         marginBottom: 12,
-        flexDirection: 'row',  // Add this to align content and arrow
-        alignItems: 'center',  // Add this to center vertically
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
     },
     itemText: {
         fontSize: 16,
         color: '#fff',
     },
-    inputAccessory: {
-        backgroundColor: '#f1f1f1',
-        padding: 8,
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        borderTopWidth: 1,
-        borderTopColor: '#ccc',
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#ff6600',
+        marginBottom: 10,
+        marginHorizontal: 12,
     },
-    accessoryContainer: {
-        backgroundColor: '#f8f8f8',
-        alignItems: 'flex-end',
-        paddingHorizontal: 8,
-        borderTopWidth: 0.5,
-        borderTopColor: '#919191',
-    },
-    doneButton: {
-        padding: 12,
-    },
-    doneButtonText: {
-        color: '#007AFF',
-        fontSize: 17,
-        fontWeight: '600',
+    separator: {
+        height: 1,
+        backgroundColor: '#333',
+        marginVertical: 10,
+        marginHorizontal: 10,
     },
 });
 

@@ -15,6 +15,7 @@ type Roster = {
     phonenumber: string;
     admin: boolean;
     changedpassword: boolean;
+    ahlAdmin: boolean;
     // Add other roster fields here
 };
 

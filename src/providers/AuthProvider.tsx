@@ -1,7 +1,7 @@
-// AuthProvider.tsx
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import { AppState, AppStateStatus } from 'react-native';
 
 type AuthContext = {
     session: Session | null;
@@ -19,20 +19,36 @@ export default function AuthProvider({children}: PropsWithChildren) {
     useEffect(() => {
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
+            console.log('Initial session:', session);
             setSession(session);
+        });
+
+        // Handle app state changes
+        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                console.log('App became active, starting auto refresh');
+                supabase.auth.startAutoRefresh();
+            } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+                console.log('App going to background, stopping auto refresh');
+                supabase.auth.stopAutoRefresh();
+            }
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-        });
+        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
+            async (_event, session) => {
+                console.log('Auth state changed:', _event);
+                setSession(session);
+            }
+        );
 
-        // Set up auto refresh
+        // Initial auto refresh start
         supabase.auth.startAutoRefresh();
 
         // Cleanup on unmount
         return () => {
-            subscription.unsubscribe();
+            authSubscription.unsubscribe();
+            subscription.remove();
             supabase.auth.stopAutoRefresh();
         };
     }, []);

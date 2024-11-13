@@ -26,11 +26,19 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-build-properties",
+      [
+        "expo-build-properties",
         {
           "ios": {
             "useFrameworks": "static"
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#ffffff"
         }
       ]
     ],

@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type AuthContext = {
     session: Session | null;
@@ -13,42 +14,57 @@ const AuthContext = createContext<AuthContext>({
     user: null,
 });
 
-export default function AuthProvider({children}: PropsWithChildren) {
+export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
 
     useEffect(() => {
-        // Get initial session
+        const loadSession = async () => {
+            // Try to load session from AsyncStorage
+            const storedSession = await AsyncStorage.getItem('session');
+            if (storedSession) {
+                const parsedSession = JSON.parse(storedSession);
+                setSession(parsedSession);
+                supabase.auth.setSession(parsedSession); // Rehydrate session in Supabase
+            }
+        };
+
+        loadSession();
+
+        // Get initial session and save it
         supabase.auth.getSession().then(({ data: { session } }) => {
-            console.log('Initial session:', session);
-            setSession(session);
+            if (session) {
+                setSession(session);
+                AsyncStorage.setItem('session', JSON.stringify(session)); // Store session
+            }
         });
 
         // Handle app state changes
-        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+        const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active') {
-                console.log('App became active, starting auto refresh');
                 supabase.auth.startAutoRefresh();
             } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-                console.log('App going to background, stopping auto refresh');
                 supabase.auth.stopAutoRefresh();
             }
         });
 
-        // Listen for auth changes
+        // Listen for auth changes and store session in AsyncStorage
         const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
-                console.log('Auth state changed:', _event);
                 setSession(session);
+                if (session) {
+                    await AsyncStorage.setItem('session', JSON.stringify(session));
+                } else {
+                    await AsyncStorage.removeItem('session');
+                }
             }
         );
 
-        // Initial auto refresh start
         supabase.auth.startAutoRefresh();
 
         // Cleanup on unmount
         return () => {
             authSubscription.unsubscribe();
-            subscription.remove();
+            appStateSubscription.remove();
             supabase.auth.stopAutoRefresh();
         };
     }, []);

@@ -4,7 +4,8 @@ import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
-import { FontAwesome, AntDesign } from '@expo/vector-icons';
+import { FontAwesome, FontAwesome6, AntDesign } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 
 const Details = () => {
     const { rosterId } = useLocalSearchParams<{ rosterId: string }>();
@@ -15,6 +16,17 @@ const Details = () => {
     const cleanPhoneNumber = (phone: string) => {
         // Remove all non-numeric characters
         return phone.replace(/\D/g, '');
+    };
+
+    const copyToClipboard = async (email: string) => {
+        await Clipboard.setStringAsync(email);
+        Alert.alert(
+            "Success",
+            "Email copied to clipboard!",
+            [
+                { text: "Close", style: "default" }
+            ]
+        );
     };
 
 
@@ -44,6 +56,12 @@ const Details = () => {
                         <Text style={styles.label}>Email</Text>
                         <View style={styles.valueContainer}>
                             <Text style={styles.value}>{selectedRoster.email}</Text>
+                            <TouchableOpacity
+                                onPress={() => copyToClipboard(selectedRoster.email)}
+                                style={styles.iconButton}
+                            >
+                                <FontAwesome6 name="copy" size={24} color="#ff6600" />
+                            </TouchableOpacity>
                         </View>
                     </View>
 

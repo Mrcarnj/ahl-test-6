@@ -14,7 +14,7 @@ const Profile = () => {
 
     // Cache the profile data
     const profileData = useMemo(() => ({
-        photo: roster ? getOfficialPhoto(roster.lastfirstfullname) : null,
+        photo: roster ?.photo || 'https://via.placeholder.com/150',
         name: roster ? `${roster.firstname} ${roster.lastname}` : '',
         email: roster?.email || '',
         phone: roster?.phonenumber || '',
@@ -59,9 +59,10 @@ const Profile = () => {
                 }
             >
                 <Image
-                    source={{ 
-                        uri: profileData.photo || 'https://via.placeholder.com/150'
-                    }}
+                    source={ profileData.photo ?
+                        { uri: profileData.photo}
+                    : require('../../../assets/images/noPhoto.png')
+                }
                     style={styles.profileImage}
                 />
                 <Text style={styles.name}>{profileData.name}</Text>

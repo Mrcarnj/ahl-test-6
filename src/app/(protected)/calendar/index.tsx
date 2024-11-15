@@ -1,3 +1,5 @@
+// app/(protected)/calendar/index.tsx
+
 import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

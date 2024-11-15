@@ -13,7 +13,7 @@ type Roster = {
     lastfirstfullname: string;
     photo: string;
     phonenumber: string;
-    admin: boolean;
+    isAdmin: boolean;
     changedpassword: boolean;
     ahlAdmin: boolean;
     // Add other roster fields here

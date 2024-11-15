@@ -42,10 +42,12 @@ const Details = () => {
         <SafeAreaView style={styles.safeArea}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
                 <Image
-                    source={{
-                        uri: getOfficialPhoto(selectedRoster.lastfirstfullname) || 'https://via.placeholder.com/150'
-                    }}
+                    source={ selectedRoster.photo ?
+                        { uri: selectedRoster.photo }
+                        : require('../../../../assets/images/noPhoto.png')
+                    }
                     style={styles.profileImage}
+                    defaultSource={{ uri: selectedRoster.photo }}
                 />
                 <Text style={styles.name}>
                     {selectedRoster.firstname} {selectedRoster.lastname}

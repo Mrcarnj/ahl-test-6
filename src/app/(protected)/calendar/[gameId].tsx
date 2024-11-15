@@ -6,6 +6,8 @@ import { format } from 'date-fns';
 import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
+
+
 const gameId = () => {
   const { gameId } = useLocalSearchParams<{ gameId: string }>();
   const { allGames, myGames } = useSchedule();
@@ -56,11 +58,11 @@ const gameId = () => {
 
   const handleGroupChat = async () => {
     console.log("HandleGroupChat started");
-    
+
     const cleanPhoneNumber = (phone: string) => {
-        if (!phone) return null;
-        console.log("Cleaning phone number:", phone);
-        return phone.replace(/\D/g, '');
+      if (!phone) return null;
+      console.log("Cleaning phone number:", phone);
+      return phone.replace(/\D/g, '');
     };
 
     // Get and clean all valid phone numbers
@@ -70,51 +72,51 @@ const gameId = () => {
     const lines2 = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
 
     console.log("Found officials:", {
-        ref1: ref1?.phonenumber,
-        ref2: ref2?.phonenumber,
-        lines1: lines1?.phonenumber,
-        lines2: lines2?.phonenumber
+      ref1: ref1?.phonenumber,
+      ref2: ref2?.phonenumber,
+      lines1: lines1?.phonenumber,
+      lines2: lines2?.phonenumber
     });
 
     const phoneNumbers = [
-        ref1?.phonenumber ? cleanPhoneNumber(ref1.phonenumber) : null,
-        ref2?.phonenumber ? cleanPhoneNumber(ref2.phonenumber) : null,
-        lines1?.phonenumber ? cleanPhoneNumber(lines1.phonenumber) : null,
-        lines2?.phonenumber ? cleanPhoneNumber(lines2.phonenumber) : null
+      ref1?.phonenumber ? cleanPhoneNumber(ref1.phonenumber) : null,
+      ref2?.phonenumber ? cleanPhoneNumber(ref2.phonenumber) : null,
+      lines1?.phonenumber ? cleanPhoneNumber(lines1.phonenumber) : null,
+      lines2?.phonenumber ? cleanPhoneNumber(lines2.phonenumber) : null
     ].filter(Boolean);
 
     console.log("Cleaned phone numbers:", phoneNumbers);
 
     if (phoneNumbers.length === 0) {
-        console.log("No phone numbers found");
-        Alert.alert("Error", "No phone numbers available for officials");
-        return;
+      console.log("No phone numbers found");
+      Alert.alert("Error", "No phone numbers available for officials");
+      return;
     }
 
     try {
-        console.log("Attempting to copy to clipboard");
-        await Clipboard.setStringAsync(phoneNumbers.join(', '));
-        console.log("Successfully copied to clipboard");
-        
-        Alert.alert(
-            "Numbers Copied!",
-            "Numbers have been copied to your clipboard. Would you like to open Messages now?\n\nJust paste (tap and hold, then select Paste) in the 'To:' field to add all officials.",
-            [
-                {
-                    text: "Open Messages",
-                    onPress: () => Linking.openURL('sms:')
-                },
-                {
-                    text: "Cancel",
-                    style: "cancel"
-                }
-            ]
-        );
+      console.log("Attempting to copy to clipboard");
+      await Clipboard.setStringAsync(phoneNumbers.join(', '));
+      console.log("Successfully copied to clipboard");
+
+      Alert.alert(
+        "Numbers Copied!",
+        "Numbers have been copied to your clipboard. Would you like to open Messages now?\n\nJust paste (tap and hold, then select Paste) in the 'To:' field to add all officials.",
+        [
+          {
+            text: "Open Messages",
+            onPress: () => Linking.openURL('sms:')
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
+          }
+        ]
+      );
     } catch (error) {
-        console.error("Clipboard error:", error);
-        Alert.alert("Error", "Failed to copy numbers to clipboard");
+      console.error("Clipboard error:", error);
+      Alert.alert("Error", "Failed to copy numbers to clipboard");
     }
-};
+  };
 
   const handleArenaPress = (game: Schedule) => {
     // Get arena address from the homeTeamData
@@ -198,16 +200,24 @@ const gameId = () => {
       <Text style={styles.titles}>Officials Crew</Text>
       <View style={styles.refereesRow}>
         <View style={styles.refereeContainer}>
-          <Image
-            source={{ uri: getOfficialPhoto(game.referee1) }}
-            style={styles.profileImageRef}
+        <Image
+            source={
+              allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
+                ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
+                : require('../../../../assets/images/noPhoto.png')
+            }
+            style={styles.profileImageLines}
           />
           <Text style={styles.refereeText}>{getOfficialName(game.referee1)}</Text>
         </View>
         <View style={styles.refereeContainer}>
-          <Image
-            source={{ uri: getOfficialPhoto(game.referee2) }}
-            style={styles.profileImageRef}
+        <Image
+            source={
+              allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
+                ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
+                : require('../../../../assets/images/noPhoto.png')
+            }
+            style={styles.profileImageLines}
           />
           <Text style={styles.refereeText}>{getOfficialName(game.referee2)}</Text>
         </View>
@@ -215,15 +225,23 @@ const gameId = () => {
 
       <View style={styles.refereesRow}>
         <View style={styles.refereeContainer}>
-          <Image
-            source={{ uri: getOfficialPhoto(game.linesperson1) }}
+        <Image
+            source={
+              allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
+                ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
+                : require('../../../../assets/images/noPhoto.png')
+            }
             style={styles.profileImageLines}
           />
           <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)}</Text>
         </View>
         <View style={styles.refereeContainer}>
           <Image
-            source={{ uri: getOfficialPhoto(game.linesperson2) }}
+            source={
+              allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
+                ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
+                : require('../../../../assets/images/noPhoto.png')
+            }
             style={styles.profileImageLines}
           />
           <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)}</Text>

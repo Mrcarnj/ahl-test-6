@@ -29,20 +29,25 @@ const RosterScreen = () => {
         refreshRoster();
     }, []);
 
-    useEffect(() => {
+    const sanitizeSearchQuery = (query: string): string => {
+        return query.replace(/[^a-zA-Z\s]/g, '');
+     };
+     
+     useEffect(() => {
         const sortedAdminRosters = allRosters
             .filter(roster => roster.ahlAdmin)
             .sort((b, a) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
         setAdminRosters(sortedAdminRosters);
-
+     
+        const sanitizedQuery = sanitizeSearchQuery(searchQuery);
         const sortedAndFilteredRosters = allRosters
             .filter((roster) =>
-                roster.lastfirstfullname.toLowerCase().includes(searchQuery.toLowerCase())
+                roster.lastfirstfullname.toLowerCase().includes(sanitizedQuery.toLowerCase())
             )
             .sort((a, b) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
-
+     
         setFilteredRosters(sortedAndFilteredRosters);
-    }, [searchQuery, allRosters]);
+     }, [searchQuery, allRosters]);
 
     const handleRosterPress = useCallback((id: number) => {
         router.push({

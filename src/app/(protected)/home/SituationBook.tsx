@@ -78,6 +78,7 @@ export default function SituationBook() {
             <View style={styles.searchContainer}>
                 <TextInput
                     style={styles.searchBar}
+                    maxLength={50}
                     placeholder="Search..."
                     placeholderTextColor={'#ccc'}
                     value={searchTerm}

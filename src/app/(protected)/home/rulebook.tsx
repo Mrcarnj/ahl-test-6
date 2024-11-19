@@ -81,6 +81,7 @@ export default function Rulebook() {
                     placeholder="Search..."
                     placeholderTextColor={'#ccc'}
                     value={searchTerm}
+                    maxLength={50}
                     onChangeText={setSearchTerm}
                     returnKeyType="search"
                     onSubmitEditing={handleSearch}

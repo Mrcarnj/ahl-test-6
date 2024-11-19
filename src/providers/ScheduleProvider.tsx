@@ -13,7 +13,7 @@ export interface Roster {
     lastfirstfullname: string;
     photo: string | null;
     phonenumber: string;
-    admin: boolean;
+    isAdmin: boolean;
     changedpassword: boolean;
 }
 

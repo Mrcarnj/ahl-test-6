@@ -83,18 +83,19 @@ const TestScheduleScreen = () => {
         const startDate = new Date(2024, 9, 21);
         const endDate = new Date(2025, 5, 30);
         const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to start of day
         let nextDueDate = startDate;
-
+    
         while (nextDueDate <= endDate) {
             if (nextDueDate >= today) {
-                const daysUntilDue = differenceInDays(addDays(nextDueDate, 1), today);
+                const daysUntilDue = differenceInDays(nextDueDate, today);
                 const rangeEndDate = new Date(nextDueDate);
                 const rangeStartDate = new Date(rangeEndDate);
                 rangeStartDate.setDate(rangeStartDate.getDate() - 14);
-
+    
                 const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(addDays(rangeEndDate, -1), 'MMMM d')}`;
-
-                if (daysUntilDue === 0) {
+    
+                if (format(nextDueDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
                     return { text: "TODAY by 12pm EST", isToday: true, isTomorrow: false, dateRange, rangeStartDate, rangeEndDate };
                 } else if (daysUntilDue === 1) {
                     return { text: "TOMORROW", isToday: false, isTomorrow: true, dateRange, rangeStartDate, rangeEndDate };
@@ -104,7 +105,7 @@ const TestScheduleScreen = () => {
             }
             nextDueDate = addDays(nextDueDate, 14);
         }
-
+    
         return { text: "No more expense reports due", isToday: false, isTomorrow: false, dateRange: "", rangeStartDate: null, rangeEndDate: null };
     }, []);
 
@@ -150,26 +151,33 @@ const TestScheduleScreen = () => {
                 }
             >
                 <View style={styles.header}>
-                <Image 
-          source={require('../../../../assets/images/ahlLogo.png')} 
-          style={styles.leagueLogo} 
-        />
+                    <Image
+                        source={require('../../../../assets/images/ahlLogo.png')}
+                        style={styles.leagueLogo}
+                    />
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
-                    </View>
+                </View>
                 {todayEvent && (
-                <>
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Today</Text>
-                        <View style={styles.gameCard}>
-                            <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
-                            <Text style={styles.matchup}>
-                                {todayEvent.awayteam} @ {todayEvent.hometeam}
-                            </Text>
-                        </View>
+                        <TouchableOpacity
+                            style={styles.gameCard}
+                            onPress={() => handleGamePress(todayEvent.gameid)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.gameContent}>
+                                <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
+                                <Text style={styles.matchup}>
+                                    {todayEvent.awayteam} @ {todayEvent.hometeam}
+                                </Text>
+                                <Text style={styles.gameDetails}>
+                                    {formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // {todayEvent.homeTeamData?.arenaname}
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                        </TouchableOpacity>
                     </View>
-                    <View style={styles.separator} />
-                </>
-            )}
+                )}
 
                 <View style={styles.separator} />
 
@@ -227,12 +235,12 @@ const TestScheduleScreen = () => {
                         <Text style={styles.noGamesText}>No upcoming games</Text>
                     )}
                     <TouchableOpacity
-    style={styles.gameCard}
-    onPress={() => router.push("/(protected)/home/AllGames")}
->
-    <Text style={styles.link}>View All Games</Text>
-    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-</TouchableOpacity>
+                        style={styles.gameCard}
+                        onPress={() => router.push("/(protected)/home/AllGames")}
+                    >
+                        <Text style={styles.link}>View All Games</Text>
+                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                    </TouchableOpacity>
                 </View>
                 <View style={styles.separator} />
 
@@ -245,7 +253,7 @@ const TestScheduleScreen = () => {
                         >
                             <View style={styles.linkTitleContainer}>
                                 <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook' &&   <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
                                 {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
                             </View>
                             <Ionicons name="chevron-forward" size={24} color="#ff6600" />
@@ -404,7 +412,7 @@ const styles = StyleSheet.create({
         height: 80,
         resizeMode: 'contain',
         marginBottom: 10,
-      },
+    },
 });
 
 export default TestScheduleScreen;

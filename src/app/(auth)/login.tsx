@@ -24,13 +24,36 @@ export default function Auth() {
   const { session, user } = useAuth();
   const { roster } = useRoster();
 
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email) && email.length < 255;
+  };
+
+  const validatePassword = (password: string): boolean => {
+    // Ensure password meets minimum requirements and has no illegal chars
+    return /^[a-zA-Z0-9!@#$%^&*(),.?":{}|<>]{6,64}$/.test(password);
+  };
+
   async function signInWithEmail() {
-    setLoading(true)
+    setLoading(true);
     try {
+      // Validate inputs before sending
+      if (!validateEmail(email)) {
+        Alert.alert('Invalid email format');
+        return;
+      }
+
+      if (!validatePassword(password)) {
+        Alert.alert('Invalid password format');
+        return;
+      }
+
+      const sanitizedEmail = email.trim().toLowerCase();
+
       const { data: authData, error } = await supabase.auth.signInWithPassword({
-        email: email,
+        email: sanitizedEmail,
         password: password,
-      })
+      });
 
       if (error) {
         Alert.alert(error.message);
@@ -78,8 +101,12 @@ export default function Auth() {
       <View style={styles.formContainer}>
         <TextInput
           style={styles.inputField}
-          onChangeText={(text) => setEmail(text)}
+          onChangeText={(text) => setEmail(text.trim())}
           value={email}
+          maxLength={255}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
           placeholderTextColor={'#666'}
           placeholder="email@address.com"
           autoCapitalize={'none'}
@@ -89,9 +116,12 @@ export default function Auth() {
         />
         <TextInput
           style={styles.inputField}
-          onChangeText={(text) => setPassword(text)}
+          onChangeText={(text) => setPassword(text.trim())}
           value={password}
           secureTextEntry={true}
+          maxLength={64}
+          autoComplete="password"
+          textContentType="password"
           placeholderTextColor={'#666'}
           placeholder="Password"
           autoCapitalize={'none'}

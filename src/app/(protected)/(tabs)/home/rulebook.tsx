@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/home/rulebook.tsx
 import { View, StyleSheet, Dimensions, TextInput, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import Pdf from 'react-native-pdf';

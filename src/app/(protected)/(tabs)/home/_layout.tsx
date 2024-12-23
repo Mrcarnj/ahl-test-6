@@ -1,4 +1,4 @@
-// app/(protected)/home/_layout.tsx
+// app/(protected)/(tabs)/home/_layout.tsx
 import { useRoster } from "@/src/providers/RosterProvider";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack } from "expo-router";

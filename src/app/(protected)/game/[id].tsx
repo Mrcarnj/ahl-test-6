@@ -1,3 +1,4 @@
+// app/(protected)/game/[id].tsx
 import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach } from '@/src/providers/ScheduleProvider';

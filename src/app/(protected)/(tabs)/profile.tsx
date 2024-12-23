@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/profile.tsx
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl } from 'react-native';
 import React, { useMemo, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';

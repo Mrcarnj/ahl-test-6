@@ -1,4 +1,4 @@
-// app/(protected)/calendar/_layout.tsx
+// app/(protected)/(tabs)/calendar/_layout.tsx
 import { useRoster } from "@/src/providers/RosterProvider";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack } from "expo-router";

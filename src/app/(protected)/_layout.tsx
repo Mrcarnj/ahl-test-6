@@ -1,3 +1,4 @@
+// app/(protected)/_layout.tsx
 import { router, Tabs, Stack } from "expo-router";
 import { useAuth } from "../../providers/AuthProvider";
 import RosterProvider from "../../providers/RosterProvider";

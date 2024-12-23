@@ -1,3 +1,4 @@
+// app/index.tsx
 import { useAuth } from "../providers/AuthProvider";
 import { Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";

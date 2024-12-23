@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/home/index.tsx
 import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking, Image } from 'react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';

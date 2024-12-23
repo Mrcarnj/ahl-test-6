@@ -8,12 +8,12 @@ import * as Clipboard from 'expo-clipboard';
 
 
 
-const gameId = () => {
-  const { gameId } = useLocalSearchParams<{ gameId: string }>();
+const GameDetails = () => {
+  const { id, source } = useLocalSearchParams<{ id: string; source: string }>();
   const { allGames, myGames } = useSchedule();
   const { allRosters } = useRoster();
 
-  const game = myGames.find(g => g.gameid === gameId);
+  const game = myGames.find(g => g.gameid === id);
 
   if (!game) {
     return <Text>Game not found</Text>;
@@ -537,4 +537,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default gameId;
+export default GameDetails;

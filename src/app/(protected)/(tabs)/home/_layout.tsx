@@ -38,18 +38,6 @@ export default function HomeLayout() {
           }}
         />
         <Stack.Screen 
-          name="[gameId]" 
-          options={{
-            headerTitle: "Game Details",
-            //headerBackTitle: "Home",  // This is the correct property
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
-        <Stack.Screen 
           name="AllGames/index"  // This handles the AllGames route
           options={{
             headerTitle: "All Games",

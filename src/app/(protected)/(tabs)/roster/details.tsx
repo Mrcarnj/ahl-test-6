@@ -44,7 +44,7 @@ const Details = () => {
                 <Image
                     source={ selectedRoster.photo ?
                         { uri: selectedRoster.photo }
-                        : require('../../../../assets/images/noPhoto.png')
+                        : require('../../../../../assets/images/noPhoto.png')
                     }
                     style={styles.profileImage}
                     defaultSource={{ uri: selectedRoster.photo }}

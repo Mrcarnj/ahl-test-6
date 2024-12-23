@@ -61,7 +61,7 @@ const Profile = () => {
                 <Image
                     source={ profileData.photo ?
                         { uri: profileData.photo}
-                    : require('../../../assets/images/noPhoto.png')
+                    : require('../../../../assets/images/noPhoto.png')
                 }
                     style={styles.profileImage}
                 />

@@ -47,8 +47,11 @@ const TestScheduleScreen = () => {
 
     const handleGamePress = (gameId: string) => {
         router.push({
-            pathname: "/(protected)/home/[gameId]",
-            params: { gameId }
+            pathname: "/(protected)/game/[id]",
+            params: { 
+                id: gameId,
+                source: 'home'
+            }
         });
     };
 
@@ -151,7 +154,7 @@ const TestScheduleScreen = () => {
             >
                 <View style={styles.header}>
                 <Image 
-          source={require('../../../../assets/images/ahlLogo.png')} 
+          source={require('../../../../../assets/images/ahlLogo.png')} 
           style={styles.leagueLogo} 
         />
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>

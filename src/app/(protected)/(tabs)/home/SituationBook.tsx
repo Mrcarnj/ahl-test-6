@@ -2,11 +2,11 @@ import { View, StyleSheet, Dimensions, TextInput, Text, TouchableOpacity, Keyboa
 import React, { useState, useEffect } from 'react';
 import Pdf from 'react-native-pdf';
 import AntDesign from '@expo/vector-icons/AntDesign';
-import ruleBookText from '../../../lib/RuleBookPdfText.json';  // Adjust path as needed
+import ruleBookText from '../../../../lib/SituationBookPdfText.json';  // Adjust path as needed
 
-export default function Rulebook() {
+export default function SituationBook() {
     const source = {
-        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20AHL%20Rule%20Book.pdf?t=2024-11-07T22%3A19%3A04.158Z',
+        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?t=2024-11-11T00%3A19%3A09.244Z',
         cache: true
     };
 
@@ -95,6 +95,7 @@ export default function Rulebook() {
                 )}
             </View>
 
+            {/* Search Navigation Controls */}
             {searchResults.length > 0 && searchTerm !== '' && (
                 <View style={styles.navigationContainer}>
                     <TouchableOpacity onPress={goToPreviousResult}>

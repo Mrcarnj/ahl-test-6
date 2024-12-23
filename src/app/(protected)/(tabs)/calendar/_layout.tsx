@@ -46,17 +46,6 @@ export default function HomeLayout() {
             headerTintColor: '#ffffff',
           }}
         />
-        <Stack.Screen 
-          name="[gameId]" 
-          options={{
-            headerTitle: "Game Details",
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
     </Stack>
   );
 }

@@ -14,60 +14,78 @@ const AuthContext = createContext<AuthContext>({
     user: null,
 });
 
+// In AuthProvider.tsx
+
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
 
     useEffect(() => {
-        const loadSession = async () => {
-            // Try to load session from AsyncStorage
-            const storedSession = await AsyncStorage.getItem('session');
-            if (storedSession) {
-                const parsedSession = JSON.parse(storedSession);
-                setSession(parsedSession);
-                supabase.auth.setSession(parsedSession); // Rehydrate session in Supabase
-            }
-        };
+        const setupAuth = async () => {
+            try {
+                // Log initial state
+                console.log('Setting up auth...');
 
-        loadSession();
-
-        // Get initial session and save it
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                setSession(session);
-                AsyncStorage.setItem('session', JSON.stringify(session)); // Store session
-            }
-        });
-
-        // Handle app state changes
-        const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-            if (nextAppState === 'active') {
-                supabase.auth.startAutoRefresh();
-            } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-                supabase.auth.stopAutoRefresh();
-            }
-        });
-
-        // Listen for auth changes and store session in AsyncStorage
-        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
-                setSession(session);
-                if (session) {
-                    await AsyncStorage.setItem('session', JSON.stringify(session));
-                } else {
-                    await AsyncStorage.removeItem('session');
+                // Try AsyncStorage first
+                const storedSession = await AsyncStorage.getItem('session');
+                console.log('Stored session from AsyncStorage:', storedSession ? 'exists' : 'none');
+                
+                if (storedSession) {
+                    const parsedSession = JSON.parse(storedSession);
+                    console.log('Setting stored session');
+                    setSession(parsedSession);
+                    await supabase.auth.setSession(parsedSession);
                 }
+
+                // Get Supabase session
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                console.log('Current Supabase session:', currentSession ? 'exists' : 'none');
+
+                if (currentSession) {
+                    console.log('Setting current session');
+                    setSession(currentSession);
+                    await AsyncStorage.setItem('session', JSON.stringify(currentSession));
+                }
+
+                // Set up auth listener
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                    async (event, session) => {
+                        console.log('Auth state change:', event, session ? 'with session' : 'no session');
+                        
+                        if (session) {
+                            setSession(session);
+                            await AsyncStorage.setItem('session', JSON.stringify(session));
+                        } else {
+                            // Only clear on explicit sign out
+                            if (event === 'SIGNED_OUT') {
+                                console.log('Explicit sign out, clearing session');
+                                setSession(null);
+                                await AsyncStorage.removeItem('session');
+                            } else {
+                                console.log('Session null but not signing out, event:', event);
+                            }
+                        }
+                    }
+                );
+
+                // Initialize and start auto-refresh
+                await supabase.auth.initialize();
+                supabase.auth.startAutoRefresh();
+
+                return () => {
+                    subscription.unsubscribe();
+                };
+            } catch (error) {
+                console.error('Error in setupAuth:', error);
             }
-        );
-
-        supabase.auth.startAutoRefresh();
-
-        // Cleanup on unmount
-        return () => {
-            authSubscription.unsubscribe();
-            appStateSubscription.remove();
-            supabase.auth.stopAutoRefresh();
         };
+
+        setupAuth();
     }, []);
+
+    // Also log any session changes from the state
+    useEffect(() => {
+        console.log('Session state changed:', session ? 'exists' : 'none');
+    }, [session]);
 
     return (
         <AuthContext.Provider value={{ 

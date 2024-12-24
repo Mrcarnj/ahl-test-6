@@ -4,8 +4,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach, formatGameDate2 } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { format } from 'date-fns';
-import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useState } from 'react';
+
 
 
 
@@ -13,6 +15,7 @@ const GameDetails = () => {
   const { id, source } = useLocalSearchParams<{ id: string; source: string }>();
   const { allGames, myGames } = useSchedule();
   const { allRosters } = useRoster();
+  const [activeTab, setActiveTab] = useState('crew');
 
   const game = myGames.find(g => g.gameid === id);
 
@@ -36,6 +39,7 @@ const GameDetails = () => {
     return ref ? `${ref.firstname} ${ref.lastname}` : lastfirstfullname;
   };
 
+
   const handleOfficialPress = (rosterId: number) => {
     router.push({
         pathname: "/(protected)/official/[rosterId]",
@@ -46,26 +50,13 @@ const GameDetails = () => {
     });
 };
 
-  const handlePhonePress = (phone: any) => {
-    Alert.alert(
-      "Contact Equipment Manager",
-      "Choose an action",
-      [
-        {
-          text: "Call",
-          onPress: () => Linking.openURL(`tel:${phone}`)
-        },
-        {
-          text: "Message",
-          onPress: () => Linking.openURL(`sms:${phone}?body=`)
-        },
-        {
-          text: "Cancel",
-          style: "cancel"
-        }
-      ]
-    );
-  };
+  // const handlePhonePress = (phone: any, action: 'call' | 'message') => {
+  //     if (action === 'call') {
+  //       Linking.openURL(`tel:${phone}`);
+  //     } else if (action === 'message') {
+  //       Linking.openURL(`sms:${phone}?body=`);
+  //     }
+  //   };
 
   const handleGroupChat = async () => {
     console.log("HandleGroupChat started");
@@ -155,12 +146,236 @@ const GameDetails = () => {
     });
   };
 
+  const CrewContent = ({ game, allRosters, handleOfficialPress, handleGroupChat }: { game: Schedule, allRosters: any[], handleOfficialPress: (id: number) => void, handleGroupChat: () => void }) => (
+    <>
+      <View style={styles.refereesRow}>
+        <View style={styles.refereeContainer}>
+          <TouchableOpacity 
+            onPress={() => {
+              const ref = allRosters.find(r => r.lastfirstfullname === game.referee1);
+              if (ref) {
+                handleOfficialPress(ref.id);
+              }
+            }}
+          >
+            <Image
+              source={
+                allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
+                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
+                  : require('../../../../assets/images/noPhoto.png')
+              }
+              style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.referee1)} </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.refereeContainer}>
+          <TouchableOpacity 
+            onPress={() => {
+              const ref = allRosters.find(r => r.lastfirstfullname === game.referee2);
+              if (ref) {
+                handleOfficialPress(ref.id);
+              }
+            }}
+          >
+            <Image
+              source={
+                allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
+                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
+                  : require('../../../../assets/images/noPhoto.png')
+              }
+              style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.referee2)} </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+  
+      <View style={styles.refereesRow}>
+        <View style={styles.refereeContainer}>
+          <TouchableOpacity 
+            onPress={() => {
+              const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
+              if (ref) {
+                handleOfficialPress(ref.id);
+              }
+            }}
+          >
+            <Image
+              source={
+                allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
+                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
+                  : require('../../../../assets/images/noPhoto.png')
+              }
+              style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)} </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.refereeContainer}>
+          <TouchableOpacity 
+            onPress={() => {
+              const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
+              if (ref) {
+                handleOfficialPress(ref.id);
+              }
+            }}
+          >
+            <Image
+              source={
+                allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
+                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
+                  : require('../../../../assets/images/noPhoto.png')
+              }
+              style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)} </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+  
+      <TouchableOpacity onPress={handleGroupChat}>
+        <Text style={styles.groupChat}>
+          Start Group Chat <AntDesign name="message1" size={25} />
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+  
+  const AwayTeamContent = ({ game }: { game: Schedule }) => (
+    <View style={styles.teamContentContainer}>
+      <View style={styles.leftColumn}>
+        <Text style={styles.titles}>Head Coach</Text>
+        <View style={styles.headCoachContainer}>
+          <Image
+            source={{ uri: getTeamCoach(game.awayTeamData) || 'https://via.placeholder.com/150' }}
+            style={styles.headCoachPic}
+          />
+          <Text style={styles.headCoachText}>
+            {game.awayTeamData?.headcoachname || 'N/A'}
+          </Text>
+        </View>
+      </View>
+      
+      <View style={styles.rightColumn}>
+        <View style={styles.rightContentSection}>
+          <Text style={styles.subtitles}>Assistant Coach</Text>
+          <Text style={styles.staffText}>
+            {game.awayTeamData?.assistantcoach1 || 'N/A'}
+          </Text>
+        </View>
+        
+        <View style={styles.rightContentSection}>
+          <Text style={styles.subtitles}>Assistant Coach</Text>
+          <Text style={styles.staffText}>
+            {game.awayTeamData?.assistantcoach2 || 'N/A'}
+          </Text>
+        </View>
+        
+        <View style={styles.rightContentSection}>
+  <Text style={styles.subtitles}>Equipment Manager</Text>
+  <Text style={styles.staffText}>
+    {game.awayTeamData?.eqname || 'N/A'}
+  </Text>
+  <View style={styles.iconsContainer}>
+    <TouchableOpacity
+      onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData.eqphone}`)}
+      style={styles.iconButton}
+    >
+      <FontAwesome name="phone" size={24} color="#ff6600" />
+    </TouchableOpacity>
+    <TouchableOpacity
+      onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData.eqphone}?body=`)}
+      style={styles.iconButton}
+    >
+      <AntDesign name="message1" size={24} color="#ff6600" />
+    </TouchableOpacity>
+  </View>
+</View>
+      </View>
+    </View>
+  );
+  
+  const HomeTeamContent = ({ game }: { game: Schedule }) => (
+    <View style={styles.teamContentContainer}>
+      <View style={styles.leftColumn}>
+        <Text style={styles.titles}>Head Coach</Text>
+        <View style={styles.headCoachContainer}>
+          <Image
+            source={{ uri: getTeamCoach(game.homeTeamData) || 'https://via.placeholder.com/150' }}
+            style={styles.headCoachPic}
+          />
+          <Text style={styles.headCoachText}>
+            {game.homeTeamData?.headcoachname || 'N/A'}
+          </Text>
+        </View>
+      </View>
+      
+      <View style={styles.rightColumn}>
+        <View style={styles.rightContentSection}>
+          <Text style={styles.subtitles}>Assistant Coach</Text>
+          <Text style={styles.staffText}>
+            {game.homeTeamData?.assistantcoach1 || 'N/A'}
+          </Text>
+        </View>
+        
+        <View style={styles.rightContentSection}>
+          <Text style={styles.subtitles}>Assistant Coach</Text>
+          <Text style={styles.staffText}>
+            {game.homeTeamData?.assistantcoach2 || 'N/A'}
+          </Text>
+        </View>
+        
+        <View style={styles.rightContentSection}>
+  <Text style={styles.subtitles}>Equipment Manager</Text>
+  <Text style={styles.staffText}>
+    {game.homeTeamData?.eqname || 'N/A'}
+  </Text>
+  <View style={styles.iconsContainer}>
+    <TouchableOpacity
+      onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
+      style={styles.iconButton}
+    >
+      <FontAwesome name="phone" size={24} color="#ff6600" />
+    </TouchableOpacity>
+    <TouchableOpacity
+      onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
+      style={styles.iconButton}
+    >
+      <AntDesign name="message1" size={24} color="#ff6600" />
+    </TouchableOpacity>
+  </View>
+</View>
+      </View>
+    </View>
+  );
+
+  const renderContent = () => {
+    switch(activeTab) {
+        case 'crew':
+            return <CrewContent 
+                game={game} 
+                allRosters={allRosters} 
+                handleOfficialPress={handleOfficialPress}
+                handleGroupChat={handleGroupChat}
+            />;
+        case game.awayTeamData?.abbreviation?.toLowerCase():
+            return <AwayTeamContent 
+                game={game}
+            />;
+        case game.homeTeamData?.abbreviation?.toLowerCase():
+            return <HomeTeamContent 
+                game={game}
+            />;
+        default:
+            return null;
+    }
+};
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.card}>
-      <Text style={styles.gameDate}>
-    {formatGameDate2(game.gamedate)}
-</Text>
+        <Text style={styles.gameDate}>{formatGameDate2(game.gamedate)}</Text>
         <Text style={styles.gameID}>Game# {game.gameid}</Text>
         <View style={styles.teamsContainer}>
           <Image
@@ -206,153 +421,34 @@ const GameDetails = () => {
         </View>
       </View>
       <Text style={styles.disclaimer}>Note: Gamesheet not available until after completion of the game.</Text>
-      <View style={styles.separator} />
 
-      <Text style={styles.titles}>Officials Crew</Text>
-<View style={styles.refereesRow}>
-    <View style={styles.refereeContainer}>
-        <TouchableOpacity 
-            onPress={() => {
-                const ref = allRosters.find(r => r.lastfirstfullname === game.referee1);
-                if (ref) {
-                    handleOfficialPress(ref.id);
-                }
-            }}
+      <View style={styles.tabContainer}>
+    {[
+        'Crew', 
+        game.awayTeamData?.abbreviation || 'Away', 
+        game.homeTeamData?.abbreviation || 'Home'
+    ].map((tab) => (
+        <TouchableOpacity
+            key={tab}
+            onPress={() => setActiveTab(tab.toLowerCase().replace(' ', ''))}
+            style={[
+                styles.tab,
+                activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTab
+            ]}
         >
-            <Image
-                source={
-                    allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
-                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
-                        : require('../../../../assets/images/noPhoto.png')
-                }
-                style={styles.profileImageLines}
-            />
-            <Text style={styles.refereeText}>{getOfficialName(game.referee1)} </Text>
+            <Text style={[
+                styles.tabText,
+                activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTabText
+            ]}>
+                {tab}
+            </Text>
         </TouchableOpacity>
-    </View>
-    <View style={styles.refereeContainer}>
-        <TouchableOpacity 
-            onPress={() => {
-                const ref = allRosters.find(r => r.lastfirstfullname === game.referee2);
-                if (ref) {
-                    handleOfficialPress(ref.id);
-                }
-            }}
-        >
-            <Image
-                source={
-                    allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
-                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
-                        : require('../../../../assets/images/noPhoto.png')
-                }
-                style={styles.profileImageLines}
-            />
-            <Text style={styles.refereeText}>{getOfficialName(game.referee2)} </Text>
-        </TouchableOpacity>
-    </View>
+    ))}
 </View>
 
-<View style={styles.refereesRow}>
-    <View style={styles.refereeContainer}>
-        <TouchableOpacity 
-            onPress={() => {
-                const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
-                if (ref) {
-                    handleOfficialPress(ref.id);
-                }
-            }}
-        >
-            <Image
-                source={
-                    allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
-                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
-                        : require('../../../../assets/images/noPhoto.png')
-                }
-                style={styles.profileImageLines}
-            />
-            <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)} </Text>
-        </TouchableOpacity>
-    </View>
-    <View style={styles.refereeContainer}>
-        <TouchableOpacity 
-            onPress={() => {
-                const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
-                if (ref) {
-                    handleOfficialPress(ref.id);
-                }
-            }}
-        >
-            <Image
-                source={
-                    allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
-                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
-                        : require('../../../../assets/images/noPhoto.png')
-                }
-                style={styles.profileImageLines}
-            />
-            <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)} </Text>
-        </TouchableOpacity>
-    </View>
-</View>
-
-      <TouchableOpacity onPress={handleGroupChat}>
-        <Text style={styles.groupChat}>
-          Start Group Chat <AntDesign name="message1" size={25} />
-        </Text>
-      </TouchableOpacity>
-
-      <View style={styles.separator} />
-
-      <Text style={styles.titles}>Head Coaches</Text>
-      <View style={styles.headCoachesRow}>
-        <View style={styles.headCoachContainer}>
-          <Image
-            source={{ uri: getTeamCoach(game.awayTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.headCoachPic}
-          />
-          <Text style={styles.headCoachText}>
-            {game.awayTeamData?.headcoachname || 'N/A'}
-          </Text>
-        </View>
-        <View style={styles.headCoachContainer}>
-          <Image
-            source={{ uri: getTeamCoach(game.homeTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.headCoachPic}
-          />
-          <Text style={styles.headCoachText}>
-            {game.homeTeamData?.headcoachname || 'N/A'}
-          </Text>
-        </View>
+      <View style={styles.contentContainer}>
+        {renderContent()}
       </View>
-
-      <Text style={styles.titles}>Equipment Managers</Text>
-      <View style={styles.equipmentManagersRow}>
-        <View style={styles.equipmentManagerContainer}>
-          <Text style={styles.equipmentManagerName}>
-            {game.awayTeamData?.eqname || 'N/A'}
-          </Text>
-          <TouchableOpacity
-            onPress={() => game.awayTeamData?.eqphone && handlePhonePress(game.awayTeamData.eqphone)}
-          >
-            <Text style={styles.equipmentManagerPhone}>
-              {game.awayTeamData?.eqphone || 'N/A'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.equipmentManagerContainer}>
-          <Text style={styles.equipmentManagerName}>
-            {game.homeTeamData?.eqname || 'N/A'}
-          </Text>
-          <TouchableOpacity
-            onPress={() => game.homeTeamData?.eqphone && handlePhonePress(game.homeTeamData.eqphone)}
-          >
-            <Text style={styles.equipmentManagerPhone}>
-              {game.homeTeamData?.eqphone || 'N/A'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      <View style={styles.separator} />
     </ScrollView>
   );
 }
@@ -487,7 +583,8 @@ const styles = StyleSheet.create({
   equipmentManagerPhone: {
     fontSize: 14,
     color: '#4287f5',
-    textAlign: 'center',
+    textAlign: 'left',
+    paddingTop: 2,
     textDecorationLine: 'underline',
   },
   refereeContainer: {
@@ -581,6 +678,91 @@ const styles = StyleSheet.create({
     color: '#ff6600',
     textAlign: 'center',
     marginBottom: 10,
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#ff6600',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    backgroundColor: '#000',
+    marginBottom: 20,
+  },
+  tab: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    position: 'relative',
+  },
+  tabText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  activeTabText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  tabContent: {
+    padding: 20,
+  },
+  contentText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  teamContentContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+  },
+  leftColumn: {
+    flex: 0.8,
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#333',
+    paddingRight: 15,
+  },
+  rightColumn: {
+    flex: 1.2,
+    paddingLeft: 15,
+    justifyContent: 'center',
+  },
+  subtitles: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ff6600',
+    marginBottom: 5,
+  },
+  subtitles2: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ff6600',
+    marginBottom: 5,
+  },
+  equipmentManagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    marginTop: 5, // Add space between name and icons
+  },
+  iconButton: {
+    padding: 5,
+  },
+  staffText: {
+    fontSize: 14,
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  rightContentSection: {
+    marginBottom: 20,
   },
 });
 

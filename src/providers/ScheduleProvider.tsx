@@ -97,6 +97,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         arenaaddress, 
                         logo,
                         headcoachname,
+                        assistantcoach1,
+                        assistantcoach2,
                         eqname,
                         eqphone
                     ),
@@ -106,6 +108,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         abbreviation, 
                         logo,
                         headcoachname,
+                        assistantcoach1,
+                        assistantcoach2,
                         eqname,
                         eqphone
                     )

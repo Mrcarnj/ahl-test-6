@@ -45,7 +45,7 @@ export default function ProtectedLayout() {
             name="official/[rosterId]" 
             options={({ route }) => ({
               headerTitle: "Official's Details",
-              headerBackTitle: (route.params as DetailsRouteParams)?.source === 'game' ? 'Game Details' : 'Roster',
+              headerBackTitle: (route.params as DetailsRouteParams)?.source === 'game' ? 'Game' : 'Roster',
               headerShown: true,
               headerStyle: {
                 backgroundColor: '#000000',

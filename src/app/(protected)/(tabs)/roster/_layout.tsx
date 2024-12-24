@@ -16,18 +16,6 @@ export default function RosterLayout() {
               headerTintColor: '#ffffff',
             }}
           />
-          <Stack.Screen 
-            name="details" 
-            options={{
-              headerTitle: "Official's Details",
-              //headerBackTitle: "Home",  // This is the correct property
-              headerShown: true,
-              headerStyle: {
-                backgroundColor: '#000000',
-              },
-              headerTintColor: '#ffffff',
-            }}
-          />
           </Stack>
     );
   }

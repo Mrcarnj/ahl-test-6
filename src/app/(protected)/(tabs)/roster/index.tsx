@@ -47,8 +47,11 @@ const RosterScreen = () => {
 
     const handleRosterPress = useCallback((id: number) => {
         router.push({
-            pathname: "/(protected)/roster/details",
-            params: { rosterId: id }
+            pathname: "/(protected)/official/[rosterId]",
+            params: { 
+                rosterId: id,
+                source: 'roster'
+            }
         });
     }, []);
 

@@ -1,6 +1,6 @@
 // app/(protected)/game/[id].tsx
 import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { format } from 'date-fns';
@@ -35,6 +35,16 @@ const GameDetails = () => {
     const ref = allRosters.find(r => r.lastfirstfullname === lastfirstfullname);
     return ref ? `${ref.firstname} ${ref.lastname}` : lastfirstfullname;
   };
+
+  const handleOfficialPress = (rosterId: number) => {
+    router.push({
+        pathname: "/(protected)/official/[rosterId]",
+        params: { 
+            rosterId: rosterId,
+            source: 'game'
+        }
+    });
+};
 
   const handlePhonePress = (phone: any) => {
     Alert.alert(
@@ -199,55 +209,91 @@ const GameDetails = () => {
       <View style={styles.separator} />
 
       <Text style={styles.titles}>Officials Crew</Text>
-      <View style={styles.refereesRow}>
-        <View style={styles.refereeContainer}>
-        <Image
-            source={
-              allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
-                ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
-                : require('../../../../assets/images/noPhoto.png')
-            }
-            style={styles.profileImageLines}
-          />
-          <Text style={styles.refereeText}>{getOfficialName(game.referee1)}</Text>
-        </View>
-        <View style={styles.refereeContainer}>
-        <Image
-            source={
-              allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
-                ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
-                : require('../../../../assets/images/noPhoto.png')
-            }
-            style={styles.profileImageLines}
-          />
-          <Text style={styles.refereeText}>{getOfficialName(game.referee2)}</Text>
-        </View>
-      </View>
+<View style={styles.refereesRow}>
+    <View style={styles.refereeContainer}>
+        <TouchableOpacity 
+            onPress={() => {
+                const ref = allRosters.find(r => r.lastfirstfullname === game.referee1);
+                if (ref) {
+                    handleOfficialPress(ref.id);
+                }
+            }}
+        >
+            <Image
+                source={
+                    allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
+                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
+                        : require('../../../../assets/images/noPhoto.png')
+                }
+                style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.referee1)} </Text>
+        </TouchableOpacity>
+    </View>
+    <View style={styles.refereeContainer}>
+        <TouchableOpacity 
+            onPress={() => {
+                const ref = allRosters.find(r => r.lastfirstfullname === game.referee2);
+                if (ref) {
+                    handleOfficialPress(ref.id);
+                }
+            }}
+        >
+            <Image
+                source={
+                    allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
+                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
+                        : require('../../../../assets/images/noPhoto.png')
+                }
+                style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.referee2)} </Text>
+        </TouchableOpacity>
+    </View>
+</View>
 
-      <View style={styles.refereesRow}>
-        <View style={styles.refereeContainer}>
-        <Image
-            source={
-              allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
-                ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
-                : require('../../../../assets/images/noPhoto.png')
-            }
-            style={styles.profileImageLines}
-          />
-          <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)}</Text>
-        </View>
-        <View style={styles.refereeContainer}>
-          <Image
-            source={
-              allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
-                ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
-                : require('../../../../assets/images/noPhoto.png')
-            }
-            style={styles.profileImageLines}
-          />
-          <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)}</Text>
-        </View>
-      </View>
+<View style={styles.refereesRow}>
+    <View style={styles.refereeContainer}>
+        <TouchableOpacity 
+            onPress={() => {
+                const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
+                if (ref) {
+                    handleOfficialPress(ref.id);
+                }
+            }}
+        >
+            <Image
+                source={
+                    allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
+                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
+                        : require('../../../../assets/images/noPhoto.png')
+                }
+                style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)} </Text>
+        </TouchableOpacity>
+    </View>
+    <View style={styles.refereeContainer}>
+        <TouchableOpacity 
+            onPress={() => {
+                const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
+                if (ref) {
+                    handleOfficialPress(ref.id);
+                }
+            }}
+        >
+            <Image
+                source={
+                    allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
+                        ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
+                        : require('../../../../assets/images/noPhoto.png')
+                }
+                style={styles.profileImageLines}
+            />
+            <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)} </Text>
+        </TouchableOpacity>
+    </View>
+</View>
 
       <TouchableOpacity onPress={handleGroupChat}>
         <Text style={styles.groupChat}>

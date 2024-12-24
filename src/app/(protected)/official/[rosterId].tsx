@@ -8,7 +8,7 @@ import { FontAwesome, FontAwesome6, AntDesign } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 const Details = () => {
-    const { rosterId } = useLocalSearchParams<{ rosterId: string }>();
+    const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
     const { allRosters } = useRoster();
 
     const selectedRoster = allRosters.find(r => r.id === parseInt(rosterId));
@@ -44,7 +44,7 @@ const Details = () => {
                 <Image
                     source={ selectedRoster.photo ?
                         { uri: selectedRoster.photo }
-                        : require('../../../../../assets/images/noPhoto.png')
+                        : require('../../../../assets/images/noPhoto.png')
                     }
                     style={styles.profileImage}
                     defaultSource={{ uri: selectedRoster.photo }}

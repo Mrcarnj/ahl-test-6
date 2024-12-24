@@ -14,12 +14,8 @@ export interface Roster {
     lastfirstfullname: string;
     photo: string | null;
     phonenumber: string;
-<<<<<<< HEAD
-    isAdmin: boolean;
-=======
-    isAdmin: boolean;      // changed from admin to isAdmin
-    ahlAdmin: boolean;     // added this field
->>>>>>> v2.0
+isAdmin: boolean;      // changed from admin to isAdmin
+ahlAdmin: boolean;     // added this field
     changedpassword: boolean;
 }
 

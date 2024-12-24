@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/profile.tsx
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl } from 'react-native';
 import React, { useMemo, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -61,7 +62,7 @@ const Profile = () => {
                 <Image
                     source={ profileData.photo ?
                         { uri: profileData.photo}
-                    : require('../../../assets/images/noPhoto.png')
+                    : require('../../../../assets/images/noPhoto.png')
                 }
                     style={styles.profileImage}
                 />

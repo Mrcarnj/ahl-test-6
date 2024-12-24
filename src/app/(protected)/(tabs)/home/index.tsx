@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/home/index.tsx
 import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking, Image } from 'react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
@@ -47,8 +48,11 @@ const TestScheduleScreen = () => {
 
     const handleGamePress = (gameId: string) => {
         router.push({
-            pathname: "/(protected)/home/[gameId]",
-            params: { gameId }
+            pathname: "/(protected)/game/[id]",
+            params: { 
+                id: gameId,
+                source: 'home'
+            }
         });
     };
 
@@ -151,10 +155,17 @@ const TestScheduleScreen = () => {
                 }
             >
                 <View style={styles.header}>
+<<<<<<< HEAD:src/app/(protected)/home/index.tsx
                     <Image
                         source={require('../../../../assets/images/ahlLogo.png')}
                         style={styles.leagueLogo}
                     />
+=======
+                <Image 
+          source={require('../../../../../assets/images/ahlLogo.png')} 
+          style={styles.leagueLogo} 
+        />
+>>>>>>> v2.0:src/app/(protected)/(tabs)/home/index.tsx
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
                 </View>
                 {todayEvent && (

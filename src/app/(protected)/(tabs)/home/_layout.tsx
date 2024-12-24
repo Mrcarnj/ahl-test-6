@@ -1,4 +1,4 @@
-// app/(protected)/home/_layout.tsx
+// app/(protected)/(tabs)/home/_layout.tsx
 import { useRoster } from "@/src/providers/RosterProvider";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
@@ -31,18 +31,6 @@ export default function HomeLayout() {
             headerShown: false,
             headerTitle: "Home",
             headerLeft: () => null,
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
-        <Stack.Screen 
-          name="[gameId]" 
-          options={{
-            headerTitle: "Game Details",
-            //headerBackTitle: "Home",  // This is the correct property
-            headerShown: true,
             headerStyle: {
               backgroundColor: '#000000',
             },

@@ -1,3 +1,4 @@
+//src/providers/ScheduleProvider.tsx
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useRoster } from "./RosterProvider";
@@ -13,7 +14,12 @@ export interface Roster {
     lastfirstfullname: string;
     photo: string | null;
     phonenumber: string;
+<<<<<<< HEAD
     isAdmin: boolean;
+=======
+    isAdmin: boolean;      // changed from admin to isAdmin
+    ahlAdmin: boolean;     // added this field
+>>>>>>> v2.0
     changedpassword: boolean;
 }
 

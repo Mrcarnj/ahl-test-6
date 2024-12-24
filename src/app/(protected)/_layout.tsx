@@ -1,10 +1,21 @@
 // app/(protected)/_layout.tsx
-import { router, Tabs, useNavigation } from "expo-router";
+import { router, Tabs, Stack } from "expo-router";
 import { useAuth } from "../../providers/AuthProvider";
 import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
-import { useProtectedRoute } from "../../hooks/useProtectedRoute"; // We'll move this to a separate file
-import { FontAwesome } from '@expo/vector-icons'; // or whatever icon set you prefer
+import { useProtectedRoute } from "../../hooks/useProtectedRoute";
+import { FontAwesome } from '@expo/vector-icons';
+
+// Define the type for our route params
+type GameRouteParams = {
+  id: string;
+  source: 'calendar' | 'home';
+}
+
+type DetailsRouteParams = {
+  rosterId: string;
+  source: 'roster' | 'game';
+}
 
 export default function ProtectedLayout() {
   useProtectedRoute();
@@ -12,56 +23,37 @@ export default function ProtectedLayout() {
   return (
     <RosterProvider>
       <ScheduleProvider>
-        <Tabs
-          screenOptions={{
-            headerShown: false,
-            tabBarStyle: {
-              backgroundColor: '#000000',
-              borderTopWidth: 0,
-            },
-            tabBarActiveTintColor: '#ff6600',
-            tabBarInactiveTintColor: '#666',
-          }}
-        >
-          <Tabs.Screen
-            name="home"
-            options={{
-              headerTitle: "Home",
-              tabBarLabel: "Home",
-              tabBarIcon: ({ color }) => (
-                <FontAwesome name="home" size={24} color={color} />
-              ),
-            }}
+        <Stack>
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ headerShown: false }} 
           />
-          <Tabs.Screen
-            name="calendar"
-            options={{
-              headerShown: false,
-              tabBarLabel: "Calendar",
-              tabBarIcon: ({ color }) => (
-                <FontAwesome name="calendar" size={24} color={color} />
-              ),
-            }}
+          <Stack.Screen 
+            name="game/[id]" 
+            options={({ route }) => ({
+              headerTitle: "Game Details",
+              // Type assertion to access params
+              headerBackTitle: (route.params as GameRouteParams)?.source === 'calendar' ? 'Calendar' : 'Home',
+              headerShown: true,
+              headerStyle: {
+                backgroundColor: '#000000',
+              },
+              headerTintColor: '#ffffff',
+            })}
           />
-          <Tabs.Screen
-            name="roster"
-            options={{
-              tabBarLabel: "Roster",
-              tabBarIcon: ({ color }) => (
-                <FontAwesome name="users" size={24} color={color} />
-              ),
-            }}
+          <Stack.Screen 
+            name="official/[rosterId]" 
+            options={({ route }) => ({
+              headerTitle: "Official's Details",
+              headerBackTitle: (route.params as DetailsRouteParams)?.source === 'game' ? 'Game Details' : 'Roster',
+              headerShown: true,
+              headerStyle: {
+                backgroundColor: '#000000',
+              },
+              headerTintColor: '#ffffff',
+            })}
           />
-          <Tabs.Screen
-            name="profile"
-            options={{
-              tabBarLabel: "Profile",
-              tabBarIcon: ({ color }) => (
-                <FontAwesome name="user" size={24} color={color} />
-              ),
-            }}
-          />
-        </Tabs>
+        </Stack>
       </ScheduleProvider>
     </RosterProvider>
   );

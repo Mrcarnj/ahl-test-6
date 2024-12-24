@@ -1,4 +1,4 @@
-// app/(protected)/calendar/_layout.tsx
+// app/(protected)/(tabs)/calendar/_layout.tsx
 import { useRoster } from "@/src/providers/RosterProvider";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
@@ -40,17 +40,6 @@ export default function HomeLayout() {
                 <Ionicons name="share-outline" size={24} color="#ff6600" />
               </TouchableOpacity>
             ),
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
-        <Stack.Screen 
-          name="[gameId]" 
-          options={{
-            headerTitle: "Game Details",
-            headerShown: true,
             headerStyle: {
               backgroundColor: '#000000',
             },

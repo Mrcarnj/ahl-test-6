@@ -1,4 +1,4 @@
-// app/(protected)/details.tsx
+// app/(protected)/(tabs)/roster/details.tsx
 import { View, Text, StyleSheet, ScrollView, Image, Alert, Linking, TouchableOpacity } from 'react-native';
 import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { FontAwesome, FontAwesome6, AntDesign } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 const Details = () => {
-    const { rosterId } = useLocalSearchParams<{ rosterId: string }>();
+    const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
     const { allRosters } = useRoster();
 
     const selectedRoster = allRosters.find(r => r.id === parseInt(rosterId));

@@ -1,4 +1,4 @@
-// app/(protected)/calendar/index.tsx
+// app/(protected)/(tabs)/calendar/index.tsx
 
 import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
@@ -62,12 +62,15 @@ export default function CalendarScreen() {
     const selectedDate = day.dateString;
     const selectedGame = markedDates[selectedDate];
     if (selectedGame?.gameid) {
-      router.push({
-        pathname: "/(protected)/calendar/[gameId]",
-        params: { gameId: selectedGame.gameid }
-      });
+        router.push({
+            pathname: "/(protected)/game/[id]",
+            params: { 
+                id: selectedGame.gameid,
+                source: 'calendar'
+            }
+        });
     }
-  };
+};
 
   const onMonthChange = (month: DateData) => {
     setCurrentMonth(new Date(month.timestamp));

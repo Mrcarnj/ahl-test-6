@@ -1,3 +1,4 @@
+// app/(protected)/(tabs)/roster/index.tsx
 import React, { useEffect, useState, useCallback, memo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
@@ -51,8 +52,11 @@ const RosterScreen = () => {
 
     const handleRosterPress = useCallback((id: number) => {
         router.push({
-            pathname: "/(protected)/roster/details",
-            params: { rosterId: id }
+            pathname: "/(protected)/official/[rosterId]",
+            params: { 
+                rosterId: id,
+                source: 'roster'
+            }
         });
     }, []);
 

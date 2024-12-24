@@ -1,7 +1,7 @@
 // app/(protected)/game/[id].tsx
 import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach } from '@/src/providers/ScheduleProvider';
+import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach, formatGameDate2 } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { format } from 'date-fns';
 import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
@@ -158,9 +158,9 @@ const GameDetails = () => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.card}>
-        <Text style={styles.gameDate}>
-          {format(new Date(game.gamedate), 'MM/dd/yyyy')}
-        </Text>
+      <Text style={styles.gameDate}>
+    {formatGameDate2(game.gamedate)}
+</Text>
         <Text style={styles.gameID}>Game# {game.gameid}</Text>
         <View style={styles.teamsContainer}>
           <Image

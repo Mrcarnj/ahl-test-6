@@ -173,6 +173,11 @@ export const formatGameDate = (dateString: string) => {
     return format(date, 'EEE. MMMM d, yyyy');
 };
 
+export const formatGameDate2 = (dateString: string) => {
+    const date = parse(dateString, 'yyyy-MM-dd', new Date());
+    return format(date, 'MM/d/yyyy');
+};
+
 // Updated getTeamLogo function
 export const getTeamLogo = (team?: Team) => {
     if (team?.abbreviation) {

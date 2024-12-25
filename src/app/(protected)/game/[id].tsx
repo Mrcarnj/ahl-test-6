@@ -164,7 +164,7 @@ const GameDetails = () => {
                   ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
                   : require('../../../../assets/images/noPhoto.png')
               }
-              style={styles.profileImageLines}
+              style={styles.profileImageRef}
             />
             <Text style={styles.refereeText}>{getOfficialName(game.referee1)} </Text>
           </TouchableOpacity>
@@ -184,7 +184,7 @@ const GameDetails = () => {
                   ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
                   : require('../../../../assets/images/noPhoto.png')
               }
-              style={styles.profileImageLines}
+              style={styles.profileImageRef}
             />
             <Text style={styles.refereeText}>{getOfficialName(game.referee2)} </Text>
           </TouchableOpacity>
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   },
   refereesRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-evenly',
     marginBottom: 20,
   },
   headCoachesRow: {
@@ -589,6 +589,7 @@ const styles = StyleSheet.create({
   },
   refereeContainer: {
     alignItems: 'center',
+    marginHorizontal: 30,
   },
   profileImageRef: {
     width: 150,
@@ -689,7 +690,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#333',
     backgroundColor: '#000',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   tab: {
     paddingVertical: 12,

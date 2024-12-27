@@ -1,5 +1,5 @@
 // app/(protected)/game/[id].tsx
-import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach, formatGameDate2 } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
@@ -16,6 +16,8 @@ const GameDetails = () => {
   const { allGames, myGames } = useSchedule();
   const { allRosters } = useRoster();
   const [activeTab, setActiveTab] = useState('crew');
+  const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
+  const screenWidth = Dimensions.get('window').width;
 
   const game = myGames.find(g => g.gameid === id);
 
@@ -42,13 +44,13 @@ const GameDetails = () => {
 
   const handleOfficialPress = (rosterId: number) => {
     router.push({
-        pathname: "/(protected)/official/[rosterId]",
-        params: { 
-            rosterId: rosterId,
-            source: 'game'
-        }
+      pathname: "/(protected)/official/[rosterId]",
+      params: {
+        rosterId: rosterId,
+        source: 'game'
+      }
     });
-};
+  };
 
   // const handlePhonePress = (phone: any, action: 'call' | 'message') => {
   //     if (action === 'call') {
@@ -150,7 +152,7 @@ const GameDetails = () => {
     <>
       <View style={styles.refereesRow}>
         <View style={styles.refereeContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               const ref = allRosters.find(r => r.lastfirstfullname === game.referee1);
               if (ref) {
@@ -170,7 +172,7 @@ const GameDetails = () => {
           </TouchableOpacity>
         </View>
         <View style={styles.refereeContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               const ref = allRosters.find(r => r.lastfirstfullname === game.referee2);
               if (ref) {
@@ -190,10 +192,10 @@ const GameDetails = () => {
           </TouchableOpacity>
         </View>
       </View>
-  
+
       <View style={styles.refereesRow}>
         <View style={styles.refereeContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
               if (ref) {
@@ -213,7 +215,7 @@ const GameDetails = () => {
           </TouchableOpacity>
         </View>
         <View style={styles.refereeContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
               if (ref) {
@@ -233,7 +235,7 @@ const GameDetails = () => {
           </TouchableOpacity>
         </View>
       </View>
-  
+
       <TouchableOpacity onPress={handleGroupChat}>
         <Text style={styles.groupChat}>
           Start Group Chat <AntDesign name="message1" size={25} />
@@ -241,7 +243,7 @@ const GameDetails = () => {
       </TouchableOpacity>
     </>
   );
-  
+
   const AwayTeamContent = ({ game }: { game: Schedule }) => (
     <View style={styles.teamContentContainer}>
       <View style={styles.leftColumn}>
@@ -256,7 +258,7 @@ const GameDetails = () => {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.rightColumn}>
         <View style={styles.rightContentSection}>
           <Text style={styles.subtitles}>Assistant Coach</Text>
@@ -264,38 +266,38 @@ const GameDetails = () => {
             {game.awayTeamData?.assistantcoach1 || 'N/A'}
           </Text>
         </View>
-        
+
         <View style={styles.rightContentSection}>
           <Text style={styles.subtitles}>Assistant Coach</Text>
           <Text style={styles.staffText}>
             {game.awayTeamData?.assistantcoach2 || 'N/A'}
           </Text>
         </View>
-        
+
         <View style={styles.rightContentSection}>
-  <Text style={styles.subtitles}>Equipment Manager</Text>
-  <Text style={styles.staffText}>
-    {game.awayTeamData?.eqname || 'N/A'}
-  </Text>
-  <View style={styles.iconsContainer}>
-    <TouchableOpacity
-      onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData.eqphone}`)}
-      style={styles.iconButton}
-    >
-      <FontAwesome name="phone" size={24} color="#ff6600" />
-    </TouchableOpacity>
-    <TouchableOpacity
-      onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData.eqphone}?body=`)}
-      style={styles.iconButton}
-    >
-      <AntDesign name="message1" size={24} color="#ff6600" />
-    </TouchableOpacity>
-  </View>
-</View>
+          <Text style={styles.subtitles}>Equipment Manager</Text>
+          <Text style={styles.staffText}>
+            {game.awayTeamData?.eqname || 'N/A'}
+          </Text>
+          <View style={styles.iconsContainer}>
+            <TouchableOpacity
+              onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData.eqphone}`)}
+              style={styles.iconButton}
+            >
+              <FontAwesome name="phone" size={24} color="#ff6600" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData.eqphone}?body=`)}
+              style={styles.iconButton}
+            >
+              <AntDesign name="message1" size={24} color="#ff6600" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </View>
   );
-  
+
   const HomeTeamContent = ({ game }: { game: Schedule }) => (
     <View style={styles.teamContentContainer}>
       <View style={styles.leftColumn}>
@@ -310,7 +312,7 @@ const GameDetails = () => {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.rightColumn}>
         <View style={styles.rightContentSection}>
           <Text style={styles.subtitles}>Assistant Coach</Text>
@@ -318,59 +320,59 @@ const GameDetails = () => {
             {game.homeTeamData?.assistantcoach1 || 'N/A'}
           </Text>
         </View>
-        
+
         <View style={styles.rightContentSection}>
           <Text style={styles.subtitles}>Assistant Coach</Text>
           <Text style={styles.staffText}>
             {game.homeTeamData?.assistantcoach2 || 'N/A'}
           </Text>
         </View>
-        
+
         <View style={styles.rightContentSection}>
-  <Text style={styles.subtitles}>Equipment Manager</Text>
-  <Text style={styles.staffText}>
-    {game.homeTeamData?.eqname || 'N/A'}
-  </Text>
-  <View style={styles.iconsContainer}>
-    <TouchableOpacity
-      onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
-      style={styles.iconButton}
-    >
-      <FontAwesome name="phone" size={24} color="#ff6600" />
-    </TouchableOpacity>
-    <TouchableOpacity
-      onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
-      style={styles.iconButton}
-    >
-      <AntDesign name="message1" size={24} color="#ff6600" />
-    </TouchableOpacity>
-  </View>
-</View>
+          <Text style={styles.subtitles}>Equipment Manager</Text>
+          <Text style={styles.staffText}>
+            {game.homeTeamData?.eqname || 'N/A'}
+          </Text>
+          <View style={styles.iconsContainer}>
+            <TouchableOpacity
+              onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
+              style={styles.iconButton}
+            >
+              <FontAwesome name="phone" size={24} color="#ff6600" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
+              style={styles.iconButton}
+            >
+              <AntDesign name="message1" size={24} color="#ff6600" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </View>
   );
 
   const renderContent = () => {
-    switch(activeTab) {
-        case 'crew':
-            return <CrewContent 
-                game={game} 
-                allRosters={allRosters} 
-                handleOfficialPress={handleOfficialPress}
-                handleGroupChat={handleGroupChat}
-            />;
-        case game.awayTeamData?.abbreviation?.toLowerCase():
-            return <AwayTeamContent 
-                game={game}
-            />;
-        case game.homeTeamData?.abbreviation?.toLowerCase():
-            return <HomeTeamContent 
-                game={game}
-            />;
-        default:
-            return null;
+    switch (activeTab) {
+      case 'crew':
+        return <CrewContent
+          game={game}
+          allRosters={allRosters}
+          handleOfficialPress={handleOfficialPress}
+          handleGroupChat={handleGroupChat}
+        />;
+      case game.awayTeamData?.abbreviation?.toLowerCase():
+        return <AwayTeamContent
+          game={game}
+        />;
+      case game.homeTeamData?.abbreviation?.toLowerCase():
+        return <HomeTeamContent
+          game={game}
+        />;
+      default:
+        return null;
     }
-};
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -423,28 +425,28 @@ const GameDetails = () => {
       <Text style={styles.disclaimer}>Note: Gamesheet not available until after completion of the game.</Text>
 
       <View style={styles.tabContainer}>
-    {[
-        'Crew', 
-        game.awayTeamData?.abbreviation || 'Away', 
-        game.homeTeamData?.abbreviation || 'Home'
-    ].map((tab) => (
-        <TouchableOpacity
+        {[
+          'Crew',
+          game.awayTeamData?.abbreviation || 'Away',
+          game.homeTeamData?.abbreviation || 'Home'
+        ].map((tab) => (
+          <TouchableOpacity
             key={tab}
             onPress={() => setActiveTab(tab.toLowerCase().replace(' ', ''))}
             style={[
-                styles.tab,
-                activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTab
+              styles.tab,
+              activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTab
             ]}
-        >
+          >
             <Text style={[
-                styles.tabText,
-                activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTabText
+              styles.tabText,
+              activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTabText
             ]}>
-                {tab}
+              {tab}
             </Text>
-        </TouchableOpacity>
-    ))}
-</View>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <View style={styles.contentContainer}>
         {renderContent()}

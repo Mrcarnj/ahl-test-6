@@ -49,7 +49,7 @@ const TestScheduleScreen = () => {
     const handleGamePress = (gameId: string) => {
         router.push({
             pathname: "/(protected)/game/[id]",
-            params: { 
+            params: {
                 id: gameId,
                 source: 'home'
             }
@@ -154,26 +154,35 @@ const TestScheduleScreen = () => {
                 }
             >
                 <View style={styles.header}>
-                <Image 
-          source={require('../../../../../assets/images/ahlLogo.png')} 
-          style={styles.leagueLogo} 
-        />
+                    <Image
+                        source={require('../../../../../assets/images/ahlLogo.png')}
+                        style={styles.leagueLogo}
+                    />
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
-                    </View>
+                </View>
                 {todayEvent && (
-                <>
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Today</Text>
-                        <View style={styles.gameCard}>
-                            <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
-                            <Text style={styles.matchup}>
-                                {todayEvent.awayteam} @ {todayEvent.hometeam}
-                            </Text>
+                    <>
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Today</Text>
+                            <TouchableOpacity
+                                style={styles.gameCardToday}
+                                onPress={() => handleGamePress(todayEvent.gameid)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={styles.gameContent}>
+                                    <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
+                                    <Text style={styles.matchup}>
+                                        {todayEvent.awayteam} @ {todayEvent.hometeam}
+                                    </Text>
+                                    <Text style={styles.gameDetails}>
+                                        {formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // {todayEvent.homeTeamData?.arenaname}
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                            </TouchableOpacity>
                         </View>
-                    </View>
-                    <View style={styles.separator} />
-                </>
-            )}
+                    </>
+                )}
 
                 <View style={styles.separator} />
 
@@ -231,12 +240,12 @@ const TestScheduleScreen = () => {
                         <Text style={styles.noGamesText}>No upcoming games</Text>
                     )}
                     <TouchableOpacity
-    style={styles.gameCard}
-    onPress={() => router.push("/(protected)/home/AllGames")}
->
-    <Text style={styles.link}>View All Games</Text>
-    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-</TouchableOpacity>
+                        style={styles.gameCard}
+                        onPress={() => router.push("/(protected)/home/AllGames")}
+                    >
+                        <Text style={styles.link}>View All Games</Text>
+                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                    </TouchableOpacity>
                 </View>
                 <View style={styles.separator} />
 
@@ -249,7 +258,7 @@ const TestScheduleScreen = () => {
                         >
                             <View style={styles.linkTitleContainer}>
                                 <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook' &&   <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
                                 {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
                             </View>
                             <Ionicons name="chevron-forward" size={24} color="#ff6600" />
@@ -308,6 +317,14 @@ const styles = StyleSheet.create({
         padding: 15,
         borderRadius: 8,
         marginBottom: 12,
+        flexDirection: 'row',  // Add this to align content and arrow
+        alignItems: 'center',  // Add this to center vertically
+        justifyContent: 'space-between', // Add this to put arrow on right
+    },
+    gameCardToday: {
+        backgroundColor: '#1a1a1a',
+        padding: 15,
+        borderRadius: 8,
         flexDirection: 'row',  // Add this to align content and arrow
         alignItems: 'center',  // Add this to center vertically
         justifyContent: 'space-between', // Add this to put arrow on right
@@ -404,11 +421,12 @@ const styles = StyleSheet.create({
         marginLeft: 8, // Backup for gap if not supported
     },
     leagueLogo: {
+        marginTop: 5,
         width: 80,
         height: 80,
         resizeMode: 'contain',
         marginBottom: 10,
-      },
+    },
 });
 
 export default TestScheduleScreen;

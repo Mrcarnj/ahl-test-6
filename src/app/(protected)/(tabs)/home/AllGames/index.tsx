@@ -43,8 +43,11 @@ export default function AllGames() {
 
     const handleGamePress = (gameId: string) => {
         router.push({
-            pathname: "/(protected)/home/[gameId]",
-            params: { gameId }
+            pathname: "/(protected)/game/[id]",
+            params: { 
+                id: gameId,
+                source: 'home'
+            }
         });
     };
 

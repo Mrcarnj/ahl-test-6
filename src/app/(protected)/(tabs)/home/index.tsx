@@ -84,32 +84,74 @@ const TestScheduleScreen = () => {
     };
 
     const getNextExpenseReportDue = useCallback(() => {
-        const startDate = new Date(2024, 9, 21);
-        const endDate = new Date(2025, 5, 30);
+        const startDate = new Date(2024, 9, 21); // October 21, 2024
+        const endDate = new Date(2025, 5, 30);   // June 30, 2025
         const today = new Date();
+        today.setHours(0, 0, 0, 0);  // Set to start of day for accurate comparison
         let nextDueDate = startDate;
-
+    
         while (nextDueDate <= endDate) {
-            if (nextDueDate >= today) {
-                const daysUntilDue = differenceInDays(addDays(nextDueDate, 1), today);
-                const rangeEndDate = new Date(nextDueDate);
+            // Create date objects for comparison that are set to start of day
+            const currentDueDate = new Date(nextDueDate);
+            currentDueDate.setHours(0, 0, 0, 0);
+            
+            // Create a copy for tomorrow comparison
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+    
+            if (currentDueDate >= today) {
+                const rangeEndDate = new Date(currentDueDate);
                 const rangeStartDate = new Date(rangeEndDate);
                 rangeStartDate.setDate(rangeStartDate.getDate() - 14);
-
+    
                 const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(addDays(rangeEndDate, -1), 'MMMM d')}`;
-
-                if (daysUntilDue === 0) {
-                    return { text: "TODAY by 12pm EST", isToday: true, isTomorrow: false, dateRange, rangeStartDate, rangeEndDate };
-                } else if (daysUntilDue === 1) {
-                    return { text: "TOMORROW", isToday: false, isTomorrow: true, dateRange, rangeStartDate, rangeEndDate };
-                } else {
-                    return { text: `${daysUntilDue} day${daysUntilDue > 1 ? 's' : ''}`, isToday: false, isTomorrow: false, dateRange, rangeStartDate, rangeEndDate };
+    
+                // Check if it's due today
+                if (currentDueDate.getTime() === today.getTime()) {
+                    return { 
+                        text: "TODAY by 12pm EST", 
+                        isToday: true, 
+                        isTomorrow: false, 
+                        dateRange,
+                        rangeStartDate,
+                        rangeEndDate 
+                    };
                 }
+                
+                // Check if it's due tomorrow
+                if (currentDueDate.getTime() === tomorrow.getTime()) {
+                    return { 
+                        text: "TOMORROW", 
+                        isToday: false, 
+                        isTomorrow: true, 
+                        dateRange,
+                        rangeStartDate,
+                        rangeEndDate 
+                    };
+                }
+    
+                // If not today or tomorrow, show days until due
+                const daysUntilDue = differenceInDays(currentDueDate, today);
+                return { 
+                    text: `${daysUntilDue} day${daysUntilDue > 1 ? 's' : ''}`, 
+                    isToday: false, 
+                    isTomorrow: false, 
+                    dateRange,
+                    rangeStartDate,
+                    rangeEndDate 
+                };
             }
             nextDueDate = addDays(nextDueDate, 14);
         }
-
-        return { text: "No more expense reports due", isToday: false, isTomorrow: false, dateRange: "", rangeStartDate: null, rangeEndDate: null };
+    
+        return { 
+            text: "No more expense reports due", 
+            isToday: false, 
+            isTomorrow: false, 
+            dateRange: "", 
+            rangeStartDate: null, 
+            rangeEndDate: null 
+        };
     }, []);
 
     const getGamesInDateRange = useCallback((dateRange: string) => {

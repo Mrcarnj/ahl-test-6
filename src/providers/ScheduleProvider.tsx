@@ -50,9 +50,24 @@ export interface Team {
     logo: string | null;
 }
 
-type ScheduleContext = {
+export interface TeamRoster {
+    id: number;
+    team: string;
+    player_name: string;
+    position: string;
+    games_played: number;
+    goals: number;
+    assists: number;
+    points: number;
+    plusMinus: number;
+    penalty_minutes: number;
+    power_play_goals: number;
+  }
+
+  type ScheduleContext = {
     allGames: Schedule[];
     myGames: Schedule[];
+    teamRosters: TeamRoster[];
     loading: boolean;
     error: string | null;
     refreshSchedule: () => Promise<void>;
@@ -61,6 +76,7 @@ type ScheduleContext = {
 const ScheduleContext = createContext<ScheduleContext>({
     allGames: [],
     myGames: [],
+    teamRosters: [],
     loading: false,
     error: null,
     refreshSchedule: async () => {},
@@ -72,6 +88,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [myGames, setMyGames] = useState<Schedule[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
 
     const fetchSchedule = async () => {
         if (!roster?.lastfirstfullname) {
@@ -116,12 +133,18 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 `)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
+            
+                const { data: rostersData, error: rostersError } = await supabase
+                .from('teamRosters')
+                .select('*');
 
+            if (rostersError) throw rostersError;
             if (scheduleError) throw scheduleError;
 
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
+            setTeamRosters(rostersData);
 
             // Filter for games where the roster member is assigned as any official
             const myFilteredGames = processedGames.filter(game => 
@@ -153,6 +176,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         <ScheduleContext.Provider value={{
             allGames,
             myGames,
+            teamRosters,
             loading,
             error,
             refreshSchedule: fetchSchedule

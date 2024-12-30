@@ -244,113 +244,197 @@ const GameDetails = () => {
     </>
   );
 
-  const AwayTeamContent = ({ game }: { game: Schedule }) => (
-    <View style={styles.teamContentContainer}>
-      <View style={styles.leftColumn}>
-        <Text style={styles.titles}>Head Coach</Text>
-        <View style={styles.headCoachContainer}>
-          <Image
-            source={{ uri: getTeamCoach(game.awayTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.headCoachPic}
-          />
-          <Text style={styles.headCoachText}>
-            {game.awayTeamData?.headcoachname || 'N/A'}
-          </Text>
-        </View>
-      </View>
+  const AwayTeamContent = ({ game }: { game: Schedule }) => { 
+    const { teamRosters } = useSchedule();
+    const teamAbbrev = game.awayTeamData?.abbreviation;
+    const teamRoster = teamRosters.filter(player => player.team === teamAbbrev);
 
-      <View style={styles.rightColumn}>
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Assistant Coach</Text>
-          <Text style={styles.staffText}>
-            {game.awayTeamData?.assistantcoach1 || 'N/A'}
-          </Text>
-        </View>
+    return (
+      <ScrollView style={styles.teamContentScrollView}>
+        <View style={styles.teamContentContainer}>
+          <View style={styles.leftColumn}>
+            <Text style={styles.titles}>Head Coach</Text>
+            <View style={styles.headCoachContainer}>
+              <Image
+                source={{ uri: getTeamCoach(game.awayTeamData) || 'https://via.placeholder.com/150' }}
+                style={styles.headCoachPic}
+              />
+              <Text style={styles.headCoachText}>
+                {game.awayTeamData?.headcoachname || 'N/A'}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Assistant Coach</Text>
-          <Text style={styles.staffText}>
-            {game.awayTeamData?.assistantcoach2 || 'N/A'}
-          </Text>
-        </View>
+          <View style={styles.rightColumn}>
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Assistant Coach</Text>
+              <Text style={styles.staffText}>
+                {game.awayTeamData?.assistantcoach1 || 'N/A'}
+              </Text>
+            </View>
 
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Equipment Manager</Text>
-          <Text style={styles.staffText}>
-            {game.awayTeamData?.eqname || 'N/A'}
-          </Text>
-          <View style={styles.iconsContainer}>
-            <TouchableOpacity
-              onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData.eqphone}`)}
-              style={styles.iconButton}
-            >
-              <FontAwesome name="phone" size={24} color="#ff6600" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData.eqphone}?body=`)}
-              style={styles.iconButton}
-            >
-              <AntDesign name="message1" size={24} color="#ff6600" />
-            </TouchableOpacity>
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Assistant Coach</Text>
+              <Text style={styles.staffText}>
+                {game.awayTeamData?.assistantcoach2 || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Equipment Manager</Text>
+              <Text style={styles.staffText}>
+                {game.awayTeamData?.eqname || 'N/A'}
+              </Text>
+              <View style={styles.iconsContainer}>
+                <TouchableOpacity
+                  onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData?.eqphone}`)}
+                  style={styles.iconButton}
+                >
+                  <FontAwesome name="phone" size={24} color="#ff6600" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData?.eqphone}?body=`)}
+                  style={styles.iconButton}
+                >
+                  <AntDesign name="message1" size={24} color="#ff6600" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-    </View>
-  );
 
-  const HomeTeamContent = ({ game }: { game: Schedule }) => (
-    <View style={styles.teamContentContainer}>
-      <View style={styles.leftColumn}>
-        <Text style={styles.titles}>Head Coach</Text>
-        <View style={styles.headCoachContainer}>
-          <Image
-            source={{ uri: getTeamCoach(game.homeTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.headCoachPic}
-          />
-          <Text style={styles.headCoachText}>
-            {game.homeTeamData?.headcoachname || 'N/A'}
-          </Text>
+        <View style={styles.separator} />
+
+        <View style={styles.rosterContainer}>
+          <Text style={styles.sectionTitle}>Team Roster</Text>
+          
+          <View style={styles.rosterHeader}>
+            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
+            <Text style={styles.headerText}>POS</Text>
+            <Text style={styles.headerText}>GP</Text>
+            <Text style={styles.headerText}>G</Text>
+            <Text style={styles.headerText}>A</Text>
+            <Text style={styles.headerText}>PTS</Text>
+            <Text style={styles.headerText}>+/-</Text>
+            <Text style={styles.headerText}>PIM</Text>
+            <Text style={styles.headerText}>PPG</Text>
+          </View>
+          
+          {teamRoster.map((player) => (
+            <View key={player.id} style={styles.playerRow}>
+              <Text style={[styles.playerText, { flex: 4 }]}>
+                {player.player_name}
+              </Text>
+              <Text style={styles.playerText}>{player.position}</Text>
+              <Text style={styles.playerText}>{player.games_played}</Text>
+              <Text style={styles.playerText}>{player.goals}</Text>
+              <Text style={styles.playerText}>{player.assists}</Text>
+              <Text style={styles.playerText}>{player.points}</Text>
+              <Text style={styles.playerText}>{player.plusMinus}</Text>
+              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+              <Text style={styles.playerText}>{player.power_play_goals}</Text>
+            </View>
+          ))}
         </View>
-      </View>
+      </ScrollView>
+    );
+};
 
-      <View style={styles.rightColumn}>
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Assistant Coach</Text>
-          <Text style={styles.staffText}>
-            {game.homeTeamData?.assistantcoach1 || 'N/A'}
-          </Text>
-        </View>
+  const HomeTeamContent = ({ game }: { game: Schedule }) => { 
+    const { teamRosters } = useSchedule();
+    const teamAbbrev = game.homeTeamData?.abbreviation;
+    const teamRoster = teamRosters.filter(player => player.team === teamAbbrev);
 
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Assistant Coach</Text>
-          <Text style={styles.staffText}>
-            {game.homeTeamData?.assistantcoach2 || 'N/A'}
-          </Text>
-        </View>
+    return (
+      <ScrollView style={styles.teamContentScrollView}>
+        <View style={styles.teamContentContainer}>
+          <View style={styles.leftColumn}>
+            <Text style={styles.titles}>Head Coach</Text>
+            <View style={styles.headCoachContainer}>
+              <Image
+                source={{ uri: getTeamCoach(game.homeTeamData) || 'https://via.placeholder.com/150' }}
+                style={styles.headCoachPic}
+              />
+              <Text style={styles.headCoachText}>
+                {game.homeTeamData?.headcoachname || 'N/A'}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.rightContentSection}>
-          <Text style={styles.subtitles}>Equipment Manager</Text>
-          <Text style={styles.staffText}>
-            {game.homeTeamData?.eqname || 'N/A'}
-          </Text>
-          <View style={styles.iconsContainer}>
-            <TouchableOpacity
-              onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
-              style={styles.iconButton}
-            >
-              <FontAwesome name="phone" size={24} color="#ff6600" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
-              style={styles.iconButton}
-            >
-              <AntDesign name="message1" size={24} color="#ff6600" />
-            </TouchableOpacity>
+          <View style={styles.rightColumn}>
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Assistant Coach</Text>
+              <Text style={styles.staffText}>
+                {game.homeTeamData?.assistantcoach1 || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Assistant Coach</Text>
+              <Text style={styles.staffText}>
+                {game.homeTeamData?.assistantcoach2 || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.rightContentSection}>
+              <Text style={styles.subtitles}>Equipment Manager</Text>
+              <Text style={styles.staffText}>
+                {game.homeTeamData?.eqname || 'N/A'}
+              </Text>
+              <View style={styles.iconsContainer}>
+                <TouchableOpacity
+                  onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
+                  style={styles.iconButton}
+                >
+                  <FontAwesome name="phone" size={24} color="#ff6600" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
+                  style={styles.iconButton}
+                >
+                  <AntDesign name="message1" size={24} color="#ff6600" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-    </View>
-  );
+
+        <View style={styles.separator} />
+
+        <View style={styles.rosterContainer}>
+          <Text style={styles.sectionTitle}>Team Roster</Text>
+          
+          <View style={styles.rosterHeader}>
+            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
+            <Text style={styles.headerText}>POS</Text>
+            <Text style={styles.headerText}>GP</Text>
+            <Text style={styles.headerText}>G</Text>
+            <Text style={styles.headerText}>A</Text>
+            <Text style={styles.headerText}>PTS</Text>
+            <Text style={styles.headerText}>+/-</Text>
+            <Text style={styles.headerText}>PIM</Text>
+            <Text style={styles.headerText}>PPG</Text>
+          </View>
+          
+          {teamRoster.map((player) => (
+            <View key={player.id} style={styles.playerRow}>
+              <Text style={[styles.playerText, { flex: 4 }]}>
+                {player.player_name}
+              </Text>
+              <Text style={styles.playerText}>{player.position}</Text>
+              <Text style={styles.playerText}>{player.games_played}</Text>
+              <Text style={styles.playerText}>{player.goals}</Text>
+              <Text style={styles.playerText}>{player.assists}</Text>
+              <Text style={styles.playerText}>{player.points}</Text>
+              <Text style={styles.playerText}>{player.plusMinus}</Text>
+              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+              <Text style={styles.playerText}>{player.power_play_goals}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    );
+};
 
   const renderContent = () => {
     switch (activeTab) {
@@ -461,7 +545,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   contentContainer: {
-    padding: 20,
+    padding: 10,
     paddingBottom: 20, // Add extra padding at the bottom
   },
   loadingContainer: {
@@ -729,7 +813,7 @@ const styles = StyleSheet.create({
     paddingRight: 15,
   },
   rightColumn: {
-    flex: 1.2,
+    flex: 1,
     paddingLeft: 15,
     justifyContent: 'center',
   },
@@ -766,6 +850,65 @@ const styles = StyleSheet.create({
   },
   rightContentSection: {
     marginBottom: 20,
+  },
+  teamContentScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  rosterContainer: {
+    marginTop: 20,
+  },
+  rosterTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  rosterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  headerText: {
+    color: '#ff6600',
+    fontSize: 12,
+    fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
+  },
+  playerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  playerName: {
+    color: '#ffffff',
+    fontSize: 12,
+    flex: 2,
+  },
+  playerStat: {
+    color: '#ffffff',
+    fontSize: 12,
+    flex: 1,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ff6600',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  playerText: {
+    color: '#ffffff',
+    fontSize: 12,
+    flex: 1,
+    textAlign: 'center',
   },
 });
 

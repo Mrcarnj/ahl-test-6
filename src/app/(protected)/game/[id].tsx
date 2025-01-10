@@ -244,41 +244,58 @@ const GameDetails = () => {
     </>
   );
 
-  const AwayTeamContent = ({ game }: { game: Schedule }) => { 
+  const AwayTeamContent = ({ game }: { game: Schedule }) => {
     const { teamRosters } = useSchedule();
     const teamAbbrev = game.awayTeamData?.abbreviation;
-    const teamRoster = teamRosters.filter(player => player.team === teamAbbrev);
+    const teamRoster = teamRosters
+      .filter(player => player.team === teamAbbrev)
+      .sort((a, b) => {
+        // First sort by points (descending)
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        // If points are equal, sort by games played (ascending)
+        if (a.games_played !== b.games_played) {
+          return a.games_played - b.games_played;
+        }
+        // If games played are equal, sort by goals (descending)
+        if (b.goals !== a.goals) {
+          return b.goals - a.goals;
+        }
+        // If goals are equal, sort by assists (descending)
+        return b.assists - a.assists;
+      });
 
     const pointsLeaders = [...teamRoster]
-        .sort((a, b) => {
-            // First sort by points (descending)
-            if (b.points !== a.points) {
-                return b.points - a.points;
-            }
-            // If points are equal, sort by games played (ascending)
-            if (a.games_played !== b.games_played) {
-                return a.games_played - b.games_played;
-            }
-            // If games played are equal, sort by goals (descending)
-            if (b.goals !== a.goals) {
-                return b.goals - a.goals;
-            }
-            // If goals are equal, sort by assists (descending)
-            return b.assists - a.assists;
-        })
-        .slice(0, 5); // Get only top 5
+      .sort((a, b) => {
+        // First sort by points (descending)
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        // If points are equal, sort by games played (ascending)
+        if (a.games_played !== b.games_played) {
+          return a.games_played - b.games_played;
+        }
+        // If games played are equal, sort by goals (descending)
+        if (b.goals !== a.goals) {
+          return b.goals - a.goals;
+        }
+        // If goals are equal, sort by assists (descending)
+        return b.assists - a.assists;
+      })
+      .slice(0, 5); // Get only top 5
 
-        const pimLeaders = [...teamRoster]
-        .sort((a, b) => {
-            // First sort by penalty minutes (descending)
-            if (b.penalty_minutes !== a.penalty_minutes) {
-                return b.penalty_minutes - a.penalty_minutes;
-            }
-            // If pims are equal, sort by games played (ascending)
-                return a.games_played - b.games_played;
-            
-        })
-        .slice(0, 3); // Get only top 5
+    const pimLeaders = [...teamRoster]
+      .sort((a, b) => {
+        // First sort by penalty minutes (descending)
+        if (b.penalty_minutes !== a.penalty_minutes) {
+          return b.penalty_minutes - a.penalty_minutes;
+        }
+        // If pims are equal, sort by games played (ascending)
+        return a.games_played - b.games_played;
+
+      })
+      .slice(0, 3); // Get only top 5
 
     return (
       <ScrollView style={styles.teamContentScrollView}>
@@ -338,9 +355,9 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Points Leaders</Text>
-          
+
           <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text> 
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -349,7 +366,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PTS</Text>
             <Text style={styles.headerText}>PPG</Text>
           </View>
-          
+
           {pointsLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -368,7 +385,7 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Penalty Leaders</Text>
-          
+
           <View style={styles.rosterHeader}>
             <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
@@ -376,7 +393,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>GP</Text>
             <Text style={styles.headerText}>PIM</Text>
           </View>
-          
+
           {pimLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -392,7 +409,7 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Team Roster</Text>
-          
+
           <View style={styles.rosterHeader}>
             <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
@@ -405,7 +422,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PIM</Text>
             <Text style={styles.headerText}>PPG</Text>
           </View>
-          
+
           {teamRoster.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -425,43 +442,60 @@ const GameDetails = () => {
         </View>
       </ScrollView>
     );
-};
+  };
 
-  const HomeTeamContent = ({ game }: { game: Schedule }) => { 
+  const HomeTeamContent = ({ game }: { game: Schedule }) => {
     const { teamRosters } = useSchedule();
     const teamAbbrev = game.homeTeamData?.abbreviation;
-    const teamRoster = teamRosters.filter(player => player.team === teamAbbrev);
+    const teamRoster = teamRosters
+      .filter(player => player.team === teamAbbrev)
+      .sort((a, b) => {
+        // First sort by points (descending)
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        // If points are equal, sort by games played (ascending)
+        if (a.games_played !== b.games_played) {
+          return a.games_played - b.games_played;
+        }
+        // If games played are equal, sort by goals (descending)
+        if (b.goals !== a.goals) {
+          return b.goals - a.goals;
+        }
+        // If goals are equal, sort by assists (descending)
+        return b.assists - a.assists;
+      });
 
     const pointsLeaders = [...teamRoster]
-        .sort((a, b) => {
-            // First sort by points (descending)
-            if (b.points !== a.points) {
-                return b.points - a.points;
-            }
-            // If points are equal, sort by games played (ascending)
-            if (a.games_played !== b.games_played) {
-                return a.games_played - b.games_played;
-            }
-            // If games played are equal, sort by goals (descending)
-            if (b.goals !== a.goals) {
-                return b.goals - a.goals;
-            }
-            // If goals are equal, sort by assists (descending)
-            return b.assists - a.assists;
-        })
-        .slice(0, 5); // Get only top 5
+      .sort((a, b) => {
+        // First sort by points (descending)
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        // If points are equal, sort by games played (ascending)
+        if (a.games_played !== b.games_played) {
+          return a.games_played - b.games_played;
+        }
+        // If games played are equal, sort by goals (descending)
+        if (b.goals !== a.goals) {
+          return b.goals - a.goals;
+        }
+        // If goals are equal, sort by assists (descending)
+        return b.assists - a.assists;
+      })
+      .slice(0, 5); // Get only top 5
 
-        const pimLeaders = [...teamRoster]
-        .sort((a, b) => {
-            // First sort by penalty minutes (descending)
-            if (b.penalty_minutes !== a.penalty_minutes) {
-                return b.penalty_minutes - a.penalty_minutes;
-            }
-            // If pims are equal, sort by games played (ascending)
-                return a.games_played - b.games_played;
-            
-        })
-        .slice(0, 3); // Get only top 5
+    const pimLeaders = [...teamRoster]
+      .sort((a, b) => {
+        // First sort by penalty minutes (descending)
+        if (b.penalty_minutes !== a.penalty_minutes) {
+          return b.penalty_minutes - a.penalty_minutes;
+        }
+        // If pims are equal, sort by games played (ascending)
+        return a.games_played - b.games_played;
+
+      })
+      .slice(0, 3); // Get only top 5
 
     return (
       <ScrollView style={styles.teamContentScrollView}>
@@ -521,7 +555,7 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Points Leaders</Text>
-          
+
           <View style={styles.rosterHeader}>
             <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
@@ -532,7 +566,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PTS</Text>
             <Text style={styles.headerText}>PPG</Text>
           </View>
-          
+
           {pointsLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -551,7 +585,7 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Penalty Leaders</Text>
-          
+
           <View style={styles.rosterHeader}>
             <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
@@ -559,7 +593,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>GP</Text>
             <Text style={styles.headerText}>PIM</Text>
           </View>
-          
+
           {pimLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -575,7 +609,7 @@ const GameDetails = () => {
 
         <View style={styles.rosterContainer}>
           <Text style={styles.sectionTitle}>Team Roster</Text>
-          
+
           <View style={styles.rosterHeader}>
             <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
@@ -588,7 +622,7 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PIM</Text>
             <Text style={styles.headerText}>PPG</Text>
           </View>
-          
+
           {teamRoster.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
@@ -608,7 +642,7 @@ const GameDetails = () => {
         </View>
       </ScrollView>
     );
-};
+  };
 
   const renderContent = () => {
     switch (activeTab) {

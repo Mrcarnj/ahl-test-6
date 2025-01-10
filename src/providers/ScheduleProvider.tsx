@@ -62,6 +62,7 @@ export interface TeamRoster {
     plusMinus: number;
     penalty_minutes: number;
     power_play_goals: number;
+    number: string;
   }
 
   type ScheduleContext = {

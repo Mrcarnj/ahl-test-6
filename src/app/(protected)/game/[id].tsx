@@ -340,6 +340,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Points Leaders</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text> 
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -351,6 +352,7 @@ const GameDetails = () => {
           
           {pointsLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
                 {player.player_name}
               </Text>
@@ -368,6 +370,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Penalty Leaders</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -376,6 +379,7 @@ const GameDetails = () => {
           
           {pimLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
                 {player.player_name}
               </Text>
@@ -390,6 +394,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Team Roster</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -403,6 +408,7 @@ const GameDetails = () => {
           
           {teamRoster.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
                 {player.player_name}
               </Text>
@@ -517,6 +523,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Points Leaders</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -528,6 +535,7 @@ const GameDetails = () => {
           
           {pointsLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
                 {player.player_name}
               </Text>
@@ -545,6 +553,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Penalty Leaders</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -553,6 +562,7 @@ const GameDetails = () => {
           
           {pimLeaders.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
                 {player.player_name}
               </Text>
@@ -567,6 +577,7 @@ const GameDetails = () => {
           <Text style={styles.sectionTitle}>Team Roster</Text>
           
           <View style={styles.rosterHeader}>
+            <Text style={styles.headerText}>#</Text>
             <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
             <Text style={styles.headerText}>POS</Text>
             <Text style={styles.headerText}>GP</Text>
@@ -580,6 +591,7 @@ const GameDetails = () => {
           
           {teamRoster.map((player) => (
             <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
                 {player.player_name}
               </Text>

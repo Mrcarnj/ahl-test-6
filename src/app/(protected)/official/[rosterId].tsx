@@ -6,10 +6,14 @@ import { useLocalSearchParams } from 'expo-router';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { FontAwesome, FontAwesome6, AntDesign } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { Platform } from 'react-native';
+import * as Contacts from 'expo-contacts';
+import { useContactsPermissions } from '@/src/hooks/useContactsPermissions';
 
 const Details = () => {
     const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
     const { allRosters } = useRoster();
+    const { hasPermission, requestPermissions } = useContactsPermissions();
 
     const selectedRoster = allRosters.find(r => r.id === parseInt(rosterId));
 
@@ -29,6 +33,62 @@ const Details = () => {
         );
     };
 
+    const createContact = async () => {
+        if (!selectedRoster) return;
+
+        try {
+            if (!hasPermission) {
+                const granted = await requestPermissions();
+                if (!granted) {
+                    Alert.alert(
+                        'Permission Required',
+                        'This app needs permission to add contacts.',
+                        [
+                            { text: 'OK', onPress: () => requestPermissions() }
+                        ]
+                    );
+                    return;
+                }
+            }
+
+            const contact: Contacts.Contact = {
+                firstName: selectedRoster.firstname,
+                lastName: selectedRoster.lastname,
+                phoneNumbers: [{
+                    label: Contacts.Fields.PhoneNumbers,
+                    number: selectedRoster.phonenumber,
+                }],
+                emails: [{
+                    label: Contacts.Fields.Emails,
+                    email: selectedRoster.email,
+                }],
+                company: 'AHL Officials',
+                jobTitle: 'Official',
+                contactType: Contacts.ContactTypes.Person,
+                name: `${selectedRoster.firstname} ${selectedRoster.lastname}`
+            };
+
+            const result = await Contacts.addContactAsync(contact);
+
+            if (result) {
+                Alert.alert(
+                    'Success',
+                    'Contact was successfully added to your contacts!',
+                    [{ text: 'OK' }]
+                );
+            } else {
+                throw new Error('Failed to add contact');
+            }
+        } catch (error) {
+            console.error('Error adding contact:', error);
+            Alert.alert(
+                'Error',
+                'Unable to add contact. Please try again.',
+                [{ text: 'OK' }]
+            );
+        }
+    };
+
 
     if (!selectedRoster) {
         return (
@@ -42,7 +102,7 @@ const Details = () => {
         <SafeAreaView style={styles.safeArea}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
                 <Image
-                    source={ selectedRoster.photo ?
+                    source={selectedRoster.photo ?
                         { uri: selectedRoster.photo }
                         : require('../../../../assets/images/noPhoto.png')
                     }
@@ -98,6 +158,17 @@ const Details = () => {
                             </View>
                         </View>
                     </View>
+                    <View style={styles.fieldContainer}>
+                        <TouchableOpacity
+                            onPress={createContact}
+                            style={styles.addContactButton}
+                        >
+                            <View style={styles.iconTextContainer}>
+                                <FontAwesome name="address-card-o" size={18} color="#ff6600" />
+                                <Text style={styles.addContactText}>Add to Contacts</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -117,6 +188,8 @@ const styles = StyleSheet.create({
         padding: 20,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingTop: 0,  // Remove top padding
+        marginTop: -40, // Pull content up
     },
     profileImage: {
         width: 150,
@@ -172,6 +245,27 @@ const styles = StyleSheet.create({
     },
     iconButton: {
         padding: 5, // Touchable area around icon
+    },
+    addContactButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#1a1a1a',
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 15,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    iconTextContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    addContactText: {
+        color: '#ff6600',
+        fontSize: 14,
+        fontWeight: '500',
     }
 });
 

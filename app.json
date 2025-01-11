@@ -14,10 +14,17 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dieter15.ahltest6"
+      "bundleIdentifier": "com.dieter15.ahltest6",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information."
+      }
     },
     "android": {
-      "package": "com.dieter15.ahltest6"
+      "package": "com.dieter15.ahltest6",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,7 +47,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#ffffff"
         }
-      ]
+      ],
+      "expo-contacts"
     ],
     "experiments": {
       "typedRoutes": true

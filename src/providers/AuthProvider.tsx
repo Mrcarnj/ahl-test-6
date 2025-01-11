@@ -1,8 +1,9 @@
+// providers/AuthProvider.tsx
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 
 type AuthContext = {
     session: Session | null;
@@ -14,15 +15,41 @@ const AuthContext = createContext<AuthContext>({
     user: null,
 });
 
-// In AuthProvider.tsx
-
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
+
+    const checkTosAcceptance = async (userId: string) => {
+        try {
+            console.log('Checking TOS acceptance for user:', userId);
+            const { data, error } = await supabase
+                .from('roster')
+                .select('accepted_tos, changedpassword')
+                .eq('auth_id', userId)
+                .single();
+
+            if (error) {
+                console.error('Error checking TOS:', error);
+                return;
+            }
+
+            console.log('TOS check result:', data);
+
+            // Handle different auth states
+            if (!data.changedpassword) {
+                console.log('Password needs to be changed');
+                router.replace('/(auth)/changepassword');
+            } else if (!data.accepted_tos) {
+                console.log('TOS needs to be accepted');
+                router.replace('/(auth)/tos');
+            }
+        } catch (error) {
+            console.error('Error in TOS check:', error);
+        }
+    };
 
     useEffect(() => {
         const setupAuth = async () => {
             try {
-                // Log initial state
                 console.log('Setting up auth...');
 
                 // Try AsyncStorage first
@@ -34,6 +61,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     console.log('Setting stored session');
                     setSession(parsedSession);
                     await supabase.auth.setSession(parsedSession);
+                    // Check TOS for stored session
+                    if (parsedSession.user) {
+                        await checkTosAcceptance(parsedSession.user.id);
+                    }
                 }
 
                 // Get Supabase session
@@ -44,6 +75,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     console.log('Setting current session');
                     setSession(currentSession);
                     await AsyncStorage.setItem('session', JSON.stringify(currentSession));
+                    // Check TOS for current session
+                    await checkTosAcceptance(currentSession.user.id);
                 }
 
                 // Set up auth listener
@@ -54,8 +87,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                         if (session) {
                             setSession(session);
                             await AsyncStorage.setItem('session', JSON.stringify(session));
+                            // Check TOS on auth state change
+                            await checkTosAcceptance(session.user.id);
                         } else {
-                            // Only clear on explicit sign out
                             if (event === 'SIGNED_OUT') {
                                 console.log('Explicit sign out, clearing session');
                                 setSession(null);
@@ -82,7 +116,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         setupAuth();
     }, []);
 
-    // Also log any session changes from the state
     useEffect(() => {
         console.log('Session state changed:', session ? 'exists' : 'none');
     }, [session]);

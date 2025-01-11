@@ -1,7 +1,7 @@
 // app/(protected)/(tabs)/calendar/index.tsx
 
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
 import { format, parse } from 'date-fns';
@@ -23,8 +23,15 @@ type CustomMarking = {
 export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const { myGames, loading } = useSchedule();
+  const { myGames, loading, refreshSchedule } = useSchedule();
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshSchedule();
+    setRefreshing(false);
+  }, [refreshSchedule]);
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {
@@ -91,6 +98,16 @@ export default function CalendarScreen() {
       <View style={styles.container}>
       <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
+        <ScrollView
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#ff6600']}
+                tintColor="#ff6600"
+              />
+            }
+          >
           <Calendar
             current={format(currentMonth, 'yyyy-MM-dd')}
             onMonthChange={onMonthChange}
@@ -134,6 +151,7 @@ export default function CalendarScreen() {
               );
             }}
           />
+          </ScrollView>
         </ViewShot>
       </View>
     </SafeAreaView>

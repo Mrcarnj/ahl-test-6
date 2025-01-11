@@ -1,12 +1,12 @@
 // app/(protected)/game/[id].tsx
-import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach, formatGameDate2 } from '@/src/providers/ScheduleProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { format } from 'date-fns';
 import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 
 
@@ -18,6 +18,14 @@ const GameDetails = () => {
   const [activeTab, setActiveTab] = useState('crew');
   const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
   const screenWidth = Dimensions.get('window').width;
+  const [refreshing, setRefreshing] = useState(false);
+  const { refreshSchedule } = useSchedule();
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshSchedule();
+    setRefreshing(false);
+  }, [refreshSchedule]);
 
   const game = myGames.find(g => g.gameid === id);
 
@@ -371,7 +379,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -398,7 +406,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -427,7 +435,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -571,7 +579,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -598,7 +606,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -627,7 +635,7 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name}
+                {player.player_name.replace(/\s\+-\s*$/, '')}
               </Text>
               <Text style={styles.playerText}>{player.position}</Text>
               <Text style={styles.playerText}>{player.games_played}</Text>
@@ -667,7 +675,15 @@ const GameDetails = () => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}
+      refreshControl={<RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        colors={['#ff6600']}
+        tintColor="#ff6600"
+      />
+      }
+    >
       <View style={styles.card}>
         <Text style={styles.gameDate}>{formatGameDate2(game.gamedate)}</Text>
         <Text style={styles.gameID}>Game# {game.gameid}</Text>

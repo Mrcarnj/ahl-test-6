@@ -1,12 +1,21 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSchedule, formatGameTime, Schedule } from '@/src/providers/ScheduleProvider';
 import { format, parse, isToday as checkIsToday } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useState } from 'react';
 
 export default function AllGames() {
     const router = useRouter();
     const { myGames } = useSchedule();
+    const [refreshing, setRefreshing] = useState(false);
+    const { refreshSchedule } = useSchedule();
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await refreshSchedule();
+        setRefreshing(false);
+    }, [refreshSchedule]);
 
     const formatGameDate = (dateString: string) => {
         const date = parse(dateString, 'yyyy-MM-dd', new Date());
@@ -44,7 +53,7 @@ export default function AllGames() {
     const handleGamePress = (gameId: string) => {
         router.push({
             pathname: "/(protected)/game/[id]",
-            params: { 
+            params: {
                 id: gameId,
                 source: 'home'
             }
@@ -52,7 +61,17 @@ export default function AllGames() {
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView
+            style={styles.container}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#ff6600']}
+                    tintColor="#ff6600"
+                />
+            }
+        >
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Upcoming Games</Text>
                 {upcomingGames.length > 0 ? (

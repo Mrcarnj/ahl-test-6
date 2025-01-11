@@ -1,6 +1,6 @@
 // app/(auth)/tos.tsx
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler } from 'react-native';
-import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -9,7 +9,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TermsOfService() {
   const [loading, setLoading] = useState(false);
+  const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const { user } = useAuth();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Handle hardware back button
   useEffect(() => {
@@ -21,6 +23,17 @@ export default function TermsOfService() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, []);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 20; // Adjust this value as needed
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - paddingToBottom;
+
+    if (isCloseToBottom && !hasReachedBottom) {
+      setHasReachedBottom(true);
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -46,7 +59,7 @@ export default function TermsOfService() {
   };
 
   const handleAcceptTOS = async () => {
-    if (!user) return;
+    if (!user || !hasReachedBottom) return;
 
     setLoading(true);
     try {
@@ -76,7 +89,12 @@ export default function TermsOfService() {
         <Text style={styles.title}>Terms of Service</Text>
       </View>
 
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
+      >
         <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
         <Text style={styles.text}>
           By accessing or using AHL Officials App ("the App"), you agree to comply with and be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the App.
@@ -156,10 +174,19 @@ export default function TermsOfService() {
       </ScrollView>
 
       <View style={styles.buttonContainer}>
+        {!hasReachedBottom && (
+          <Text style={styles.scrollPrompt}>
+            Please read the entire Terms of Service to continue
+          </Text>
+        )}
         <TouchableOpacity
-          style={[styles.button, styles.acceptButton, loading && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            styles.acceptButton,
+            (!hasReachedBottom || loading) && styles.buttonDisabled
+          ]}
           onPress={handleAcceptTOS}
-          disabled={loading}
+          disabled={!hasReachedBottom || loading}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Accepting...' : 'I Accept'}
@@ -244,7 +271,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
+    backgroundColor: '#666',
   },
   buttonText: {
     color: '#fff',
@@ -258,5 +286,12 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  scrollPrompt: {
+    color: '#ff6600',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontStyle: 'italic',
   },
 });

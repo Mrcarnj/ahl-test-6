@@ -63,7 +63,7 @@ export default function Auth() {
       // Use the ID from the sign in response instead of the context
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('changedpassword')
+        .select('changedpassword, accepted_tos')
         .eq('auth_id', authData.user.id)  // Use authData.user.id here
         .single();
 
@@ -71,9 +71,11 @@ export default function Auth() {
         throw rosterError;
       }
 
-      // Redirect based on changedpassword status
+      // Handle the routing based on user status
       if (!rosterData.changedpassword) {
         router.replace('/(auth)/changepassword');
+      } else if (!rosterData.accepted_tos) {
+        router.replace('/(auth)/tos');
       } else {
         router.replace('/(protected)/home');
       }

@@ -17,6 +17,8 @@ type Roster = {
     isAdmin: boolean;
     changedpassword: boolean;
     ahlAdmin: boolean;
+    accepted_tos: boolean;
+    tos_accepted_at: string | null;
     // Add other roster fields here
 };
 

@@ -2,15 +2,19 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSegments } from "expo-router";
 import { useAuth } from "../providers/AuthProvider";
+import { useRoster } from "../providers/RosterProvider";
 
 export function useProtectedRoute() {
     const { user, session } = useAuth();
+    const { roster } = useRoster();
     const segments = useSegments();
     const router = useRouter();
     const [isInitializing, setIsInitializing] = useState(true);
 
     useEffect(() => {
         const isInProtectedGroup = segments[0] === "(protected)";
+        const isInAuthGroup = segments[0] === "(auth)";
+        const isInTosPage = segments[1] === "tos";
 
         // Add a small delay to allow session restoration
         const initTimeout = setTimeout(() => {
@@ -18,12 +22,25 @@ export function useProtectedRoute() {
         }, 1000);
 
         if (!isInitializing) {
+            // If no user and trying to access protected routes, redirect to login
             if (!user && isInProtectedGroup) {
-                // Only redirect if we're sure we have no user after initialization
                 router.replace("/(auth)/login");
+                return;
+            }
+
+            // If user exists but hasn't accepted TOS and isn't already on TOS page
+            if (user && roster && !roster.accepted_tos && !isInTosPage) {
+                router.replace("/(auth)/tos");
+                return;
+            }
+
+            // If user has accepted TOS but is trying to access auth routes (including TOS page)
+            if (user && roster?.accepted_tos && isInAuthGroup) {
+                router.replace("/(protected)/home");
+                return;
             }
         }
 
         return () => clearTimeout(initTimeout);
-    }, [user, segments, isInitializing]);
+    }, [user, roster, segments, isInitializing]);
 }

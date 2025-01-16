@@ -24,18 +24,15 @@ const Profile = () => {
 
     // Handle manual refresh
     const onRefresh = useCallback(async () => {
-        setRefreshing(true);
-        try {
-            await Promise.all([
-                refreshRoster(),
-                refreshSchedule()
-            ]);
-        } catch (error) {
-            console.error('Refresh error:', error);
-        } finally {
-            setRefreshing(false);
+        if (!refreshing) {
+            try {
+                setRefreshing(true);
+                await refreshSchedule();
+            } finally {
+                setRefreshing(false);
+            }
         }
-    }, [refreshRoster, refreshSchedule]);
+    }, [refreshSchedule, refreshing]);
 
     if (!roster) {
         return (

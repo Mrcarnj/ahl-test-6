@@ -1,4 +1,3 @@
-// providers/AuthProvider.tsx
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
@@ -17,10 +16,13 @@ const AuthContext = createContext<AuthContext>({
 
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
+    const [isCheckingTos, setIsCheckingTos] = useState(false);
 
     const checkTosAcceptance = async (userId: string) => {
+        if (isCheckingTos) return;
+        
         try {
-            console.log('Checking TOS acceptance for user:', userId);
+            setIsCheckingTos(true);
             const { data, error } = await supabase
                 .from('roster')
                 .select('accepted_tos, changedpassword')
@@ -32,36 +34,32 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 return;
             }
 
-            console.log('TOS check result:', data);
-
             // Handle different auth states
             if (!data.changedpassword) {
-                console.log('Password needs to be changed');
                 router.replace('/(auth)/changepassword');
             } else if (!data.accepted_tos) {
-                console.log('TOS needs to be accepted');
                 router.replace('/(auth)/tos');
             }
         } catch (error) {
             console.error('Error in TOS check:', error);
+        } finally {
+            setIsCheckingTos(false);
         }
     };
 
     useEffect(() => {
+        let isMounted = true;
+        let authSubscription: { unsubscribe: () => void } | null = null;
+
         const setupAuth = async () => {
             try {
-                console.log('Setting up auth...');
-
                 // Try AsyncStorage first
                 const storedSession = await AsyncStorage.getItem('session');
-                console.log('Stored session from AsyncStorage:', storedSession ? 'exists' : 'none');
                 
-                if (storedSession) {
+                if (storedSession && isMounted) {
                     const parsedSession = JSON.parse(storedSession);
-                    console.log('Setting stored session');
                     setSession(parsedSession);
                     await supabase.auth.setSession(parsedSession);
-                    // Check TOS for stored session
                     if (parsedSession.user) {
                         await checkTosAcceptance(parsedSession.user.id);
                     }
@@ -69,56 +67,50 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
                 // Get Supabase session
                 const { data: { session: currentSession } } = await supabase.auth.getSession();
-                console.log('Current Supabase session:', currentSession ? 'exists' : 'none');
 
-                if (currentSession) {
-                    console.log('Setting current session');
+                if (currentSession && isMounted) {
                     setSession(currentSession);
                     await AsyncStorage.setItem('session', JSON.stringify(currentSession));
-                    // Check TOS for current session
                     await checkTosAcceptance(currentSession.user.id);
                 }
 
                 // Set up auth listener
                 const { data: { subscription } } = supabase.auth.onAuthStateChange(
                     async (event, session) => {
-                        console.log('Auth state change:', event, session ? 'with session' : 'no session');
-                        
+                        if (!isMounted) return;
+
                         if (session) {
                             setSession(session);
                             await AsyncStorage.setItem('session', JSON.stringify(session));
-                            // Check TOS on auth state change
                             await checkTosAcceptance(session.user.id);
-                        } else {
-                            if (event === 'SIGNED_OUT') {
-                                console.log('Explicit sign out, clearing session');
-                                setSession(null);
-                                await AsyncStorage.removeItem('session');
-                            } else {
-                                console.log('Session null but not signing out, event:', event);
-                            }
+                        } else if (event === 'SIGNED_OUT') {
+                            setSession(null);
+                            await AsyncStorage.removeItem('session');
                         }
                     }
                 );
 
+                authSubscription = subscription;
+
                 // Initialize and start auto-refresh
                 await supabase.auth.initialize();
                 supabase.auth.startAutoRefresh();
-
-                return () => {
-                    subscription.unsubscribe();
-                };
             } catch (error) {
                 console.error('Error in setupAuth:', error);
             }
         };
 
         setupAuth();
-    }, []);
 
-    useEffect(() => {
-        console.log('Session state changed:', session ? 'exists' : 'none');
-    }, [session]);
+        // Cleanup function
+        return () => {
+            isMounted = false;
+            if (authSubscription) {
+                authSubscription.unsubscribe();
+            }
+            supabase.auth.stopAutoRefresh();
+        };
+    }, []); // Empty dependency array
 
     return (
         <AuthContext.Provider value={{ 
@@ -130,4 +122,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};

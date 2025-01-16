@@ -41,10 +41,15 @@ const TestScheduleScreen = () => {
     const externalUrlLinks = externalLinks.filter(link => link.url);
 
     const onRefresh = useCallback(async () => {
-        setRefreshing(true);
-        await refreshSchedule();
-        setRefreshing(false);
-    }, [refreshSchedule]);
+        if (!refreshing) {
+            try {
+                setRefreshing(true);
+                await refreshSchedule();
+            } finally {
+                setRefreshing(false);
+            }
+        }
+    }, [refreshSchedule, refreshing]);
 
     const handleGamePress = (gameId: string) => {
         router.push({

@@ -90,8 +90,15 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const fetchSchedule = async () => {
+        // Prevent multiple simultaneous fetches
+        if (isRefreshing || loading) {
+            console.log('Already fetching data');
+            return;
+        }
+
         if (!roster?.lastfirstfullname) {
             console.log('No roster data available');
             return;
@@ -99,6 +106,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
         try {
             setLoading(true);
+            setIsRefreshing(true);
             setError(null);
 
             // Fetch all games with team data
@@ -165,12 +173,15 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setMyGames([]);
         } finally {
             setLoading(false);
+            setIsRefreshing(false);
         }
     };
 
     // Fetch schedule when roster data changes
     useEffect(() => {
-        fetchSchedule();
+        if (roster?.lastfirstfullname && !loading && !isRefreshing) {
+            fetchSchedule();
+        }
     }, [roster?.lastfirstfullname]);
 
     return (
@@ -178,7 +189,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             allGames,
             myGames,
             teamRosters,
-            loading,
+            loading: loading || isRefreshing, // Modified
             error,
             refreshSchedule: fetchSchedule
         }}>

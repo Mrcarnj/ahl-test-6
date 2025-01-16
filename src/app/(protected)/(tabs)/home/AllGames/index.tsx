@@ -12,10 +12,15 @@ export default function AllGames() {
     const { refreshSchedule } = useSchedule();
 
     const onRefresh = useCallback(async () => {
-        setRefreshing(true);
-        await refreshSchedule();
-        setRefreshing(false);
-    }, [refreshSchedule]);
+        if (!refreshing) {
+            try {
+                setRefreshing(true);
+                await refreshSchedule();
+            } finally {
+                setRefreshing(false);
+            }
+        }
+    }, [refreshSchedule, refreshing]);
 
     const formatGameDate = (dateString: string) => {
         const date = parse(dateString, 'yyyy-MM-dd', new Date());

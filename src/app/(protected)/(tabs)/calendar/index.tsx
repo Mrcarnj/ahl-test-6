@@ -28,10 +28,15 @@ export default function CalendarScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshSchedule();
-    setRefreshing(false);
-  }, [refreshSchedule]);
+    if (!refreshing) {
+        try {
+            setRefreshing(true);
+            await refreshSchedule();
+        } finally {
+            setRefreshing(false);
+        }
+    }
+}, [refreshSchedule, refreshing]);
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {

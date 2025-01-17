@@ -22,10 +22,15 @@ const GameDetails = () => {
   const { refreshSchedule } = useSchedule();
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshSchedule();
-    setRefreshing(false);
-  }, [refreshSchedule]);
+          if (!refreshing) {
+              try {
+                  setRefreshing(true);
+                  await refreshSchedule();
+              } finally {
+                  setRefreshing(false);
+              }
+          }
+      }, [refreshSchedule, refreshing]);
 
   const game = myGames.find(g => g.gameid === id);
 

@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import ViewShot from "react-native-view-shot";
 import { useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 const screenWidth = Dimensions.get('window').width;
 const calendarWidth = screenWidth * 0.98;
@@ -26,17 +27,23 @@ export default function CalendarScreen() {
   const { myGames, loading, refreshSchedule } = useSchedule();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const { handleRefresh } = useAuth();
 
   const onRefresh = useCallback(async () => {
     if (!refreshing) {
         try {
             setRefreshing(true);
+            await handleRefresh();
+            // Always try to refresh data even if auth refresh fails
+            // as we might still have a valid session
             await refreshSchedule();
+        } catch (error) {
+            console.error('Refresh error:', error);
         } finally {
             setRefreshing(false);
         }
     }
-}, [refreshSchedule, refreshing]);
+}, [refreshing, handleRefresh]);
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {

@@ -6,12 +6,14 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
+import { router } from 'expo-router';
 
 const Profile = () => {
     const { user } = useAuth();
     const { roster, refreshRoster } = useRoster();
     const { myGames, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
+    const { handleRefresh } = useAuth();
 
     // Cache the profile data
     const profileData = useMemo(() => ({
@@ -27,12 +29,17 @@ const Profile = () => {
         if (!refreshing) {
             try {
                 setRefreshing(true);
+                await handleRefresh();
+                // Always try to refresh data even if auth refresh fails
+                // as we might still have a valid session
                 await refreshSchedule();
+            } catch (error) {
+                console.error('Refresh error:', error);
             } finally {
                 setRefreshing(false);
             }
         }
-    }, [refreshSchedule, refreshing]);
+    }, [refreshing, handleRefresh]);
 
     if (!roster) {
         return (

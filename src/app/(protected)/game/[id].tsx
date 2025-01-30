@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useState } from 'react';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 
 
@@ -20,17 +21,23 @@ const GameDetails = () => {
   const screenWidth = Dimensions.get('window').width;
   const [refreshing, setRefreshing] = useState(false);
   const { refreshSchedule } = useSchedule();
+  const { handleRefresh } = useAuth();
 
   const onRefresh = useCallback(async () => {
-          if (!refreshing) {
-              try {
-                  setRefreshing(true);
-                  await refreshSchedule();
-              } finally {
-                  setRefreshing(false);
-              }
-          }
-      }, [refreshSchedule, refreshing]);
+    if (!refreshing) {
+        try {
+            setRefreshing(true);
+            await handleRefresh();
+            // Always try to refresh data even if auth refresh fails
+            // as we might still have a valid session
+            await refreshSchedule();
+        } catch (error) {
+            console.error('Refresh error:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }
+}, [refreshing, handleRefresh]);
 
   const game = myGames.find(g => g.gameid === id);
 

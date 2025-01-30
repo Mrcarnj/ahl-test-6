@@ -1,22 +1,37 @@
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import { createContext, PropsWithChildren, useContext, useEffect, useState, useRef } from "react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { AppState } from "react-native";
+
+// Timezone helper functions
+const isPST = (date: Date) => {
+    return date.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
+};
+
+const checkIfMidnight = () => {
+    const pstTime = new Date(isPST(new Date()));
+    return pstTime.getHours() === 0 && pstTime.getMinutes() < 5;
+};
 
 type AuthContext = {
     session: Session | null;
     user: User | null;
+    handleRefresh: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContext>({
     session: null,
     user: null,
+    handleRefresh: async () => false
 });
 
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
     const [isCheckingTos, setIsCheckingTos] = useState(false);
+    const [lastDailyRefresh, setLastDailyRefresh] = useState<string | null>(null);
+    const backgroundTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const checkTosAcceptance = async (userId: string) => {
         if (isCheckingTos) return;
@@ -34,7 +49,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 return;
             }
 
-            // Handle different auth states
             if (!data.changedpassword) {
                 router.replace('/(auth)/changepassword');
             } else if (!data.accepted_tos) {
@@ -47,14 +61,78 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
     };
 
+    const handleRefresh = async () => {
+        try {
+            // First check if we have a valid current session
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            if (currentSession) {
+                setSession(currentSession);
+                return true;
+            }
+
+            // Only try refresh if we don't have a current session
+            const { data: { session: refreshedSession }, error } = 
+                await supabase.auth.refreshSession();
+
+            if (error) {
+                // On refresh error, try to use stored session
+                const storedSession = await AsyncStorage.getItem('session');
+                if (storedSession) {
+                    const parsedSession = JSON.parse(storedSession);
+                    await supabase.auth.setSession(parsedSession);
+                    setSession(parsedSession);
+                    return true;
+                }
+                throw error;
+            }
+
+            if (refreshedSession) {
+                setSession(refreshedSession);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error('Refresh error:', error);
+            // Even if refresh fails, return true if we still have a valid session
+            if (session) return true;
+            return false;
+        }
+    };
+
+    const performDailyRefresh = async () => {
+        const today = new Date().toDateString();
+        
+        // Check if we've already refreshed today
+        if (lastDailyRefresh === today) {
+            return;
+        }
+
+        try {
+            const authRefreshed = await handleRefresh();
+            if (authRefreshed) {
+                // Store today's date as last refresh
+                await AsyncStorage.setItem('lastDailyRefresh', today);
+                setLastDailyRefresh(today);
+            }
+        } catch (error) {
+            console.error('Daily refresh error:', error);
+        }
+    };
+
     useEffect(() => {
         let isMounted = true;
         let authSubscription: { unsubscribe: () => void } | null = null;
 
         const setupAuth = async () => {
             try {
-                // Try AsyncStorage first
+                // Try to get stored session first
                 const storedSession = await AsyncStorage.getItem('session');
+                const storedLastRefresh = await AsyncStorage.getItem('lastDailyRefresh');
+                
+                if (storedLastRefresh) {
+                    setLastDailyRefresh(storedLastRefresh);
+                }
                 
                 if (storedSession && isMounted) {
                     const parsedSession = JSON.parse(storedSession);
@@ -65,7 +143,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     }
                 }
 
-                // Get Supabase session
                 const { data: { session: currentSession } } = await supabase.auth.getSession();
 
                 if (currentSession && isMounted) {
@@ -74,7 +151,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     await checkTosAcceptance(currentSession.user.id);
                 }
 
-                // Set up auth listener
                 const { data: { subscription } } = supabase.auth.onAuthStateChange(
                     async (event, session) => {
                         if (!isMounted) return;
@@ -91,8 +167,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 );
 
                 authSubscription = subscription;
-
-                // Initialize and start auto-refresh
                 await supabase.auth.initialize();
                 supabase.auth.startAutoRefresh();
             } catch (error) {
@@ -102,20 +176,42 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
         setupAuth();
 
-        // Cleanup function
+        const subscription = AppState.addEventListener('change', async (nextAppState: string) => {
+            if (nextAppState === 'active') {
+                await handleRefresh();
+            } else if (nextAppState === 'background') {
+                // Clear any existing timer
+                if (backgroundTimerRef.current) {
+                    clearInterval(backgroundTimerRef.current);
+                }
+                // Set up new timer
+                backgroundTimerRef.current = setInterval(() => {
+                    if (checkIfMidnight()) {
+                        performDailyRefresh();
+                    }
+                }, 60000);
+            }
+        });
+
         return () => {
             isMounted = false;
+            subscription.remove();
             if (authSubscription) {
                 authSubscription.unsubscribe();
             }
+            if (backgroundTimerRef.current) {
+                clearInterval(backgroundTimerRef.current);
+                backgroundTimerRef.current = null;
+            }
             supabase.auth.stopAutoRefresh();
         };
-    }, []); // Empty dependency array
+    }, []);
 
     return (
         <AuthContext.Provider value={{ 
             session, 
-            user: session?.user ?? null 
+            user: session?.user ?? null,
+            handleRefresh
         }}>
             {children}
         </AuthContext.Provider>

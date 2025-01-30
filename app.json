@@ -16,14 +16,23 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.dieter15.ahltest6",
       "infoPlist": {
-        "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information."
+        "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information.",
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "background-fetch"
+        ]
       }
     },
     "android": {
       "package": "com.dieter15.ahltest6",
       "permissions": [
         "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.WRITE_CONTACTS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ]
     },
     "web": {
@@ -48,7 +57,9 @@
           "color": "#ffffff"
         }
       ],
-      "expo-contacts"
+      "expo-contacts",
+      "expo-background-fetch",
+      "expo-task-manager"
     ],
     "experiments": {
       "typedRoutes": true

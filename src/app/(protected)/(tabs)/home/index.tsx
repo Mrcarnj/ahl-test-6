@@ -8,10 +8,12 @@ import { supabase } from '@/src/lib/supabase';
 import { Entypo, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRoster } from '@/src/providers/RosterProvider';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 
 const TestScheduleScreen = () => {
     const router = useRouter();
+    const { handleRefresh } = useAuth();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
     const { roster } = useRoster();
@@ -44,12 +46,17 @@ const TestScheduleScreen = () => {
         if (!refreshing) {
             try {
                 setRefreshing(true);
+                await handleRefresh();
+                // Always try to refresh data even if auth refresh fails
+                // as we might still have a valid session
                 await refreshSchedule();
+            } catch (error) {
+                console.error('Refresh error:', error);
             } finally {
                 setRefreshing(false);
             }
         }
-    }, [refreshSchedule, refreshing]);
+    }, [refreshing, handleRefresh]);
 
     const handleGamePress = (gameId: string) => {
         router.push({

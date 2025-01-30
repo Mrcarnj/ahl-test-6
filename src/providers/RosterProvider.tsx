@@ -96,14 +96,20 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(true);
             setError(null);
 
-            // Fetch user's roster
-            const { data: userRosterData, error: userRosterError } = await supabase
-                .from('roster')
-                .select('*')
-                .eq('auth_id', user.id)
-                .single();
+            // Add timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 10000)
+        );
 
-            if (userRosterError) throw userRosterError;
+            // Fetch user's roster
+            const fetchPromise = supabase
+            .from('roster')
+            .select('*')
+            .eq('auth_id', user.id)
+            .single();
+
+        const { data: userRosterData, error: userRosterError } = 
+            await Promise.race([fetchPromise, timeoutPromise]) as { data: Roster | null, error: any };
 
             // Fetch all rosters
             const { data: allRostersData, error: allRostersError } = await supabase

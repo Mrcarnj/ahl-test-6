@@ -4,23 +4,30 @@ import { useSchedule, formatGameTime, Schedule } from '@/src/providers/ScheduleP
 import { format, parse, isToday as checkIsToday } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 export default function AllGames() {
     const router = useRouter();
     const { myGames } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
     const { refreshSchedule } = useSchedule();
+    const { handleRefresh } = useAuth();
 
     const onRefresh = useCallback(async () => {
         if (!refreshing) {
             try {
                 setRefreshing(true);
+                await handleRefresh();
+                // Always try to refresh data even if auth refresh fails
+                // as we might still have a valid session
                 await refreshSchedule();
+            } catch (error) {
+                console.error('Refresh error:', error);
             } finally {
                 setRefreshing(false);
             }
         }
-    }, [refreshSchedule, refreshing]);
+    }, [refreshing, handleRefresh]);
 
     const formatGameDate = (dateString: string) => {
         const date = parse(dateString, 'yyyy-MM-dd', new Date());

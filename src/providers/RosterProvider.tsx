@@ -85,53 +85,33 @@ export default function RosterProvider({ children }: PropsWithChildren) {
 
     const fetchRoster = async (force = false) => {
         if (!user?.id) return;
-
-        // Check if we can use cached data
-        if (!force && lastFetch && (new Date().getTime() - lastFetch.getTime() < CACHE_DURATION)) {
-            console.log('Using memory-cached roster data');
-            return;
-        }
-
+    
         try {
             setLoading(true);
             setError(null);
-
-            // Add timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), 10000)
-        );
-
-            // Fetch user's roster
-            const fetchPromise = supabase
-            .from('roster')
-            .select('*')
-            .eq('auth_id', user.id)
-            .single();
-
-        const { data: userRosterData, error: userRosterError } = 
-            await Promise.race([fetchPromise, timeoutPromise]) as { data: Roster | null, error: any };
-
-            // Fetch all rosters
+    
+            // Get user's roster
+            const { data: userRosterData, error: userRosterError } = await supabase
+                .from('roster')
+                .select('*')
+                .eq('auth_id', user.id)
+                .single();
+    
+            if (userRosterError) throw userRosterError;
+    
+            // Get all rosters
             const { data: allRostersData, error: allRostersError } = await supabase
                 .from('roster')
                 .select('*');
-
+    
             if (allRostersError) throw allRostersError;
-
-            // Update state
+    
             setRoster(userRosterData);
             setAllRosters(allRostersData || []);
-            setLastFetch(new Date());
-
-            // Save to cache
-            await saveToCache(userRosterData, allRostersData || []);
-
-        } catch (e) {
-            const errorMessage = e instanceof Error ? e.message : 'An error occurred';
-            console.error('Fetch roster error:', errorMessage);
-            setError(errorMessage);
-            setRoster(null);
-            setAllRosters([]);
+    
+        } catch (error) {
+            console.error('Fetch roster error:', error);
+            setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
         }

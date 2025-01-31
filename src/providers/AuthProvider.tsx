@@ -65,36 +65,38 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         try {
             // First check if we have a valid current session
             const { data: { session: currentSession } } = await supabase.auth.getSession();
+            
             if (currentSession) {
                 setSession(currentSession);
+                await checkTosAcceptance(currentSession.user.id);
                 return true;
             }
-
-            // Only try refresh if we don't have a current session
+    
+            // If no current session, try to refresh
             const { data: { session: refreshedSession }, error } = 
                 await supabase.auth.refreshSession();
-
+    
             if (error) {
-                // On refresh error, try to use stored session
                 const storedSession = await AsyncStorage.getItem('session');
                 if (storedSession) {
                     const parsedSession = JSON.parse(storedSession);
                     await supabase.auth.setSession(parsedSession);
                     setSession(parsedSession);
+                    await checkTosAcceptance(parsedSession.user.id);
                     return true;
                 }
                 throw error;
             }
-
+    
             if (refreshedSession) {
                 setSession(refreshedSession);
+                await checkTosAcceptance(refreshedSession.user.id);
                 return true;
             }
-
+    
             return false;
         } catch (error) {
             console.error('Refresh error:', error);
-            // Even if refresh fails, return true if we still have a valid session
             if (session) return true;
             return false;
         }

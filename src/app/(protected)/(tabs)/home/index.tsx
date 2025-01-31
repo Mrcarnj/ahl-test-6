@@ -16,7 +16,7 @@ const TestScheduleScreen = () => {
     const { handleRefresh } = useAuth();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
-    const { roster } = useRoster();
+    const { roster, refreshRoster } = useRoster();
 
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
@@ -46,17 +46,23 @@ const TestScheduleScreen = () => {
         if (!refreshing) {
             try {
                 setRefreshing(true);
-                await handleRefresh();
-                // Always try to refresh data even if auth refresh fails
-                // as we might still have a valid session
-                await refreshSchedule();
+                
+                // First refresh auth
+                const sessionRefreshed = await handleRefresh();
+                
+                if (sessionRefreshed) {
+                    // Then refresh roster
+                    await refreshRoster();
+                    // Finally refresh schedule
+                    await refreshSchedule();
+                }
             } catch (error) {
                 console.error('Refresh error:', error);
             } finally {
                 setRefreshing(false);
             }
         }
-    }, [refreshing, handleRefresh]);
+    }, [refreshing, handleRefresh, refreshRoster, refreshSchedule]);
 
     const handleGamePress = (gameId: string) => {
         router.push({

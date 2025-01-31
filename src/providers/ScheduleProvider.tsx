@@ -97,91 +97,47 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const fetchSchedule = async () => {
-        // Prevent multiple simultaneous fetches
-        if (isRefreshing || loading) {
-            console.log('Already fetching data');
-            return;
-        }
-
         if (!roster?.lastfirstfullname) {
             console.log('No roster data available');
             return;
         }
-
+    
         try {
             setLoading(true);
-            setIsRefreshing(true);
             setError(null);
-
+    
             // Fetch all games with team data
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedule')
                 .select(`
                     *,
-                    homeTeamData:teams!schedule_hometeam_fkey(
-                        id, 
-                        city, 
-                        abbreviation, 
-                        arenaname, 
-                        timezone, 
-                        arenaaddress, 
-                        logo,
-                        headcoachname,
-                        assistantcoach1,
-                        assistantcoach2,
-                        eqname,
-                        eqphone,
-                        parking_instructions,
-                        locker_room_instructions,
-                        parking_latitude,
-                        parking_longitude
-                    ),
-                    awayTeamData:teams!schedule_awayteam_fkey(
-                        id, 
-                        city, 
-                        abbreviation, 
-                        logo,
-                        headcoachname,
-                        assistantcoach1,
-                        assistantcoach2,
-                        eqname,
-                        eqphone
-                    )
+                    homeTeamData:teams!schedule_hometeam_fkey(*),
+                    awayTeamData:teams!schedule_awayteam_fkey(*)
                 `)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
-
-            const { data: rostersData, error: rostersError } = await supabase
-                .from('teamRosters')
-                .select('*');
-
-            if (rostersError) throw rostersError;
+    
             if (scheduleError) throw scheduleError;
-
+    
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
-            setTeamRosters(rostersData);
-
-            // Filter for games where the roster member is assigned as any official
-            const myFilteredGames = processedGames.filter(game =>
+    
+            // Filter for games where the roster member is assigned
+            const myFilteredGames = processedGames.filter(game => 
                 game.referee1 === roster.lastfirstfullname ||
                 game.referee2 === roster.lastfirstfullname ||
                 game.linesperson1 === roster.lastfirstfullname ||
                 game.linesperson2 === roster.lastfirstfullname
             );
-
+    
             setMyGames(myFilteredGames);
-
-        } catch (e) {
-            const errorMessage = e instanceof Error ? e.message : 'An error occurred';
-            console.error('Fetch schedule error:', errorMessage);
-            setError(errorMessage);
-            setAllGames([]);
-            setMyGames([]);
+    
+        } catch (error) {
+            console.error('Fetch schedule error:', error);
+            setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
-            setIsRefreshing(false);
         }
     };
 

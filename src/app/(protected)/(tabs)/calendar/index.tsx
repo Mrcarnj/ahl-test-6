@@ -95,15 +95,15 @@ export default function CalendarScreen() {
     setCurrentMonth(new Date(month.timestamp));
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={{flex: 1, justifyContent: "center", alignItems: "center"}}>
-          <ActivityIndicator size="large" color="#ff6600"/>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <SafeAreaView style={styles.safeArea}>
+  //       <View style={{flex: 1, justifyContent: "center", alignItems: "center"}}>
+  //         <ActivityIndicator size="large" color="#ff6600"/>
+  //       </View>
+  //     </SafeAreaView>
+  //   );
+  // }
 
   return (
     <SafeAreaView style={styles.safeArea}>

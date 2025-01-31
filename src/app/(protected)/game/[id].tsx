@@ -25,19 +25,19 @@ const GameDetails = () => {
 
   const onRefresh = useCallback(async () => {
     if (!refreshing) {
-        try {
-            setRefreshing(true);
-            await handleRefresh();
-            // Always try to refresh data even if auth refresh fails
-            // as we might still have a valid session
-            await refreshSchedule();
-        } catch (error) {
-            console.error('Refresh error:', error);
-        } finally {
-            setRefreshing(false);
-        }
+      try {
+        setRefreshing(true);
+        await handleRefresh();
+        // Always try to refresh data even if auth refresh fails
+        // as we might still have a valid session
+        await refreshSchedule();
+      } catch (error) {
+        console.error('Refresh error:', error);
+      } finally {
+        setRefreshing(false);
+      }
     }
-}, [refreshing, handleRefresh]);
+  }, [refreshing, handleRefresh]);
 
   const game = myGames.find(g => g.gameid === id);
 
@@ -261,6 +261,31 @@ const GameDetails = () => {
           Start Group Chat <AntDesign name="message1" size={25} />
         </Text>
       </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <View style={styles.notesSection}>
+        <Text style={styles.titles}> <FontAwesome5 name="parking" size={20} color="#ff6600" /> Parking Notes</Text>
+        <View style={styles.notesContainer}>
+          <View style={styles.noteItem}>
+            <Text style={styles.bullet}>•</Text>
+            <Text style={styles.noteText}>
+              {game.homeTeamData?.parking_instructions}
+            </Text>
+          </View>
+          <View style={styles.notesSection}>
+            <Text style={styles.titles}>
+              <FontAwesome5 name="door-open" size={20} color="#ff6600" /> Locker Room Access
+            </Text>
+            </View>
+            <View style={styles.noteItem}>
+            <Text style={styles.bullet}>•</Text>
+            <Text style={styles.noteText}>
+              {game.homeTeamData?.locker_room_instructions}
+            </Text>
+          </View>
+        </View>
+      </View>
     </>
   );
 
@@ -780,6 +805,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
+  container2: {
+    flexDirection: 'row',
+  },
   contentContainer: {
     padding: 10,
     paddingBottom: 20, // Add extra padding at the bottom
@@ -1145,6 +1173,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     textAlign: 'center',
+  },
+  officialsText: {
+    color: '#ffffff',
+    fontSize: 12,
+    flex: 1,
+    textAlign: 'left',
+  },
+  notesSection: {
+    marginTop: 15,
+    marginBottom: 15,
+  },
+  notesContainer: {
+    marginTop: 10,
+  },
+  noteItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  noteItem2: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  bullet: {
+    color: '#ff6600',  // Your app's accent color
+    fontSize: 16,
+    width: 20,
+    lineHeight: 20,
+  },
+  noteText: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+    paddingRight: 10,
   },
 });
 

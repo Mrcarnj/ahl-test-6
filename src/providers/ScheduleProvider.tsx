@@ -14,8 +14,8 @@ export interface Roster {
     lastfirstfullname: string;
     photo: string | null;
     phonenumber: string;
-isAdmin: boolean;      // changed from admin to isAdmin
-ahlAdmin: boolean;     // added this field
+    isAdmin: boolean;      // changed from admin to isAdmin
+    ahlAdmin: boolean;     // added this field
     changedpassword: boolean;
 }
 
@@ -48,6 +48,10 @@ export interface Team {
     eqname: string;
     eqphone: string;
     logo: string | null;
+    parking_latitude: number;
+    parking_longitude: number;
+    parking_instructions: string;
+    locker_room_instructions: string;
 }
 
 export interface TeamRoster {
@@ -63,9 +67,9 @@ export interface TeamRoster {
     penalty_minutes: number;
     power_play_goals: number;
     number: string;
-  }
+}
 
-  type ScheduleContext = {
+type ScheduleContext = {
     allGames: Schedule[];
     myGames: Schedule[];
     teamRosters: TeamRoster[];
@@ -80,7 +84,7 @@ const ScheduleContext = createContext<ScheduleContext>({
     teamRosters: [],
     loading: false,
     error: null,
-    refreshSchedule: async () => {},
+    refreshSchedule: async () => { },
 });
 
 export default function ScheduleProvider({ children }: PropsWithChildren) {
@@ -126,7 +130,11 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         assistantcoach1,
                         assistantcoach2,
                         eqname,
-                        eqphone
+                        eqphone,
+                        parking_instructions,
+                        locker_room_instructions,
+                        parking_latitude,
+                        parking_longitude
                     ),
                     awayTeamData:teams!schedule_awayteam_fkey(
                         id, 
@@ -142,8 +150,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 `)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
-            
-                const { data: rostersData, error: rostersError } = await supabase
+
+            const { data: rostersData, error: rostersError } = await supabase
                 .from('teamRosters')
                 .select('*');
 
@@ -156,7 +164,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setTeamRosters(rostersData);
 
             // Filter for games where the roster member is assigned as any official
-            const myFilteredGames = processedGames.filter(game => 
+            const myFilteredGames = processedGames.filter(game =>
                 game.referee1 === roster.lastfirstfullname ||
                 game.referee2 === roster.lastfirstfullname ||
                 game.linesperson1 === roster.lastfirstfullname ||
@@ -242,7 +250,7 @@ export const getTeamCoach = (team?: Team) => {
 export const formatGameTime = (timetz: string, gameDate: string) => {
     const [time, offset] = timetz.split(/[+-]/);
     const [hours, minutes] = time.split(':');
-    
+
     const hour = parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
@@ -254,7 +262,7 @@ export const formatGameTime = (timetz: string, gameDate: string) => {
         const dstEnd = new Date(year, 10, year === 2024 ? 3 : 2);
         return date >= dstStart && date < dstEnd;
     })();
-    
+
     const getTimezoneAbbr = (offset: string) => {
         const gmtOffset = timetz.includes('+') ? `+${offset}` : `-${offset}`;
         switch (gmtOffset) {

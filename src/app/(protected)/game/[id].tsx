@@ -72,13 +72,6 @@ const GameDetails = () => {
     });
   };
 
-  // const handlePhonePress = (phone: any, action: 'call' | 'message') => {
-  //     if (action === 'call') {
-  //       Linking.openURL(`tel:${phone}`);
-  //     } else if (action === 'message') {
-  //       Linking.openURL(`sms:${phone}?body=`);
-  //     }
-  //   };
 
   const handleGroupChat = async () => {
     console.log("HandleGroupChat started");
@@ -159,6 +152,26 @@ const GameDetails = () => {
     });
 
     // Check if the URL can be opened
+    Linking.canOpenURL(url!).then(supported => {
+      if (supported) {
+        Linking.openURL(url!);
+      } else {
+        Alert.alert('Error', 'Unable to open maps application');
+      }
+    });
+  };
+
+  const handleParkingPress = (game: Schedule) => {
+    if (!game.homeTeamData?.parking_latitude || !game.homeTeamData?.parking_longitude) {
+      Alert.alert('Error', 'Parking location not available');
+      return;
+    }
+
+    const url = Platform.select({
+      ios: `maps://app?daddr=${game.homeTeamData.parking_latitude},${game.homeTeamData.parking_longitude}`,
+      android: `google.navigation:q=${game.homeTeamData.parking_latitude},${game.homeTeamData.parking_longitude}`,
+    });
+
     Linking.canOpenURL(url!).then(supported => {
       if (supported) {
         Linking.openURL(url!);
@@ -277,8 +290,8 @@ const GameDetails = () => {
             <Text style={styles.titles}>
               <FontAwesome5 name="door-open" size={20} color="#ff6600" /> Locker Room Access
             </Text>
-            </View>
-            <View style={styles.noteItem}>
+          </View>
+          <View style={styles.noteItem}>
             <Text style={styles.bullet}>•</Text>
             <Text style={styles.noteText}>
               {game.homeTeamData?.locker_room_instructions}
@@ -739,11 +752,20 @@ const GameDetails = () => {
           <Text style={styles.gameTime}>
             {formatGameTime(game.gametime, game.gamedate)}
           </Text>
-          <TouchableOpacity onPress={() => handleArenaPress(game)}>
-            <Text style={styles.arena}>
-              {game.homeTeamData?.arenaname || 'Arena not specified'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.arenaContainer}>
+            <TouchableOpacity onPress={() => handleArenaPress(game)}>
+              <Text style={styles.arena}>
+                {game.homeTeamData?.arenaname || 'Arena not specified'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.divider}> // </Text>
+            <TouchableOpacity onPress={() => handleParkingPress(game)}>
+              <View style={styles.parkingContainer}>
+                <FontAwesome5 name="parking" size={14} color="#666666" />
+                <Text style={styles.arena}> Parking</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.floatingButtonsContainer}>
@@ -1211,6 +1233,21 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingRight: 10,
   },
+  arenaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  divider: {
+    color: '#666666',
+    marginHorizontal: 8,
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  parkingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  }
 });
 
 export default GameDetails;

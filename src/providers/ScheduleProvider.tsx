@@ -101,11 +101,11 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('No roster data available');
             return;
         }
-    
+
         try {
             setLoading(true);
             setError(null);
-    
+
             // Fetch all games with team data
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedule')
@@ -116,23 +116,29 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 `)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
-    
+
+            const { data: rostersData, error: rostersError } = await supabase
+                .from('teamRosters')
+                .select('*');
+
+            if (rostersError) throw rostersError;
             if (scheduleError) throw scheduleError;
-    
+
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
-    
+            setTeamRosters(rostersData);
+
             // Filter for games where the roster member is assigned
-            const myFilteredGames = processedGames.filter(game => 
+            const myFilteredGames = processedGames.filter(game =>
                 game.referee1 === roster.lastfirstfullname ||
                 game.referee2 === roster.lastfirstfullname ||
                 game.linesperson1 === roster.lastfirstfullname ||
                 game.linesperson2 === roster.lastfirstfullname
             );
-    
+
             setMyGames(myFilteredGames);
-    
+
         } catch (error) {
             console.error('Fetch schedule error:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');

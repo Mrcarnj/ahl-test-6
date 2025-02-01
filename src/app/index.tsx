@@ -9,6 +9,7 @@ export default function Index() {
     const { session } = useAuth();
     const { roster } = useRoster();
     const [isInitializing, setIsInitializing] = useState(true);
+    
 
     useEffect(() => {
         const initTimeout = setTimeout(() => {

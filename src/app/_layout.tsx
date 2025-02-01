@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { Stack } from "expo-router";
 import AuthProvider from "../providers/AuthProvider";
 import { useAuth } from "../providers/AuthProvider";
@@ -7,6 +6,7 @@ import { useEffect, useState } from "react";
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import { supabase } from "../lib/supabase";
+import { useBackgroundPermissions } from "../hooks/useBackgroundPermissions";
 
 const BACKGROUND_FETCH_TASK = 'background-fetch';
 
@@ -19,11 +19,9 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
     if (session) {
       // If we have a session, attempt to refresh it
       await supabase.auth.refreshSession();
-      // Return success result
       return BackgroundFetch.BackgroundFetchResult.NewData;
     }
     
-    // If no session, return no data result
     return BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {
     console.error('Background fetch failed:', error);
@@ -31,32 +29,41 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
   }
 });
 
-// Function to register background fetch
-async function registerBackgroundFetch() {
-  try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-      minimumInterval: 60 * 60, // 1 hour in seconds
-      stopOnTerminate: false,    // iOS only
-      startOnBoot: true,         // Android only
-    });
-    console.log("Background fetch registered");
-  } catch (err) {
-    console.error("Task Register failed:", err);
-  }
-}
-
 function RootLayoutNav() {
     const { session } = useAuth();
     const [isInitializing, setIsInitializing] = useState(true);
+    const { isBackgroundAllowed, requestBackgroundPermissions } = useBackgroundPermissions();
 
     useEffect(() => {
-        // Add a small delay to allow session restoration
-        const initTimeout = setTimeout(() => {
-            setIsInitializing(false);
-        }, 1000);
+        const initializeApp = async () => {
+            try {
+                // Register background fetch if allowed
+                if (isBackgroundAllowed) {
+                    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
+                    if (!isRegistered) {
+                        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+                            minimumInterval: 60 * 60, // 1 hour
+                            stopOnTerminate: false,
+                            startOnBoot: true,
+                        });
+                    }
+                } else {
+                    // Request permissions if not allowed
+                    await requestBackgroundPermissions();
+                }
+            } catch (error) {
+                console.error('Background task setup error:', error);
+            } finally {
+                // Set initialization complete
+                const initTimeout = setTimeout(() => {
+                    setIsInitializing(false);
+                }, 1000);
+                return () => clearTimeout(initTimeout);
+            }
+        };
 
-        return () => clearTimeout(initTimeout);
-    }, []);
+        initializeApp();
+    }, [isBackgroundAllowed]);
 
     if (isInitializing) {
         return (
@@ -76,29 +83,9 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-    useEffect(() => {
-        // Register background fetch when app starts
-        registerBackgroundFetch();
-
-        // Check if the task is already registered
-        const checkTask = async () => {
-            const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
-            if (!isRegistered) {
-                await registerBackgroundFetch();
-            }
-        };
-
-        checkTask();
-    }, []);
-
     return (
         <AuthProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" />
-                {/* <Stack.Screen name="(auth)" /> */}
-                <Stack.Screen name="(protected)" />
-                {/* <Stack.Screen name="(admin)" /> */}
-            </Stack>
+            <RootLayoutNav />
         </AuthProvider>
     );
 }

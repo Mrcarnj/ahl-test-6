@@ -189,15 +189,6 @@ const TestScheduleScreen = () => {
 
     const { text, isToday, isTomorrow, dateRange } = getNextExpenseReportDue();
 
-    // if (loading) {
-    //     return (
-    //         <SafeAreaView style={styles.container}>
-    //             <Text style={styles.loadingText}>Loading...</Text>
-    //         </SafeAreaView>
-    //     );
-    // }
-
-
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>

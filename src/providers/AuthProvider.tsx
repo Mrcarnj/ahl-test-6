@@ -63,22 +63,25 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     const handleRefresh = async () => {
         try {
-            // First check if we have a valid current session
+            console.log('🔍 Checking current session...');
             const { data: { session: currentSession } } = await supabase.auth.getSession();
             
             if (currentSession) {
+                console.log('✅ Valid current session found');
                 setSession(currentSession);
                 await checkTosAcceptance(currentSession.user.id);
                 return true;
             }
     
-            // If no current session, try to refresh
+            console.log('⚠️ No current session, attempting refresh...');
             const { data: { session: refreshedSession }, error } = 
                 await supabase.auth.refreshSession();
     
             if (error) {
+                console.log('⚠️ Session refresh error, trying stored session...');
                 const storedSession = await AsyncStorage.getItem('session');
                 if (storedSession) {
+                    console.log('📱 Found stored session, attempting to use it...');
                     const parsedSession = JSON.parse(storedSession);
                     await supabase.auth.setSession(parsedSession);
                     setSession(parsedSession);
@@ -89,15 +92,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             }
     
             if (refreshedSession) {
+                console.log('✅ Session successfully refreshed');
                 setSession(refreshedSession);
                 await checkTosAcceptance(refreshedSession.user.id);
                 return true;
             }
     
+            console.log('❌ No valid session found');
             return false;
         } catch (error) {
-            console.error('Refresh error:', error);
-            if (session) return true;
+            console.error('❌ Auth refresh error:', error);
+            if (session) {
+                console.log('⚠️ Error occurred but existing session found');
+                return true;
+            }
             return false;
         }
     };

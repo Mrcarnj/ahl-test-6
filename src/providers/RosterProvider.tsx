@@ -84,36 +84,48 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     };
 
     const fetchRoster = async (force = false) => {
-        if (!user?.id) return;
+        if (!user?.id) {
+            console.log('❌ No user ID available for roster fetch');
+            return;
+        }
     
         try {
+            console.log('🔄 Starting roster fetch...');
             setLoading(true);
             setError(null);
     
-            // Get user's roster
+            console.log('👤 Fetching user roster...');
             const { data: userRosterData, error: userRosterError } = await supabase
                 .from('roster')
                 .select('*')
                 .eq('auth_id', user.id)
                 .single();
     
-            if (userRosterError) throw userRosterError;
+            if (userRosterError) {
+                console.error('❌ User roster fetch error:', userRosterError);
+                throw userRosterError;
+            }
     
-            // Get all rosters
+            console.log('👥 Fetching all rosters...');
             const { data: allRostersData, error: allRostersError } = await supabase
                 .from('roster')
                 .select('*');
     
-            if (allRostersError) throw allRostersError;
+            if (allRostersError) {
+                console.error('❌ All rosters fetch error:', allRostersError);
+                throw allRostersError;
+            }
     
+            console.log('✅ Roster data fetched successfully');
             setRoster(userRosterData);
             setAllRosters(allRostersData || []);
     
         } catch (error) {
-            console.error('Fetch roster error:', error);
+            console.error('❌ Roster fetch error:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
+            console.log('🔄 Roster loading state reset');
         }
     };
 

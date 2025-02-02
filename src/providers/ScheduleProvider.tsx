@@ -98,14 +98,16 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
     const fetchSchedule = async () => {
         if (!roster?.lastfirstfullname) {
-            console.log('No roster data available');
+            console.log('❌ Schedule fetch: No roster data available');
             return;
         }
-
+    
         try {
+            console.log('🔄 Starting schedule fetch sequence...');
             setLoading(true);
             setError(null);
-
+    
+            console.log('📅 Fetching schedule data with team details...');
             // Fetch all games with team data
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedule')
@@ -116,19 +118,30 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 `)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
-
+    
+            console.log('👥 Fetching team rosters data...');
             const { data: rostersData, error: rostersError } = await supabase
                 .from('teamRosters')
                 .select('*');
-
-            if (rostersError) throw rostersError;
-            if (scheduleError) throw scheduleError;
-
+    
+            if (rostersError) {
+                console.error('❌ Team rosters fetch error:', rostersError);
+                throw rostersError;
+            }
+            if (scheduleError) {
+                console.error('❌ Schedule fetch error:', scheduleError);
+                throw scheduleError;
+            }
+    
+            console.log('✅ Raw schedule data fetched successfully');
+            console.log(`📊 Processing ${scheduleData?.length || 0} games...`);
+    
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
             setTeamRosters(rostersData);
-
+    
+            console.log('🔍 Filtering games for official:', roster.lastfirstfullname);
             // Filter for games where the roster member is assigned
             const myFilteredGames = processedGames.filter(game =>
                 game.referee1 === roster.lastfirstfullname ||
@@ -136,16 +149,34 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 game.linesperson1 === roster.lastfirstfullname ||
                 game.linesperson2 === roster.lastfirstfullname
             );
-
+    
+            console.log(`✅ Found ${myFilteredGames.length} assigned games`);
             setMyGames(myFilteredGames);
-
+            console.log('✅ Schedule fetch and processing complete');
+    
         } catch (error) {
-            console.error('Fetch schedule error:', error);
+            console.error('❌ Schedule fetch error:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
+            console.log('🔄 Schedule loading state reset');
         }
     };
+    
+    // Fetch schedule when roster data changes
+    useEffect(() => {
+        if (roster?.lastfirstfullname && !loading && !isRefreshing) {
+            console.log('👤 Roster data changed, triggering schedule fetch...');
+            console.log('📋 Current state - loading:', loading, 'refreshing:', isRefreshing);
+            fetchSchedule();
+        } else {
+            console.log('⏳ Skipping schedule fetch:', {
+                hasRoster: !!roster?.lastfirstfullname,
+                loading,
+                isRefreshing
+            });
+        }
+    }, [roster?.lastfirstfullname]);
 
     // Fetch schedule when roster data changes
     useEffect(() => {

@@ -45,22 +45,34 @@ const TestScheduleScreen = () => {
     const onRefresh = useCallback(async () => {
         if (!refreshing) {
             try {
+                console.log('🔄 Starting refresh sequence...');
                 setRefreshing(true);
                 
-                // First refresh auth
+                console.log('🔑 Attempting auth refresh...');
                 const sessionRefreshed = await handleRefresh();
+                console.log('🔑 Auth refresh result:', sessionRefreshed);
                 
                 if (sessionRefreshed) {
-                    // Then refresh roster
+                    console.log('👥 Starting roster refresh...');
                     await refreshRoster();
-                    // Finally refresh schedule
+                    console.log('👥 Roster refresh complete');
+                    
+                    console.log('📅 Starting schedule refresh...');
                     await refreshSchedule();
+                    console.log('📅 Schedule refresh complete');
+                    
+                    console.log('✅ Full refresh sequence complete');
+                } else {
+                    console.log('❌ Auth refresh failed, stopping refresh sequence');
                 }
             } catch (error) {
-                console.error('Refresh error:', error);
+                console.error('❌ Refresh error:', error);
             } finally {
                 setRefreshing(false);
+                console.log('🔄 Refresh state reset to false');
             }
+        } else {
+            console.log('⚠️ Refresh already in progress, skipping');
         }
     }, [refreshing, handleRefresh, refreshRoster, refreshSchedule]);
 

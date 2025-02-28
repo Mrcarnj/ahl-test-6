@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState, useRef } from "react";
 import { useRoster } from "./RosterProvider";
 import { format, parse } from "date-fns";
+import { DeviceEventEmitter } from "react-native";
 
 // Import or define interfaces
 export interface Roster {
@@ -244,12 +245,41 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
     }, [roster?.lastfirstfullname]);
 
-    // Fetch schedule when roster data changes
+    // Listen for app refresh events (when app comes back from background)
     useEffect(() => {
-        if (roster?.lastfirstfullname && !loading && !isRefreshing) {
-            fetchSchedule();
+        if (!roster?.lastfirstfullname) return;
+        
+        console.log('🔄 Setting up app refresh listener...');
+        
+        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async () => {
+            console.log('📱 App refresh event received, refreshing schedule data...');
+            if (!loading && !isRefreshing) {
+                await fetchSchedule();
+            } else {
+                console.log('⏳ Skipping refresh due to ongoing operations');
+            }
+        });
+        
+        return () => {
+            console.log('🧹 Cleaning up app refresh listener...');
+            appRefreshListener.remove();
+        };
+    }, [roster?.lastfirstfullname, loading, isRefreshing]);
+
+    // Expose the refresh function
+    const refreshSchedule = async () => {
+        if (isRefreshing || loading) {
+            console.log('⏳ Refresh already in progress, skipping...');
+            return;
         }
-    }, [roster?.lastfirstfullname]);
+        
+        try {
+            setIsRefreshing(true);
+            await fetchSchedule();
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     return (
         <ScheduleContext.Provider value={{
@@ -258,7 +288,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             teamRosters,
             loading: loading || isRefreshing,
             error,
-            refreshSchedule: fetchSchedule,
+            refreshSchedule,
             realtimeEnabled
         }}>
             {children}

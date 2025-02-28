@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/roster/details.tsx
 import { View, Text, StyleSheet, ScrollView, Image, Alert, Linking, TouchableOpacity } from 'react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
@@ -9,13 +9,43 @@ import * as Clipboard from 'expo-clipboard';
 import { Platform } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import { useContactsPermissions } from '@/src/hooks/useContactsPermissions';
+import * as FileSystem from 'expo-file-system';
 
 const Details = () => {
     const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
     const { allRosters } = useRoster();
     const { hasPermission, requestPermissions } = useContactsPermissions();
+    const [photoBase64, setPhotoBase64] = useState<string | null>(null);
 
     const selectedRoster = allRosters.find(r => r.id === parseInt(rosterId));
+
+    // Fetch and convert the photo to base64 if it exists
+    useEffect(() => {
+        const fetchPhoto = async () => {
+            if (selectedRoster?.photo) {
+                try {
+                    // Download the image to a temporary file
+                    const fileUri = FileSystem.cacheDirectory + 'temp_contact_photo.jpg';
+                    const downloadResult = await FileSystem.downloadAsync(
+                        selectedRoster.photo,
+                        fileUri
+                    );
+                    
+                    if (downloadResult.status === 200) {
+                        // Read the file as base64
+                        const base64 = await FileSystem.readAsStringAsync(fileUri, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        setPhotoBase64(base64);
+                    }
+                } catch (error) {
+                    console.error('Error fetching photo:', error);
+                }
+            }
+        };
+
+        fetchPhoto();
+    }, [selectedRoster?.photo]);
 
     const cleanPhoneNumber = (phone: string) => {
         // Remove all non-numeric characters
@@ -67,6 +97,14 @@ const Details = () => {
                 contactType: Contacts.ContactTypes.Person,
                 name: `${selectedRoster.firstname} ${selectedRoster.lastname}`
             };
+
+            // Add photo to contact if available
+            if (photoBase64) {
+                contact.imageAvailable = true;
+                contact.image = {
+                    uri: `data:image/jpeg;base64,${photoBase64}`
+                };
+            }
 
             const result = await Contacts.addContactAsync(contact);
 

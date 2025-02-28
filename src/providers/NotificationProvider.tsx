@@ -4,6 +4,7 @@ import { useSchedule } from './ScheduleProvider';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
+import { DeviceEventEmitter } from 'react-native';
 
 type NotificationContextType = {
   pushToken: string | null;
@@ -72,6 +73,26 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       scheduleNotifications();
     }
   }, [myGames]);
+
+  // Listen for app refresh events to reschedule notifications
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    console.log('🔄 Setting up app refresh listener in NotificationProvider...');
+    
+    const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async () => {
+      console.log('📱 App refresh event received in NotificationProvider, rescheduling notifications...');
+      
+      // We don't need to do anything here as notifications will be rescheduled
+      // when myGames updates from the ScheduleProvider refresh
+      console.log('ℹ️ Notifications will be rescheduled when game data refreshes');
+    });
+    
+    return () => {
+      console.log('🧹 Cleaning up app refresh listener in NotificationProvider...');
+      appRefreshListener.remove();
+    };
+  }, [user?.id]);
 
   return (
     <NotificationContext.Provider value={{ pushToken, scheduledNotifications }}>

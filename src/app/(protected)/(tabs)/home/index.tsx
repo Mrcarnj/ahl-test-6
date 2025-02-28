@@ -49,21 +49,38 @@ const TestScheduleScreen = () => {
                 setRefreshing(true);
                 
                 console.log('🔑 Attempting auth refresh...');
+                // Force a complete session refresh to ensure we have a valid session
                 const sessionRefreshed = await handleRefresh();
                 console.log('🔑 Auth refresh result:', sessionRefreshed);
                 
                 if (sessionRefreshed) {
                     console.log('👥 Starting roster refresh...');
+                    // Force a complete roster refresh
                     await refreshRoster();
                     console.log('👥 Roster refresh complete');
                     
                     console.log('📅 Starting schedule refresh...');
+                    // Force a complete schedule refresh
                     await refreshSchedule();
                     console.log('📅 Schedule refresh complete');
                     
                     console.log('✅ Full refresh sequence complete');
                 } else {
                     console.log('❌ Auth refresh failed, stopping refresh sequence');
+                    // If auth refresh failed, try one more time after a short delay
+                    setTimeout(async () => {
+                        console.log('🔄 Attempting auth refresh again...');
+                        const retryResult = await handleRefresh();
+                        if (retryResult) {
+                            console.log('✅ Auth refresh succeeded on retry');
+                            await refreshRoster();
+                            await refreshSchedule();
+                        } else {
+                            console.log('❌ Auth refresh failed on retry');
+                        }
+                        setRefreshing(false);
+                    }, 1000);
+                    return;
                 }
             } catch (error) {
                 console.error('❌ Refresh error:', error);

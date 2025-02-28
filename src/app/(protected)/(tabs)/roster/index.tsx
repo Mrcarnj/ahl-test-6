@@ -1,10 +1,11 @@
 // app/(protected)/(tabs)/roster/index.tsx
 import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView, RefreshControl } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
 import { router } from 'expo-router';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 // RosterItem component remains the same
 const RosterItem = memo(({ item, onPress }: {
@@ -22,19 +23,47 @@ const RosterItem = memo(({ item, onPress }: {
 
 const RosterScreen = () => {
     const { allRosters, loading, error, refreshRoster } = useRoster();
+    const { handleRefresh } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredRosters, setFilteredRosters] = useState<Roster[]>([]);
     const [adminRosters, setAdminRosters] = useState<Roster[]>([]);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         refreshRoster();
     }, []);
 
+    const onRefresh = useCallback(async () => {
+        if (!refreshing) {
+            try {
+                console.log('🔄 Roster: Starting refresh sequence...');
+                setRefreshing(true);
+                
+                console.log('🔑 Roster: Attempting auth refresh...');
+                const sessionRefreshed = await handleRefresh();
+                console.log('🔑 Roster: Auth refresh result:', sessionRefreshed);
+                
+                console.log('👥 Roster: Starting roster refresh...');
+                await refreshRoster();
+                console.log('👥 Roster: Roster refresh complete');
+                
+                console.log('✅ Roster: Full refresh sequence complete');
+            } catch (error) {
+                console.error('❌ Roster: Refresh error:', error);
+            } finally {
+                setRefreshing(false);
+                console.log('🔄 Roster: Refresh state reset to false');
+            }
+        } else {
+            console.log('⚠️ Roster: Refresh already in progress, skipping');
+        }
+    }, [refreshing, handleRefresh, refreshRoster]);
+
     const sanitizeSearchQuery = (query: string): string => {
         return query.replace(/[^a-zA-Z\s]/g, '');
-     };
+    };
      
-     useEffect(() => {
+    useEffect(() => {
         const sortedAdminRosters = allRosters
             .filter(roster => roster.ahlAdmin)
             .sort((b, a) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
@@ -109,6 +138,12 @@ const RosterScreen = () => {
                             scrollEnabled={false} // Disable FlatList scroll since we're using ScrollView
                             initialNumToRender={15}
                             contentContainerStyle={styles.listContainer}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={refreshing}
+                                    onRefresh={onRefresh}
+                                />
+                            }
                         />
                     </ScrollView>
                 </View>

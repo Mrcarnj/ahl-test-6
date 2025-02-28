@@ -32,18 +32,29 @@ export default function CalendarScreen() {
   const onRefresh = useCallback(async () => {
     if (!refreshing) {
         try {
+            console.log('🔄 Calendar: Starting refresh sequence...');
             setRefreshing(true);
-            await handleRefresh();
-            // Always try to refresh data even if auth refresh fails
-            // as we might still have a valid session
+            
+            console.log('🔑 Calendar: Attempting auth refresh...');
+            const sessionRefreshed = await handleRefresh();
+            console.log('🔑 Calendar: Auth refresh result:', sessionRefreshed);
+            
+            console.log('📅 Calendar: Starting schedule refresh...');
+            // Force a complete schedule refresh
             await refreshSchedule();
+            console.log('📅 Calendar: Schedule refresh complete');
+            
+            console.log('✅ Calendar: Full refresh sequence complete');
         } catch (error) {
-            console.error('Refresh error:', error);
+            console.error('❌ Calendar: Refresh error:', error);
         } finally {
             setRefreshing(false);
+            console.log('🔄 Calendar: Refresh state reset to false');
         }
+    } else {
+        console.log('⚠️ Calendar: Refresh already in progress, skipping');
     }
-}, [refreshing, handleRefresh]);
+  }, [refreshing, handleRefresh, refreshSchedule]);
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {

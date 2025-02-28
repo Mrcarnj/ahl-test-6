@@ -2,7 +2,8 @@
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
-import  AsyncStorage  from "@react-native-async-storage/async-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DeviceEventEmitter } from "react-native";
 
 // Define the Roster type based on your table structure
 type Roster = {
@@ -142,6 +143,27 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             initializeData();
         }
     }, [user?.id]);
+
+    // Listen for app refresh events (when app comes back from background)
+    useEffect(() => {
+        if (!user?.id) return;
+        
+        console.log('🔄 Setting up app refresh listener in RosterProvider...');
+        
+        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async () => {
+            console.log('📱 App refresh event received in RosterProvider, refreshing roster data...');
+            if (!loading) {
+                await fetchRoster(true); // Force refresh when coming back from background
+            } else {
+                console.log('⏳ Skipping roster refresh due to ongoing operations');
+            }
+        });
+        
+        return () => {
+            console.log('🧹 Cleaning up app refresh listener in RosterProvider...');
+            appRefreshListener.remove();
+        };
+    }, [user?.id, loading]);
 
     // Expose refreshRoster as a way to force fetch new data
     const refreshRoster = async () => {

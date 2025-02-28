@@ -3,7 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState, useRef } from "react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { AppState } from "react-native";
+import { AppState, DeviceEventEmitter } from "react-native";
 
 // Timezone helper functions
 const isPST = (date: Date) => {
@@ -188,7 +188,23 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
         const subscription = AppState.addEventListener('change', async (nextAppState: string) => {
             if (nextAppState === 'active') {
-                await handleRefresh();
+                console.log('🔄 App moved to foreground, refreshing session and data...');
+                // Clear any background timer when app becomes active
+                if (backgroundTimerRef.current) {
+                    clearInterval(backgroundTimerRef.current);
+                    backgroundTimerRef.current = null;
+                }
+                
+                // Force a session refresh when app comes to foreground
+                try {
+                    // First refresh the auth session
+                    await handleRefresh();
+                    
+                    // Then emit an event for other components to refresh their data
+                    DeviceEventEmitter.emit('appRefresh', { timestamp: Date.now() });
+                } catch (error) {
+                    console.error('Error refreshing on app foreground:', error);
+                }
             } else if (nextAppState === 'background') {
                 // Clear any existing timer
                 if (backgroundTimerRef.current) {

@@ -1,6 +1,6 @@
 //src/providers/ScheduleProvider.tsx
 import { supabase } from "../lib/supabase";
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import { createContext, PropsWithChildren, useContext, useEffect, useState, useRef } from "react";
 import { useRoster } from "./RosterProvider";
 import { format, parse } from "date-fns";
 
@@ -76,6 +76,7 @@ type ScheduleContext = {
     loading: boolean;
     error: string | null;
     refreshSchedule: () => Promise<void>;
+    realtimeEnabled: boolean;
 };
 
 const ScheduleContext = createContext<ScheduleContext>({
@@ -85,6 +86,7 @@ const ScheduleContext = createContext<ScheduleContext>({
     loading: false,
     error: null,
     refreshSchedule: async () => { },
+    realtimeEnabled: false,
 });
 
 export default function ScheduleProvider({ children }: PropsWithChildren) {
@@ -95,6 +97,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [realtimeEnabled, setRealtimeEnabled] = useState(false);
+    const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
     const fetchSchedule = async () => {
         if (!roster?.lastfirstfullname) {
@@ -157,6 +161,74 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
     };
     
+    // Setup real-time subscription to schedule table
+    useEffect(() => {
+        if (!roster?.lastfirstfullname) return;
+        
+        console.log('🔌 Setting up real-time subscription to schedule table...');
+        setRealtimeEnabled(false);
+        
+        const setupSubscription = async () => {
+            // Clean up any existing subscription
+            if (subscriptionRef.current) {
+                subscriptionRef.current.unsubscribe();
+                subscriptionRef.current = null;
+            }
+            
+            // Set up new subscription
+            const subscription = supabase
+                .channel('schedule-changes')
+                .on('postgres_changes', {
+                    event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
+                    schema: 'public',
+                    table: 'schedule',
+                }, async (payload) => {
+                    console.log('🔄 Real-time update received:', payload);
+                    
+                    // Check if the change is relevant to the current user
+                    const newData = payload.new as Schedule;
+                    const oldData = payload.old as Schedule;
+                    
+                    const isRelevantToUser = (data: any) => {
+                        if (!data) return false;
+                        return data.referee1 === roster.lastfirstfullname ||
+                               data.referee2 === roster.lastfirstfullname ||
+                               data.linesperson1 === roster.lastfirstfullname ||
+                               data.linesperson2 === roster.lastfirstfullname;
+                    };
+                    
+                    // If the change affects the current user's games, refresh the schedule
+                    if (isRelevantToUser(newData) || isRelevantToUser(oldData)) {
+                        console.log('🔄 Change affects current user, refreshing schedule...');
+                        await fetchSchedule();
+                    } else {
+                        console.log('ℹ️ Change does not affect current user, skipping refresh');
+                    }
+                })
+                .subscribe((status) => {
+                    console.log('Subscription status:', status);
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Successfully subscribed to schedule changes');
+                        setRealtimeEnabled(true);
+                    }
+                });
+                
+            subscriptionRef.current = subscription;
+        };
+        
+        setupSubscription();
+        
+        // Cleanup subscription when component unmounts or roster changes
+        return () => {
+            console.log('🧹 Cleaning up schedule subscription...');
+            if (subscriptionRef.current) {
+                subscriptionRef.current.unsubscribe();
+                subscriptionRef.current = null;
+            }
+            setRealtimeEnabled(false);
+        };
+    }, [roster?.lastfirstfullname]);
+
     // Fetch schedule when roster data changes
     useEffect(() => {
         if (roster?.lastfirstfullname && !loading && !isRefreshing) {
@@ -184,9 +256,10 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             allGames,
             myGames,
             teamRosters,
-            loading: loading || isRefreshing, // Modified
+            loading: loading || isRefreshing,
             error,
-            refreshSchedule: fetchSchedule
+            refreshSchedule: fetchSchedule,
+            realtimeEnabled
         }}>
             {children}
         </ScheduleContext.Provider>

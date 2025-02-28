@@ -234,8 +234,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 2,
     fontStyle: 'italic',
+    marginTop: -25,
   },
 });
 

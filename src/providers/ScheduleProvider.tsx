@@ -116,6 +116,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     homeTeamData:teams!schedule_hometeam_fkey(*),
                     awayTeamData:teams!schedule_awayteam_fkey(*)
                 `)
+                .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
     
@@ -142,16 +143,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setTeamRosters(rostersData);
     
             console.log('🔍 Filtering games for official:', roster.lastfirstfullname);
-            // Filter for games where the roster member is assigned
-            const myFilteredGames = processedGames.filter(game =>
-                game.referee1 === roster.lastfirstfullname ||
-                game.referee2 === roster.lastfirstfullname ||
-                game.linesperson1 === roster.lastfirstfullname ||
-                game.linesperson2 === roster.lastfirstfullname
-            );
-    
-            console.log(`✅ Found ${myFilteredGames.length} assigned games`);
-            setMyGames(myFilteredGames);
+            // Since we're already filtering at the database level, we can just use the processed games directly
+            setMyGames(processedGames);
+            console.log(`✅ Found ${processedGames.length} assigned games`);
             console.log('✅ Schedule fetch and processing complete');
     
         } catch (error) {

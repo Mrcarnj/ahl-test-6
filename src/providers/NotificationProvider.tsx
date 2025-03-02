@@ -78,18 +78,18 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!user?.id) return;
     
-    console.log('🔄 Setting up app refresh listener in NotificationProvider...');
+    console.log('🔄 NOTIFICATION: Setting up app refresh listener...');
     
-    const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async () => {
-      console.log('📱 App refresh event received in NotificationProvider, rescheduling notifications...');
+    const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async (data) => {
+      console.log('📱 NOTIFICATION: App refresh event received - ' + new Date().toISOString(), data);
       
       // We don't need to do anything here as notifications will be rescheduled
       // when myGames updates from the ScheduleProvider refresh
-      console.log('ℹ️ Notifications will be rescheduled when game data refreshes');
+      console.log('ℹ️ NOTIFICATION: Notifications will be rescheduled when game data refreshes');
     });
     
     return () => {
-      console.log('🧹 Cleaning up app refresh listener in NotificationProvider...');
+      console.log('🧹 NOTIFICATION: Cleaning up app refresh listener...');
       appRefreshListener.remove();
     };
   }, [user?.id]);

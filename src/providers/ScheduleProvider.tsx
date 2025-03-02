@@ -103,16 +103,18 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
     const fetchSchedule = async () => {
         if (!roster?.lastfirstfullname) {
-            console.log('❌ Schedule fetch: No roster data available');
+            console.log('❌ SCHEDULE: Fetch aborted - No roster data available');
             return;
         }
     
         try {
-            console.log('🔄 Starting schedule fetch sequence...');
+            console.log('🔄 SCHEDULE: Starting fetch sequence - ' + new Date().toISOString());
             setLoading(true);
             setError(null);
     
-            console.log('📅 Fetching schedule data with team details...');
+            console.log('📅 SCHEDULE: Fetching schedule data with team details...');
+            const fetchStart = Date.now();
+            
             // Fetch all games with team data
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedule')
@@ -124,41 +126,47 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
                 .order('gamedate', { ascending: true })
                 .order('gametime', { ascending: true });
+                
+            console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
     
-            console.log('👥 Fetching team rosters data...');
+            console.log('👥 SCHEDULE: Fetching team rosters data...');
+            const rostersStart = Date.now();
+            
             const { data: rostersData, error: rostersError } = await supabase
                 .from('teamRosters')
                 .select('*');
+                
+            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms`);
     
             if (rostersError) {
-                console.error('❌ Team rosters fetch error:', rostersError);
+                console.error('❌ SCHEDULE: Team rosters fetch error:', rostersError);
                 throw rostersError;
             }
             if (scheduleError) {
-                console.error('❌ Schedule fetch error:', scheduleError);
+                console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
                 throw scheduleError;
             }
     
-            console.log('✅ Raw schedule data fetched successfully');
-            console.log(`📊 Processing ${scheduleData?.length || 0} games...`);
+            console.log('✅ SCHEDULE: Raw data fetched successfully');
+            console.log(`📊 SCHEDULE: Processing ${scheduleData?.length || 0} games...`);
     
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
             setTeamRosters(rostersData);
     
-            console.log('🔍 Filtering games for official:', roster.lastfirstfullname);
+            console.log('🔍 SCHEDULE: Filtering games for official:', roster.lastfirstfullname);
             // Since we're already filtering at the database level, we can just use the processed games directly
             setMyGames(processedGames);
-            console.log(`✅ Found ${processedGames.length} assigned games`);
-            console.log('✅ Schedule fetch and processing complete');
+            console.log(`✅ SCHEDULE: Found ${processedGames.length} assigned games`);
+            console.log('✅ SCHEDULE: Fetch and processing complete - ' + new Date().toISOString());
     
         } catch (error) {
-            console.error('❌ Schedule fetch error:', error);
+            console.error('❌ SCHEDULE: Fetch error:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
-            console.log('🔄 Schedule loading state reset');
+            console.log('🔄 SCHEDULE: Loading state reset');
         }
     };
     
@@ -249,19 +257,41 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     useEffect(() => {
         if (!roster?.lastfirstfullname) return;
         
-        console.log('🔄 Setting up app refresh listener...');
+        console.log('🔄 SCHEDULE: Setting up app refresh listener...');
         
-        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async () => {
-            console.log('📱 App refresh event received, refreshing schedule data...');
+        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async (data) => {
+            console.log('📱 SCHEDULE: App refresh event received - ' + new Date().toISOString(), data);
+            
             if (!loading && !isRefreshing) {
-                await fetchSchedule();
+                try {
+                    console.log('🔄 SCHEDULE: Starting background refresh...');
+                    setIsRefreshing(true);
+                    
+                    // Set a timeout to prevent hanging
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Schedule refresh timeout')), 10000)
+                    );
+                    
+                    // Attempt to refresh with timeout protection
+                    await Promise.race([fetchSchedule(), timeoutPromise])
+                        .catch(error => {
+                            console.error('❌ SCHEDULE: Background refresh timed out or failed:', error);
+                        });
+                        
+                    console.log('✅ SCHEDULE: Background refresh complete');
+                } catch (error) {
+                    console.error('❌ SCHEDULE: Background refresh error:', error);
+                } finally {
+                    setIsRefreshing(false);
+                    console.log('🔄 SCHEDULE: Refresh state reset after background refresh');
+                }
             } else {
-                console.log('⏳ Skipping refresh due to ongoing operations');
+                console.log('⚠️ SCHEDULE: Skipping background refresh due to ongoing operations');
             }
         });
         
         return () => {
-            console.log('🧹 Cleaning up app refresh listener...');
+            console.log('🧹 SCHEDULE: Cleaning up app refresh listener...');
             appRefreshListener.remove();
         };
     }, [roster?.lastfirstfullname, loading, isRefreshing]);
@@ -269,15 +299,38 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     // Expose the refresh function
     const refreshSchedule = async () => {
         if (isRefreshing || loading) {
-            console.log('⏳ Refresh already in progress, skipping...');
+            console.log('⚠️ SCHEDULE: Refresh already in progress, skipping...');
             return;
         }
         
         try {
+            console.log('🔄 SCHEDULE: Starting manual refresh - ' + new Date().toISOString());
             setIsRefreshing(true);
-            await fetchSchedule();
+            
+            // Set a timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => {
+                    console.error('⏱️ SCHEDULE: Refresh timeout reached');
+                    reject(new Error('Schedule refresh timeout'));
+                }, 15000)
+            );
+            
+            // Attempt to fetch with timeout protection
+            await Promise.race([fetchSchedule(), timeoutPromise])
+                .catch(error => {
+                    console.error('❌ SCHEDULE: Manual refresh timed out or failed:', error);
+                    // If we time out, we still want to reset the loading state
+                    throw error;
+                });
+                
+            console.log('✅ SCHEDULE: Manual refresh complete');
+        } catch (error) {
+            console.error('❌ SCHEDULE: Manual refresh error:', error);
+            // Reset state even on error
         } finally {
+            // Ensure we always reset the loading state
             setIsRefreshing(false);
+            console.log('🔄 SCHEDULE: Refresh state reset after manual refresh');
         }
     };
 

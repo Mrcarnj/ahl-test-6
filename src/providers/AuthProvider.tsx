@@ -63,47 +63,92 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     const handleRefresh = async () => {
         try {
-            console.log('🔍 Checking current session...');
+            console.log('🔍 AUTH: Checking current session... - ' + new Date().toISOString());
             const { data: { session: currentSession } } = await supabase.auth.getSession();
             
             if (currentSession) {
-                console.log('✅ Valid current session found');
-                setSession(currentSession);
-                await checkTosAcceptance(currentSession.user.id);
-                return true;
-            }
-    
-            console.log('⚠️ No current session, attempting refresh...');
-            const { data: { session: refreshedSession }, error } = 
-                await supabase.auth.refreshSession();
-    
-            if (error) {
-                console.log('⚠️ Session refresh error, trying stored session...');
-                const storedSession = await AsyncStorage.getItem('session');
-                if (storedSession) {
-                    console.log('📱 Found stored session, attempting to use it...');
-                    const parsedSession = JSON.parse(storedSession);
-                    await supabase.auth.setSession(parsedSession);
-                    setSession(parsedSession);
-                    await checkTosAcceptance(parsedSession.user.id);
+                // Check if token is expired or about to expire (within 5 minutes)
+                const expiresAt = currentSession.expires_at;
+                const now = Math.floor(Date.now() / 1000);
+                const isExpired = expiresAt && expiresAt < now;
+                const isAboutToExpire = expiresAt && expiresAt < now + 300; // 5 minutes
+                
+                if (isExpired) {
+                    console.log('⚠️ AUTH: Session token is expired, attempting refresh...');
+                } else if (isAboutToExpire) {
+                    console.log('⚠️ AUTH: Session token is about to expire, attempting refresh...');
+                } else {
+                    console.log('✅ AUTH: Valid current session found with expiry in ' + 
+                        (expiresAt ? Math.floor((expiresAt - now) / 60) : 'unknown') + ' minutes');
+                    setSession(currentSession);
+                    await checkTosAcceptance(currentSession.user.id);
                     return true;
                 }
+            } else {
+                console.log('⚠️ AUTH: No current session, attempting refresh...');
+            }
+    
+            console.log('🔄 AUTH: Calling supabase.auth.refreshSession()...');
+            const refreshStart = Date.now();
+            const { data: { session: refreshedSession }, error } = 
+                await supabase.auth.refreshSession();
+            console.log(`🕒 AUTH: refreshSession took ${Date.now() - refreshStart}ms`);
+    
+            if (error) {
+                console.log('⚠️ AUTH: Session refresh error:', error.message);
+                console.log('🔍 AUTH: Trying stored session...');
+                
+                try {
+                    const storedSession = await AsyncStorage.getItem('session');
+                    if (storedSession) {
+                        console.log('📱 AUTH: Found stored session, attempting to use it...');
+                        const parsedSession = JSON.parse(storedSession);
+                        
+                        // Check if stored session is expired
+                        const storedExpiresAt = parsedSession.expires_at;
+                        const now = Math.floor(Date.now() / 1000);
+                        if (storedExpiresAt && storedExpiresAt < now) {
+                            console.log('⚠️ AUTH: Stored session is expired, cannot use it');
+                            throw new Error('Stored session is expired');
+                        }
+                        
+                        console.log('🔄 AUTH: Setting stored session...');
+                        await supabase.auth.setSession(parsedSession);
+                        setSession(parsedSession);
+                        await checkTosAcceptance(parsedSession.user.id);
+                        return true;
+                    } else {
+                        console.log('⚠️ AUTH: No stored session found');
+                    }
+                } catch (storageError) {
+                    console.error('❌ AUTH: Error accessing stored session:', storageError);
+                }
+                
                 throw error;
             }
     
             if (refreshedSession) {
-                console.log('✅ Session successfully refreshed');
+                console.log('✅ AUTH: Session successfully refreshed');
                 setSession(refreshedSession);
+                
+                // Store the refreshed session
+                try {
+                    await AsyncStorage.setItem('session', JSON.stringify(refreshedSession));
+                    console.log('💾 AUTH: Refreshed session saved to storage');
+                } catch (storageError) {
+                    console.error('❌ AUTH: Error saving refreshed session:', storageError);
+                }
+                
                 await checkTosAcceptance(refreshedSession.user.id);
                 return true;
             }
     
-            console.log('❌ No valid session found');
+            console.log('❌ AUTH: No valid session found after refresh attempt');
             return false;
         } catch (error) {
-            console.error('❌ Auth refresh error:', error);
+            console.error('❌ AUTH: Auth refresh error:', error);
             if (session) {
-                console.log('⚠️ Error occurred but existing session found');
+                console.log('⚠️ AUTH: Error occurred but existing session found');
                 return true;
             }
             return false;
@@ -188,7 +233,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
         const subscription = AppState.addEventListener('change', async (nextAppState: string) => {
             if (nextAppState === 'active') {
-                console.log('🔄 App moved to foreground, refreshing session and data...');
+                console.log('🔄 AUTH: App moved to foreground - ' + new Date().toISOString());
                 // Clear any background timer when app becomes active
                 if (backgroundTimerRef.current) {
                     clearInterval(backgroundTimerRef.current);
@@ -197,15 +242,42 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 
                 // Force a session refresh when app comes to foreground
                 try {
-                    // First refresh the auth session
-                    await handleRefresh();
+                    console.log('🔄 AUTH: Checking session state after background...');
+                    
+                    // Set a timeout to prevent hanging
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Auth refresh timeout')), 10000)
+                    );
+                    
+                    // First refresh the auth session with timeout protection
+                    const refreshResult = await Promise.race([handleRefresh(), timeoutPromise])
+                        .catch(error => {
+                            console.error('❌ AUTH: Background refresh timed out or failed:', error);
+                            // If timeout, still try to emit the refresh event
+                            // so other components can try to refresh their data
+                            return false;
+                        });
+                    
+                    console.log('🔄 AUTH: Background refresh result:', refreshResult);
                     
                     // Then emit an event for other components to refresh their data
-                    DeviceEventEmitter.emit('appRefresh', { timestamp: Date.now() });
+                    // We do this even if auth refresh failed, as we might still have a valid session
+                    console.log('📣 AUTH: Emitting appRefresh event...');
+                    DeviceEventEmitter.emit('appRefresh', { 
+                        timestamp: Date.now(),
+                        authRefreshed: refreshResult 
+                    });
                 } catch (error) {
-                    console.error('Error refreshing on app foreground:', error);
+                    console.error('❌ AUTH: Error refreshing on app foreground:', error);
+                    // Still try to emit the refresh event so other components can try
+                    DeviceEventEmitter.emit('appRefresh', { 
+                        timestamp: Date.now(),
+                        authRefreshed: false,
+                        error: error instanceof Error ? error.message : 'Unknown error'
+                    });
                 }
             } else if (nextAppState === 'background') {
+                console.log('📱 AUTH: App moved to background - ' + new Date().toISOString());
                 // Clear any existing timer
                 if (backgroundTimerRef.current) {
                     clearInterval(backgroundTimerRef.current);

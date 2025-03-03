@@ -83,33 +83,26 @@ export default function ChangePassword() {
 
    setLoading(true);
    try {
-     // First update the auth password
      const { error: authError } = await supabase.auth.updateUser({
        password: newPassword
      });
 
      if (authError) throw authError;
 
-     // Then update the roster table
      const { error: rosterError } = await supabase
        .from('roster')
        .update({ changedpassword: true })
        .eq('auth_id', user.id);
 
-     if (rosterError) {
-       // If roster update fails, we should handle this case
-       console.error('Failed to update roster:', rosterError);
-       throw new Error('Failed to complete password change process. Please try again.');
-     }
+     if (rosterError) throw rosterError;
 
-     // Only refresh roster and redirect if both operations succeed
      await refreshRoster();
      Alert.alert('Success', 'Password updated successfully');
      router.replace('/(protected)/home');
    } catch (error) {
-     console.error('Password change error:', error);
-     Alert.alert('Error', error instanceof Error ? error.message : 'An unknown error occurred');
-     setLoading(false); // Reset loading state on error
+     Alert.alert('Error', (error as Error).message);
+   } finally {
+     setLoading(false);
    }
  };
 

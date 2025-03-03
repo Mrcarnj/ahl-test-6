@@ -21,23 +21,7 @@ const GameDetails = () => {
   const screenWidth = Dimensions.get('window').width;
   const [refreshing, setRefreshing] = useState(false);
   const { refreshSchedule } = useSchedule();
-  const { handleRefresh } = useAuth();
 
-  const onRefresh = useCallback(async () => {
-    if (!refreshing) {
-      try {
-        setRefreshing(true);
-        await handleRefresh();
-        // Always try to refresh data even if auth refresh fails
-        // as we might still have a valid session
-        await refreshSchedule();
-      } catch (error) {
-        console.error('Refresh error:', error);
-      } finally {
-        setRefreshing(false);
-      }
-    }
-  }, [refreshing, handleRefresh]);
 
   const game = myGames.find(g => g.gameid === id);
 
@@ -726,13 +710,6 @@ const GameDetails = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}
-      refreshControl={<RefreshControl
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        colors={['#ff6600']}
-        tintColor="#ff6600"
-      />
-      }
     >
       <View style={styles.card}>
         <Text style={styles.gameDate}>{formatGameDate2(game.gamedate)}</Text>

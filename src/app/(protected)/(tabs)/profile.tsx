@@ -13,7 +13,6 @@ const Profile = () => {
     const { roster, refreshRoster } = useRoster();
     const { myGames, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
-    const { handleRefresh } = useAuth();
 
     // Cache the profile data
     const profileData = useMemo(() => ({
@@ -24,22 +23,6 @@ const Profile = () => {
         gameCount: myGames.length
     }), [roster, myGames]);
 
-    // Handle manual refresh
-    const onRefresh = useCallback(async () => {
-        if (!refreshing) {
-            try {
-                setRefreshing(true);
-                await handleRefresh();
-                // Always try to refresh data even if auth refresh fails
-                // as we might still have a valid session
-                await refreshSchedule();
-            } catch (error) {
-                console.error('Refresh error:', error);
-            } finally {
-                setRefreshing(false);
-            }
-        }
-    }, [refreshing, handleRefresh]);
 
     if (!roster) {
         return (
@@ -54,14 +37,6 @@ const Profile = () => {
             <ScrollView 
                 style={styles.scrollView} 
                 contentContainerStyle={styles.container}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor="#ff6600"
-                        colors={['#ff6600']}
-                    />
-                }
             >
                 <Image
                     source={ profileData.photo ?

@@ -27,34 +27,7 @@ export default function CalendarScreen() {
   const { myGames, loading, refreshSchedule } = useSchedule();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const { handleRefresh } = useAuth();
 
-  const onRefresh = useCallback(async () => {
-    if (!refreshing) {
-        try {
-            console.log('🔄 Calendar: Starting refresh sequence...');
-            setRefreshing(true);
-            
-            console.log('🔑 Calendar: Attempting auth refresh...');
-            const sessionRefreshed = await handleRefresh();
-            console.log('🔑 Calendar: Auth refresh result:', sessionRefreshed);
-            
-            console.log('📅 Calendar: Starting schedule refresh...');
-            // Force a complete schedule refresh
-            await refreshSchedule();
-            console.log('📅 Calendar: Schedule refresh complete');
-            
-            console.log('✅ Calendar: Full refresh sequence complete');
-        } catch (error) {
-            console.error('❌ Calendar: Refresh error:', error);
-        } finally {
-            setRefreshing(false);
-            console.log('🔄 Calendar: Refresh state reset to false');
-        }
-    } else {
-        console.log('⚠️ Calendar: Refresh already in progress, skipping');
-    }
-  }, [refreshing, handleRefresh, refreshSchedule]);
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {
@@ -121,16 +94,7 @@ export default function CalendarScreen() {
       <View style={styles.container}>
       <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
-        <ScrollView
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#ff6600']}
-                tintColor="#ff6600"
-              />
-            }
-          >
+        <ScrollView>
           <Calendar
             current={format(currentMonth, 'yyyy-MM-dd')}
             onMonthChange={onMonthChange}

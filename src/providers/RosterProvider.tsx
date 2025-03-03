@@ -2,8 +2,7 @@
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DeviceEventEmitter } from "react-native";
+import  AsyncStorage  from "@react-native-async-storage/async-storage";
 
 // Define the Roster type based on your table structure
 type Roster = {
@@ -18,8 +17,6 @@ type Roster = {
     isAdmin: boolean;
     changedpassword: boolean;
     ahlAdmin: boolean;
-    accepted_tos: boolean;
-    tos_accepted_at: string | null;
     // Add other roster fields here
 };
 
@@ -85,82 +82,50 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     };
 
     const fetchRoster = async (force = false) => {
-        if (!user?.id) {
-            console.log('❌ ROSTER: Fetch aborted - No user ID available');
+        if (!user?.id) return;
+
+        // Check if we can use cached data
+        if (!force && lastFetch && (new Date().getTime() - lastFetch.getTime() < CACHE_DURATION)) {
+            console.log('Using memory-cached roster data');
             return;
         }
-    
+
         try {
-            console.log('🔄 ROSTER: Starting fetch sequence - ' + new Date().toISOString());
             setLoading(true);
             setError(null);
-    
-            console.log('👤 ROSTER: Fetching user roster...');
-            const userFetchStart = Date.now();
-            
+
+            // Fetch user's roster
             const { data: userRosterData, error: userRosterError } = await supabase
                 .from('roster')
                 .select('*')
                 .eq('auth_id', user.id)
                 .single();
-                
-            console.log(`🕒 ROSTER: User roster fetch took ${Date.now() - userFetchStart}ms`);
-    
-            if (userRosterError) {
-                console.error('❌ ROSTER: User roster fetch error:', userRosterError);
-                throw userRosterError;
-            }
-    
-            console.log('👥 ROSTER: Fetching all rosters...');
-            const allFetchStart = Date.now();
-            
+
+            if (userRosterError) throw userRosterError;
+
+            // Fetch all rosters
             const { data: allRostersData, error: allRostersError } = await supabase
                 .from('roster')
                 .select('*');
-                
-            console.log(`🕒 ROSTER: All rosters fetch took ${Date.now() - allFetchStart}ms`);
-    
-            if (allRostersError) {
-                console.error('❌ ROSTER: All rosters fetch error:', allRostersError);
-                throw allRostersError;
-            }
-    
-            console.log('✅ ROSTER: Data fetched successfully');
-            console.log(`📊 ROSTER: Processing ${allRostersData?.length || 0} roster entries...`);
-            
+
+            if (allRostersError) throw allRostersError;
+
+            // Update state
             setRoster(userRosterData);
             setAllRosters(allRostersData || []);
-            
-            // Update the cache
-            try {
-                await saveToCache(userRosterData, allRostersData || []);
-                console.log('💾 ROSTER: Cache updated successfully');
-            } catch (cacheError) {
-                console.error('⚠️ ROSTER: Cache update failed:', cacheError);
-                // Continue even if cache fails
-            }
-            
-            console.log('✅ ROSTER: Fetch and processing complete - ' + new Date().toISOString());
-    
-        } catch (error) {
-            console.error('❌ ROSTER: Fetch error:', error);
-            setError(error instanceof Error ? error.message : 'An error occurred');
-            
-            // Try to load from cache if fetch fails
-            try {
-                console.log('🔍 ROSTER: Attempting to load from cache after fetch failure...');
-                const cacheLoaded = await loadCachedData();
-                if (cacheLoaded) {
-                    console.log('✅ ROSTER: Successfully loaded from cache after fetch failure');
-                } else {
-                    console.log('⚠️ ROSTER: No valid cache available after fetch failure');
-                }
-            } catch (cacheError) {
-                console.error('❌ ROSTER: Cache load after fetch failure error:', cacheError);
-            }
+            setLastFetch(new Date());
+
+            // Save to cache
+            await saveToCache(userRosterData, allRostersData || []);
+
+        } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : 'An error occurred';
+            console.error('Fetch roster error:', errorMessage);
+            setError(errorMessage);
+            setRoster(null);
+            setAllRosters([]);
         } finally {
             setLoading(false);
-            console.log('🔄 ROSTER: Loading state reset');
         }
     };
 
@@ -177,49 +142,6 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             initializeData();
         }
     }, [user?.id]);
-
-    // Listen for app refresh events (when app comes back from background)
-    useEffect(() => {
-        if (!user?.id) return;
-        
-        console.log('🔄 ROSTER: Setting up app refresh listener...');
-        
-        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async (data) => {
-            console.log('📱 ROSTER: App refresh event received - ' + new Date().toISOString(), data);
-            
-            if (!loading) {
-                try {
-                    console.log('🔄 ROSTER: Starting background refresh...');
-                    setLoading(true);
-                    
-                    // Set a timeout to prevent hanging
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Roster refresh timeout')), 10000)
-                    );
-                    
-                    // Attempt to refresh with timeout protection
-                    await Promise.race([fetchRoster(true), timeoutPromise])
-                        .catch(error => {
-                            console.error('❌ ROSTER: Background refresh timed out or failed:', error);
-                        });
-                        
-                    console.log('✅ ROSTER: Background refresh complete');
-                } catch (error) {
-                    console.error('❌ ROSTER: Background refresh error:', error);
-                } finally {
-                    setLoading(false);
-                    console.log('🔄 ROSTER: Loading state reset after background refresh');
-                }
-            } else {
-                console.log('⚠️ ROSTER: Skipping background refresh due to ongoing operations');
-            }
-        });
-        
-        return () => {
-            console.log('🧹 ROSTER: Cleaning up app refresh listener...');
-            appRefreshListener.remove();
-        };
-    }, [user?.id, loading]);
 
     // Expose refreshRoster as a way to force fetch new data
     const refreshRoster = async () => {

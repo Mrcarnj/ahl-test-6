@@ -13,7 +13,6 @@ import { useAuth } from '@/src/providers/AuthProvider';
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { handleRefresh } = useAuth();
     const { myGames, loading, refreshSchedule } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
     const { roster, refreshRoster } = useRoster();
@@ -42,89 +41,6 @@ const TestScheduleScreen = () => {
     const ruleLinks = externalLinks.filter(link => link.screenName);
     const externalUrlLinks = externalLinks.filter(link => link.url);
 
-    const onRefresh = useCallback(async () => {
-        if (!refreshing) {
-            try {
-                console.log('🔄 HOME: Starting refresh sequence - ' + new Date().toISOString());
-                setRefreshing(true);
-                
-                // Set a timeout to prevent infinite loading
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Refresh timeout')), 15000)
-                );
-                
-                console.log('🔑 HOME: Attempting auth refresh...');
-                // Force a complete session refresh to ensure we have a valid session
-                const authPromise = handleRefresh();
-                
-                // Race the auth refresh against the timeout
-                const sessionRefreshed = await Promise.race([authPromise, timeoutPromise])
-                    .catch(error => {
-                        console.error('❌ HOME: Auth refresh timed out or failed:', error);
-                        return false;
-                    });
-                
-                console.log('🔑 HOME: Auth refresh result:', sessionRefreshed);
-                
-                if (sessionRefreshed) {
-                    console.log('👥 HOME: Starting roster refresh...');
-                    // Force a complete roster refresh with timeout
-                    await Promise.race([refreshRoster(), timeoutPromise])
-                        .catch(error => {
-                            console.error('❌ HOME: Roster refresh timed out or failed:', error);
-                        });
-                    console.log('👥 HOME: Roster refresh complete');
-                    
-                    console.log('📅 HOME: Starting schedule refresh...');
-                    // Force a complete schedule refresh with timeout
-                    await Promise.race([refreshSchedule(), timeoutPromise])
-                        .catch(error => {
-                            console.error('❌ HOME: Schedule refresh timed out or failed:', error);
-                        });
-                    console.log('📅 HOME: Schedule refresh complete');
-                    
-                    console.log('✅ HOME: Full refresh sequence complete');
-                } else {
-                    console.log('❌ HOME: Auth refresh failed, attempting retry...');
-                    // If auth refresh failed, try one more time after a short delay
-                    setTimeout(async () => {
-                        try {
-                            console.log('🔄 HOME: Attempting auth refresh again...');
-                            const retryResult = await Promise.race([handleRefresh(), timeoutPromise])
-                                .catch(error => {
-                                    console.error('❌ HOME: Auth retry timed out or failed:', error);
-                                    return false;
-                                });
-                                
-                            if (retryResult) {
-                                console.log('✅ HOME: Auth refresh succeeded on retry');
-                                await Promise.race([refreshRoster(), timeoutPromise])
-                                    .catch(error => console.error('❌ HOME: Roster refresh retry failed:', error));
-                                await Promise.race([refreshSchedule(), timeoutPromise])
-                                    .catch(error => console.error('❌ HOME: Schedule refresh retry failed:', error));
-                                console.log('✅ HOME: Retry refresh sequence complete');
-                            } else {
-                                console.log('❌ HOME: Auth refresh failed on retry');
-                            }
-                        } catch (error) {
-                            console.error('❌ HOME: Retry refresh error:', error);
-                        } finally {
-                            setRefreshing(false);
-                            console.log('🔄 HOME: Refresh state reset to false after retry');
-                        }
-                    }, 1000);
-                    return;
-                }
-            } catch (error) {
-                console.error('❌ HOME: Refresh error:', error);
-            } finally {
-                setRefreshing(false);
-                console.log('🔄 HOME: Refresh state reset to false - ' + new Date().toISOString());
-            }
-        } else {
-            console.log('⚠️ HOME: Refresh already in progress, skipping');
-        }
-    }, [refreshing, handleRefresh, refreshRoster, refreshSchedule]);
 
     const handleGamePress = (gameId: string) => {
         router.push({
@@ -257,14 +173,6 @@ const TestScheduleScreen = () => {
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={['#ff6600']}
-                        tintColor="#ff6600"
-                    />
-                }
             >
                 <View style={styles.header}>
                     <Image

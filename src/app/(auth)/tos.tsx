@@ -1,17 +1,20 @@
 // app/(auth)/tos.tsx
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
-import { router } from 'expo-router';
+import { router, useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
+import { useRoster } from '@/src/providers/RosterProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TermsOfService() {
-  const [loading, setLoading] = useState(false);
-  const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const { user } = useAuth();
+  const { refreshRoster } = useRoster();
+  const [hasReachedBottom, setHasReachedBottom] = useState(false);
+  const [loading, setLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const router = useRouter();
 
   // Handle hardware back button
   useEffect(() => {
@@ -62,22 +65,71 @@ export default function TermsOfService() {
     if (!user || !hasReachedBottom) return;
 
     setLoading(true);
+    console.log('📝 Starting TOS acceptance process...');
+    
     try {
-      const { error } = await supabase
+      // Update the roster table
+      console.log('📝 Updating roster with TOS acceptance...');
+      const { data, error } = await supabase
         .from('roster')
         .update({
           accepted_tos: true,
           tos_accepted_at: new Date().toISOString()
         })
-        .eq('auth_id', user.id);
+        .eq('auth_id', user.id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ TOS acceptance update failed:', error);
+        throw error;
+      }
 
-      router.replace('/(protected)/home');
+      console.log('✅ TOS acceptance updated successfully:', data);
+
+      // Force refresh roster data
+      console.log('🔄 Forcing roster refresh...');
+      try {
+        await refreshRoster();
+        console.log('✅ Roster refresh complete');
+      } catch (refreshError) {
+        console.error('❌ Roster refresh failed:', refreshError);
+        // Continue even if refresh fails
+      }
+      
+      // Verify the update was successful
+      console.log('🔍 Verifying TOS update...');
+      try {
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('roster')
+          .select('accepted_tos, tos_accepted_at')
+          .eq('auth_id', user.id)
+          .single();
+        
+        if (verifyError) {
+          console.error('❌ Verification failed:', verifyError);
+        } else {
+          console.log('✅ Verification result:', verifyData);
+        }
+      } catch (verifyError) {
+        console.error('❌ Verification error:', verifyError);
+        // Continue even if verification fails
+      }
+      
+      console.log('✅ TOS acceptance process complete');
+      
+      // Reset loading state before navigation
+      setLoading(false);
+      
+      // Navigate to home page with a slight delay to ensure state updates
+      console.log('🔄 Navigating to home page...');
+      setTimeout(() => {
+        router.replace('/(protected)/home');
+      }, 500);
     } catch (error) {
+      console.error('❌ TOS acceptance error:', error);
       Alert.alert('Error', 'Failed to accept terms of service. Please try again.');
-      console.error('TOS acceptance error:', error);
     } finally {
+      // Ensure loading state is always reset
       setLoading(false);
     }
   };

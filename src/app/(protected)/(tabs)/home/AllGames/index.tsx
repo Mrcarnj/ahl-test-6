@@ -11,23 +11,7 @@ export default function AllGames() {
     const { myGames } = useSchedule();
     const [refreshing, setRefreshing] = useState(false);
     const { refreshSchedule } = useSchedule();
-    const { handleRefresh } = useAuth();
 
-    const onRefresh = useCallback(async () => {
-        if (!refreshing) {
-            try {
-                setRefreshing(true);
-                await handleRefresh();
-                // Always try to refresh data even if auth refresh fails
-                // as we might still have a valid session
-                await refreshSchedule();
-            } catch (error) {
-                console.error('Refresh error:', error);
-            } finally {
-                setRefreshing(false);
-            }
-        }
-    }, [refreshing, handleRefresh]);
 
     const formatGameDate = (dateString: string) => {
         const date = parse(dateString, 'yyyy-MM-dd', new Date());
@@ -75,14 +59,6 @@ export default function AllGames() {
     return (
         <ScrollView
             style={styles.container}
-            refreshControl={
-                <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={['#ff6600']}
-                    tintColor="#ff6600"
-                />
-            }
         >
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Upcoming Games</Text>

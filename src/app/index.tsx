@@ -1,11 +1,13 @@
 // app/index.tsx
 import { useAuth } from "../providers/AuthProvider";
+import { useRoster } from "../providers/RosterProvider";
 import { Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";
 import { useEffect, useState } from "react";
 
 export default function Index() {
     const { session } = useAuth();
+    const { roster } = useRoster();
     const [isInitializing, setIsInitializing] = useState(true);
 
     useEffect(() => {
@@ -24,9 +26,16 @@ export default function Index() {
         );
     }
 
-    if (session) {
-        return <Redirect href="/(protected)/home" />;
+    // If no session, redirect to login
+    if (!session) {
+        return <Redirect href="/(auth)/login" />;
     }
 
-    return <Redirect href="/(auth)/login" />;
+    // Check if user needs to accept TOS
+    if (roster && !roster.accepted_tos) {
+        return <Redirect href="/(auth)/tos" />;
+    }
+
+    // If session exists and TOS is accepted, go to protected home
+    return <Redirect href="/(protected)/home" />;
 }

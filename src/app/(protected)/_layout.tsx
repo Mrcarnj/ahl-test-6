@@ -6,7 +6,8 @@ import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
 import { useProtectedRoute } from "../../hooks/useProtectedRoute";
 import { FontAwesome } from '@expo/vector-icons';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 
 // Define the type for our route params
 type GameRouteParams = {
@@ -19,9 +20,13 @@ type DetailsRouteParams = {
   source: 'roster' | 'game';
 }
 
+// Event name for app refresh
+export const APP_REFRESH_EVENT = 'app_refresh_event';
+
 export default function ProtectedLayout() {
   useProtectedRoute();
   const { roster } = useRoster();
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Add TOS check
   useEffect(() => {
@@ -30,9 +35,24 @@ export default function ProtectedLayout() {
     }
   }, [roster]);
 
+  // Listen for app refresh events
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      APP_REFRESH_EVENT,
+      () => {
+        console.log('🔄 App refresh event received, remounting providers...');
+        setRefreshKey(prevKey => prevKey + 1);
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
-    <RosterProvider>
-      <ScheduleProvider>
+    <RosterProvider key={`roster-${refreshKey}`}>
+      <ScheduleProvider key={`schedule-${refreshKey}`}>
         <Stack>
           <Stack.Screen 
             name="(tabs)" 

@@ -1,7 +1,7 @@
 // app/(protected)/(tabs)/calendar/index.tsx
 
 import React, { useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
 import { format, parse } from 'date-fns';
@@ -24,10 +24,8 @@ type CustomMarking = {
 export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const { myGames, loading, refreshSchedule } = useSchedule();
+  const { myGames, loading } = useSchedule();
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {
@@ -212,6 +210,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     fontStyle: 'italic',
     marginTop: -25,
+  },
+  scrollView: {
+    flex: 1,
   },
 });
 

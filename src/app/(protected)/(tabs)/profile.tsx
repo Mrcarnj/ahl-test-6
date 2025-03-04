@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/profile.tsx
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl } from 'react-native';
-import React, { useMemo, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -12,7 +12,7 @@ const Profile = () => {
     const { user } = useAuth();
     const { roster, refreshRoster } = useRoster();
     const { myGames, refreshSchedule } = useSchedule();
-    const [refreshing, setRefreshing] = useState(false);
+
 
     // Cache the profile data
     const profileData = useMemo(() => ({
@@ -22,7 +22,6 @@ const Profile = () => {
         phone: roster?.phonenumber || '',
         gameCount: myGames.length
     }), [roster, myGames]);
-
 
     if (!roster) {
         return (

@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/home/index.tsx
-import { View, Text, StyleSheet, ScrollView, Button, RefreshControl, TouchableOpacity, Linking, Image } from 'react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Button, TouchableOpacity, Linking, Image } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
 import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { format, parse, isBefore, isToday as checkIsToday, differenceInDays, addDays } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,13 +9,13 @@ import { Entypo, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/ve
 import { useRouter } from 'expo-router';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
+import AppRefreshControl from '@/src/components/AppRefreshControl';
 
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, loading, refreshSchedule } = useSchedule();
-    const [refreshing, setRefreshing] = useState(false);
-    const { roster, refreshRoster } = useRoster();
+    const { myGames, loading } = useSchedule();
+    const { roster } = useRoster();
 
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
@@ -173,6 +173,7 @@ const TestScheduleScreen = () => {
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
+                refreshControl={<AppRefreshControl />}
             >
                 <View style={styles.header}>
                     <Image

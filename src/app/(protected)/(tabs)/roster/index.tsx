@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/roster/index.tsx
 import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
@@ -27,12 +27,10 @@ const RosterScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredRosters, setFilteredRosters] = useState<Roster[]>([]);
     const [adminRosters, setAdminRosters] = useState<Roster[]>([]);
-    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         refreshRoster();
     }, []);
-
 
     const sanitizeSearchQuery = (query: string): string => {
         return query.replace(/[^a-zA-Z\s]/g, '');
@@ -203,6 +201,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#333',
         marginVertical: 10,
         marginHorizontal: 10,
+    },
+    list: {
+        flex: 1,
     },
 });
 

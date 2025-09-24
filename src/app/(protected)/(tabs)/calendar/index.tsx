@@ -10,6 +10,9 @@ import ViewShot from "react-native-view-shot";
 import { useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
+import HockeySyncButton from '@/src/components/HockeySyncButton';
+import HockeyTestViewer from '@/src/components/HockeyTestViewer';
+import { useHockeySync } from '@/src/hooks/useHockeySync';
 
 const screenWidth = Dimensions.get('window').width;
 const calendarWidth = screenWidth * 0.98;
@@ -26,6 +29,7 @@ export default function CalendarScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const { myGames, loading } = useSchedule();
   const router = useRouter();
+  const { getSyncStatusText } = useHockeySync();
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {
@@ -90,7 +94,15 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-      <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
+        <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
+        <Text style={styles.syncStatus}>{getSyncStatusText()}</Text>
+        <HockeySyncButton 
+          style={styles.syncButton}
+          onSyncComplete={() => {
+            // Refresh schedule data after sync
+            // The ScheduleProvider should automatically refresh
+          }}
+        />
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
         <ScrollView>
           <Calendar
@@ -210,6 +222,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     fontStyle: 'italic',
     marginTop: -25,
+  },
+  syncStatus: {
+    fontSize: 12,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  syncButton: {
+    marginBottom: 10,
   },
   scrollView: {
     flex: 1,

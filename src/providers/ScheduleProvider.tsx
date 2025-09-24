@@ -31,6 +31,11 @@ export interface Schedule {
     linesperson2: string;
     referee1: string;
     referee2: string;
+    uuid: string;
+    created_at: string;
+    updated_at: string;
+    season: string;
+    gamecode: string;
     homeTeamData?: Team;  // For joined data
     awayTeamData?: Team;  // For joined data
 }

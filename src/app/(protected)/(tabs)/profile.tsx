@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/profile.tsx
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList } from 'react-native';
-import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -16,6 +16,11 @@ const Profile = () => {
     // State for collapsible sections
     const [expandedSeasons, setExpandedSeasons] = useState<Set<string>>(new Set());
     const [expandedGamecodes, setExpandedGamecodes] = useState<Set<string>>(new Set());
+    
+    // State for iCal URL editing
+    const [isEditingIcalUrl, setIsEditingIcalUrl] = useState(false);
+    const [icalUrlValue, setIcalUrlValue] = useState(roster?.ical_url || '');
+    const [savingIcalUrl, setSavingIcalUrl] = useState(false);
 
     // Cache the profile data and game breakdown
     const profileData = useMemo(() => {
@@ -59,10 +64,54 @@ const Profile = () => {
             name: roster ? `${roster.firstname} ${roster.lastname}` : '',
             email: roster?.email || '',
             phone: roster?.phonenumber || '',
+            icalUrl: roster?.ical_url || '',
             gameCount: totalGames,
             seasonsBreakdown: seasonsArray
         };
     }, [roster, myGames]);
+
+    // Update iCal URL value when roster changes
+    useEffect(() => {
+        setIcalUrlValue(roster?.ical_url || '');
+    }, [roster?.ical_url]);
+
+    // Save iCal URL function
+    const saveIcalUrl = async () => {
+        if (!roster?.auth_id) {
+            Alert.alert('Error', 'Unable to save: No user data available');
+            return;
+        }
+
+        try {
+            setSavingIcalUrl(true);
+            
+            const { error } = await supabase
+                .from('roster')
+                .update({ ical_url: icalUrlValue.trim() || null })
+                .eq('auth_id', roster.auth_id);
+
+            if (error) {
+                throw error;
+            }
+
+            // Refresh roster data to get updated values
+            await refreshRoster();
+            setIsEditingIcalUrl(false);
+            
+            Alert.alert('Success', 'iCal URL updated successfully');
+        } catch (error) {
+            console.error('Error saving iCal URL:', error);
+            Alert.alert('Error', 'Failed to save iCal URL. Please try again.');
+        } finally {
+            setSavingIcalUrl(false);
+        }
+    };
+
+    // Cancel editing iCal URL
+    const cancelEditIcalUrl = () => {
+        setIcalUrlValue(roster?.ical_url || '');
+        setIsEditingIcalUrl(false);
+    };
 
     // Toggle functions for collapsible sections
     const toggleSeason = (season: string) => {
@@ -214,6 +263,54 @@ const Profile = () => {
                         </View>
                     </View>
 
+                    <View style={styles.fieldContainer}>
+                        <Text style={styles.label}>iCal URL</Text>
+                        {isEditingIcalUrl ? (
+                            <View style={styles.editContainer}>
+                                <TextInput
+                                    style={styles.icalUrlInput}
+                                    value={icalUrlValue}
+                                    onChangeText={setIcalUrlValue}
+                                    placeholder="Enter iCal URL..."
+                                    placeholderTextColor="#666"
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                />
+                                <View style={styles.editButtons}>
+                                    <TouchableOpacity 
+                                        style={[styles.editButton, styles.saveButton]} 
+                                        onPress={saveIcalUrl}
+                                        disabled={savingIcalUrl}
+                                    >
+                                        <Text style={styles.editButtonText}>
+                                            {savingIcalUrl ? 'Saving...' : 'Save'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.editButton, styles.cancelButton]} 
+                                        onPress={cancelEditIcalUrl}
+                                        disabled={savingIcalUrl}
+                                    >
+                                        <Text style={styles.editButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.valueContainer}>
+                                <Text style={styles.value}>
+                                    {profileData.icalUrl || 'Not set'}
+                                </Text>
+                                <TouchableOpacity 
+                                    style={styles.editIconButton} 
+                                    onPress={() => setIsEditingIcalUrl(true)}
+                                >
+                                    <Text style={styles.editIcon}>✏️</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+
                     <TouchableOpacity 
                         style={styles.linkButton} 
                         onPress={() => supabase.auth.signOut()}
@@ -356,6 +453,48 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#fff',
     },
+    editContainer: {
+        width: '100%',
+    },
+    icalUrlInput: {
+        backgroundColor: '#333',
+        color: '#fff',
+        borderWidth: 1,
+        borderColor: '#ff6600',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        marginBottom: 10,
+    },
+    editButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 10,
+    },
+    editButton: {
+        flex: 1,
+        padding: 10,
+        borderRadius: 6,
+        alignItems: 'center',
+    },
+    saveButton: {
+        backgroundColor: '#ff6600',
+    },
+    cancelButton: {
+        backgroundColor: '#666',
+    },
+    editButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    editIconButton: {
+        padding: 5,
+        marginLeft: 10,
+    },
+    editIcon: {
+        fontSize: 16,
+    },
     infoSection: {
         width: '100%',
         marginBottom: 20,
@@ -386,9 +525,6 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#ff6600',
         paddingVertical: 5,
-    },
-    editButton: {
-        padding: 5,
     },
     linkButton: {
         backgroundColor: '#ff6600',

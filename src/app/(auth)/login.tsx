@@ -63,7 +63,7 @@ export default function Auth() {
       // Use the ID from the sign in response instead of the context
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('changedpassword, accepted_tos')
+        .select('changedpassword, accepted_tos, ical_url')
         .eq('auth_id', authData.user.id)  // Use authData.user.id here
         .single();
 
@@ -76,6 +76,8 @@ export default function Auth() {
         router.replace('/(auth)/changepassword');
       } else if (!rosterData.accepted_tos) {
         router.replace('/(auth)/tos');
+      } else if (!rosterData.ical_url) {
+        router.replace('/(auth)/ical-setup');
       } else {
         router.replace('/(protected)/home');
       }

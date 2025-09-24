@@ -96,12 +96,12 @@ export default function TermsOfService() {
         // Continue even if refresh fails
       }
       
-      // Verify the update was successful
+      // Verify the update was successful and check for iCal URL
       console.log('🔍 Verifying TOS update...');
       try {
         const { data: verifyData, error: verifyError } = await supabase
           .from('roster')
-          .select('accepted_tos, tos_accepted_at')
+          .select('accepted_tos, tos_accepted_at, ical_url')
           .eq('auth_id', user.id)
           .single();
         
@@ -109,22 +109,32 @@ export default function TermsOfService() {
           console.error('❌ Verification failed:', verifyError);
         } else {
           console.log('✅ Verification result:', verifyData);
+          
+          // Reset loading state before navigation
+          setLoading(false);
+          
+          // Navigate based on iCal URL status
+          console.log('🔄 Checking iCal URL status...');
+          setTimeout(() => {
+            if (!verifyData.ical_url) {
+              console.log('🔄 Navigating to iCal setup...');
+              router.replace('/(auth)/ical-setup');
+            } else {
+              console.log('🔄 Navigating to home page...');
+              router.replace('/(protected)/home');
+            }
+          }, 500);
         }
       } catch (verifyError) {
         console.error('❌ Verification error:', verifyError);
         // Continue even if verification fails
+        setLoading(false);
+        setTimeout(() => {
+          router.replace('/(protected)/home');
+        }, 500);
       }
       
       console.log('✅ TOS acceptance process complete');
-      
-      // Reset loading state before navigation
-      setLoading(false);
-      
-      // Navigate to home page with a slight delay to ensure state updates
-      console.log('🔄 Navigating to home page...');
-      setTimeout(() => {
-        router.replace('/(protected)/home');
-      }, 500);
     } catch (error) {
       console.error('❌ TOS acceptance error:', error);
       Alert.alert('Error', 'Failed to accept terms of service. Please try again.');

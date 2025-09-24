@@ -79,9 +79,9 @@ const TestScheduleScreen = () => {
         return format(date, 'EEEE, MMMM d, yyyy');
     };
 
-    const getNextExpenseReportDue = useCallback(() => {
-        const startDate = new Date(2024, 9, 21); // October 21, 2024
-        const endDate = new Date(2025, 5, 30);   // June 30, 2025
+    const expenseReportData = useMemo(() => {
+        const startDate = new Date(2025, 8, 22); // September 22, 2025
+        const endDate = new Date(2026, 5, 30);   // June 30, 2026
         const today = new Date();
         today.setHours(0, 0, 0, 0);  // Set to start of day for accurate comparison
         let nextDueDate = startDate;
@@ -139,7 +139,7 @@ const TestScheduleScreen = () => {
             }
             nextDueDate = addDays(nextDueDate, 14);
         }
-    
+        
         return { 
             text: "No more expense reports due", 
             isToday: false, 
@@ -153,7 +153,7 @@ const TestScheduleScreen = () => {
     const getGamesInDateRange = useCallback((dateRange: string) => {
         if (!dateRange) return [];
 
-        const { rangeStartDate, rangeEndDate } = getNextExpenseReportDue();
+        const { rangeStartDate, rangeEndDate } = expenseReportData;
         if (!rangeStartDate || !rangeEndDate) return [];
 
         const startDateStr = format(rangeStartDate, 'yyyy-MM-dd');
@@ -163,9 +163,9 @@ const TestScheduleScreen = () => {
             .filter(game => game.gamedate >= startDateStr && game.gamedate <= endDateStr)
             .map(game => game.gameid)
             .sort((a, b) => Number(a) - Number(b));
-    }, [myGames, getNextExpenseReportDue]);
+    }, [myGames, expenseReportData]);
 
-    const { text, isToday, isTomorrow, dateRange } = getNextExpenseReportDue();
+    const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
     return (
         <SafeAreaView style={styles.container}

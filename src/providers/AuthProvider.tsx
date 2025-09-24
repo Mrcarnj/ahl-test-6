@@ -23,7 +23,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             console.log('Checking TOS acceptance for user:', userId);
             const { data, error } = await supabase
                 .from('roster')
-                .select('accepted_tos, changedpassword')
+                .select('accepted_tos, changedpassword, ical_url')
                 .eq('auth_id', userId)
                 .single();
 
@@ -41,6 +41,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             } else if (!data.accepted_tos) {
                 console.log('TOS needs to be accepted');
                 router.replace('/(auth)/tos');
+            } else if (!data.ical_url) {
+                console.log('iCal URL needs to be set up');
+                router.replace('/(auth)/ical-setup');
             }
         } catch (error) {
             console.error('Error in TOS check:', error);

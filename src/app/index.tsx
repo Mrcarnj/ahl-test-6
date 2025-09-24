@@ -36,6 +36,11 @@ export default function Index() {
         return <Redirect href="/(auth)/tos" />;
     }
 
-    // If session exists and TOS is accepted, go to protected home
+    // Check if user needs to set up iCal URL
+    if (roster && roster.accepted_tos && !roster.ical_url) {
+        return <Redirect href="/(auth)/ical-setup" />;
+    }
+
+    // If session exists, TOS is accepted, and iCal URL is set, go to protected home
     return <Redirect href="/(protected)/home" />;
 }

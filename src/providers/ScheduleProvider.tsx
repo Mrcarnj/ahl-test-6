@@ -18,6 +18,7 @@ export interface Roster {
     isAdmin: boolean;      // changed from admin to isAdmin
     ahlAdmin: boolean;     // added this field
     changedpassword: boolean;
+    ical_url: string | null;
 }
 
 export interface Schedule {

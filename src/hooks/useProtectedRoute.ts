@@ -15,6 +15,7 @@ export function useProtectedRoute() {
         const isInProtectedGroup = segments[0] === "(protected)";
         const isInAuthGroup = segments[0] === "(auth)";
         const isInTosPage = segments[1] === "tos";
+        const isInIcalSetupPage = segments[1] === "ical-setup";
 
         // Add a small delay to allow session restoration
         const initTimeout = setTimeout(() => {
@@ -34,8 +35,14 @@ export function useProtectedRoute() {
                 return;
             }
 
-            // If user has accepted TOS but is trying to access auth routes (including TOS page)
-            if (user && roster?.accepted_tos && isInAuthGroup) {
+            // If user has accepted TOS but doesn't have iCal URL set and isn't already on iCal setup page
+            if (user && roster?.accepted_tos && !roster.ical_url && !isInIcalSetupPage) {
+                router.replace("/(auth)/ical-setup");
+                return;
+            }
+
+            // If user has completed all setup but is trying to access auth routes
+            if (user && roster?.accepted_tos && roster?.ical_url && isInAuthGroup) {
                 router.replace("/(protected)/home");
                 return;
             }

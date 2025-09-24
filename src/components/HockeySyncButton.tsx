@@ -82,37 +82,6 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
     }
   };
 
-  const handleTestSync = async () => {
-    setIsLoading(true);
-    
-    try {
-      const result = await fetchAndParseHockeySchedule(true);
-      
-      if (result.success) {
-        console.log('Test sync result:', result.testOutput);
-        Alert.alert(
-          'Test Sync Complete',
-          `Parsed ${result.testOutput?.length || 0} games. Check console for details.`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Test Sync Failed',
-          `Error: ${result.error}`,
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.error('Test sync error:', error);
-      Alert.alert(
-        'Test Sync Error',
-        'An unexpected error occurred during test sync.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const formatLastSync = () => {
     if (!lastSyncTime) return 'Never synced';
@@ -141,15 +110,6 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
         </Text>
       )}
       
-      <TouchableOpacity
-        style={[styles.testButton, isLoading && styles.testButtonDisabled]}
-        onPress={handleTestSync}
-        disabled={isLoading}
-      >
-        <Text style={styles.testButtonText}>
-          Test Parse (Console)
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -157,15 +117,15 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    padding: 16,
+    padding: 8,
   },
   syncButton: {
     backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
     marginBottom: 8,
-    minWidth: 200,
+    minWidth: 140,
     alignItems: 'center',
   },
   syncButtonDisabled: {
@@ -173,23 +133,8 @@ const styles = StyleSheet.create({
   },
   syncButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  testButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  testButtonDisabled: {
-    backgroundColor: '#999',
-  },
-  testButtonText: {
-    color: '#fff',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   lastSyncText: {
     fontSize: 12,

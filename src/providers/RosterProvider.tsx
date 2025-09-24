@@ -19,6 +19,7 @@ type Roster = {
     ahlAdmin: boolean;
     accepted_tos: boolean;
     tos_accepted_at: string | null;
+    ical_url: string | null;
     // Add other roster fields here
 };
 

@@ -112,7 +112,7 @@ export default function CalendarScreen() {
         <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
         {lastSyncTime && (
           <Text style={styles.lastSyncText}>
-            Last sync: {lastSyncTime}
+           Pull Down to Refresh // Last sync: {lastSyncTime}
           </Text>
         )}
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>

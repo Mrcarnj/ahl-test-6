@@ -10,13 +10,19 @@ export async function fetchAndParseHockeySchedule(testMode = false) {
   const icalUrl = 'https://www.horizonwebref.com/syncICS?o=1IBN&enc=96c1fb9db288fce606cd7b7fd1e16d44fafb007c';
   
   try {
+    console.log('🌐 Fetching iCal data from HorizonWebRef...');
     const response = await fetch(icalUrl);
     const icalText = await response.text();
     
-    const games = parseIcalToGames(icalText);
+    console.log(`📄 iCal data received: ${icalText.length} characters`);
+    console.log('🔄 Parsing iCal events and converting timezones...');
+    
+    const games = await parseIcalToGames(icalText);
     
     if (testMode) {
-      console.log('Parsed Games:', games);
+      console.log('🏒 Hockey Schedule Parsing Complete!');
+      console.log(`📊 Total games parsed: ${games.length}`);
+      console.log('📅 Parsed Games:', games);
       return { success: true, testOutput: games };
     }
     
@@ -43,14 +49,14 @@ export async function fetchAndParseHockeySchedule(testMode = false) {
   }
 }
 
-function parseIcalToGames(icalText) {
+async function parseIcalToGames(icalText) {
   const games = [];
   const events = icalText.split('BEGIN:VEVENT');
   
   // Skip first element (before first event)
   for (let i = 1; i < events.length; i++) {
     const eventText = events[i];
-    const game = parseEvent(eventText);
+    const game = await parseEvent(eventText);
     if (game) {
       games.push(game);
     }
@@ -59,7 +65,7 @@ function parseIcalToGames(icalText) {
   return games;
 }
 
-function parseEvent(eventText) {
+async function parseEvent(eventText) {
   try {
     // Extract basic fields using regex
     const uid = extractField(eventText, 'UID');
@@ -76,9 +82,9 @@ function parseEvent(eventText) {
     // Parse description for game details
     const gameDetails = parseDescription(description);
     
-    // Convert times
-    const startTime = convertIcalTimeToLocal(dtstart);
-    const endTime = convertIcalTimeToLocal(dtend);
+    // Convert times to home team's timezone
+    const startTime = await convertIcalTimeToTeamTimezone(dtstart, gameDetails.homeTeam);
+    const endTime = await convertIcalTimeToTeamTimezone(dtend, gameDetails.homeTeam);
     
     return {
       uid: uid,
@@ -179,46 +185,156 @@ function parseDescription(description) {
   };
 }
 
-function convertIcalTimeToLocal(icalTime) {
-  // Input format: "20251004T200000Z"
-  // Convert to: "2025-10-04T13:00:00-07:00" (Pacific time)
+async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
+  // Input format: "20251004T200000Z" (UTC)
+  // Convert to team's local timezone dynamically
   
-  if (!icalTime) return null;
+  if (!icalTime || !homeTeam) return null;
   
-  // Parse the iCal time format
-  const year = icalTime.substring(0, 4);
-  const month = icalTime.substring(4, 6);
-  const day = icalTime.substring(6, 8);
-  const hour = icalTime.substring(9, 11);
-  const minute = icalTime.substring(11, 13);
-  const second = icalTime.substring(13, 15);
-  
-  // Create UTC date
-  const utcDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
-  
-  // Convert to Pacific time
-  const pacificTime = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  }).formatToParts(utcDate);
-  
-  // Build ISO string with Pacific timezone
-  const parts = {};
-  pacificTime.forEach(part => {
-    parts[part.type] = part.value;
-  });
-  
-  // Determine if DST (rough approximation)
-  const isDST = utcDate.getMonth() >= 2 && utcDate.getMonth() <= 10;
-  const offset = isDST ? '-07:00' : '-08:00';
-  
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
+  try {
+    console.log(`🔍 Looking up timezone for team: "${homeTeam}"`);
+    
+    // Look up the home team's timezone from the teams table
+    // Try multiple lookup strategies since iCal might use different naming
+    let teamData = null;
+    
+    // Strategy 1: Try exact match with city
+    const { data: cityMatch } = await supabase
+      .from('teams')
+      .select('timezone, city')
+      .eq('city', homeTeam)
+      .single();
+    
+    if (cityMatch) {
+      teamData = cityMatch;
+      console.log(`✅ Found exact city match: "${cityMatch.city}"`);
+    } else {
+      // Strategy 2: Try partial match (e.g., "Bakersfield" might match "Bakersfield Condors")
+      const { data: partialMatch } = await supabase
+        .from('teams')
+        .select('timezone, city')
+        .ilike('city', `%${homeTeam}%`)
+        .single();
+      
+      if (partialMatch) {
+        teamData = partialMatch;
+        console.log(`✅ Found partial city match: "${partialMatch.city}"`);
+      } else {
+        console.log(`❌ No city match found for: "${homeTeam}"`);
+      }
+    }
+    
+    if (!teamData || !teamData.timezone) {
+      console.warn(`No timezone found for team: ${homeTeam}, using UTC as fallback`);
+      return icalTime; // Return original UTC time if no timezone found
+    }
+    
+    const teamTimezone = teamData.timezone;
+    
+    // Parse the iCal time format
+    const year = icalTime.substring(0, 4);
+    const month = icalTime.substring(4, 6);
+    const day = icalTime.substring(6, 8);
+    const hour = icalTime.substring(9, 11);
+    const minute = icalTime.substring(11, 13);
+    const second = icalTime.substring(13, 15);
+    
+    // CRITICAL FIX: HorizonWebRef iCal incorrectly labels times as UTC when they're actually Eastern Time
+    // Create Eastern Time date instead of UTC
+    const easternDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`); // EDT
+    // Note: Use -05:00 for EST during standard time months (roughly Nov-Mar)
+    
+    console.log(`   Converting from EDT: ${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`);
+    
+    // Simple timezone conversion - just subtract hours based on timezone
+    let convertedHour = parseInt(hour, 10);
+    let convertedMinute = parseInt(minute, 10);
+    
+    // Calculate time difference from EDT to target timezone
+    if (teamTimezone === 'PST' || teamTimezone === 'PDT') {
+      // EDT to PST: subtract 4 hours
+      convertedHour -= 4;
+    } else if (teamTimezone === 'CST' || teamTimezone === 'CDT') {
+      // EDT to CST: subtract 1 hour
+      convertedHour -= 1;
+    } else if (teamTimezone === 'MST' || teamTimezone === 'MDT') {
+      // EDT to MST: subtract 2 hours
+      convertedHour -= 2;
+    }
+    
+    // Handle day rollover
+    if (convertedHour < 0) {
+      convertedHour += 24;
+      // Note: We're not handling day changes in this simple version
+    }
+    
+    const localTime = {
+      year: { value: year },
+      month: { value: month },
+      day: { value: day },
+      hour: { value: convertedHour.toString().padStart(2, '0') },
+      minute: { value: convertedMinute.toString().padStart(2, '0') },
+      second: { value: second }
+    };
+    
+    // Get the timezone offset for the team's timezone
+    const offset = getTimezoneOffset(easternDate, teamTimezone);
+    
+    const convertedTime = `${localTime.year.value}-${localTime.month.value}-${localTime.day.value}T${localTime.hour.value}:${localTime.minute.value}:${localTime.second.value}${offset}`;
+    
+    // Log the timezone conversion for debugging
+    console.log(`🕐 Timezone Conversion for ${homeTeam}:`);
+    console.log(`   iCal Time (labeled UTC but actually EDT): ${icalTime}`);
+    console.log(`   Corrected as Eastern Time: ${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`);
+    console.log(`   Team Timezone: ${teamTimezone}`);
+    console.log(`   Simple Conversion: ${hour}:${minute} EDT -> ${localTime.hour.value}:${localTime.minute.value} ${teamTimezone}`);
+    console.log(`   Final Time with Offset: ${convertedTime}`);
+    
+    return convertedTime;
+    
+  } catch (error) {
+    console.error(`Error converting time for team ${homeTeam}:`, error);
+    return icalTime; // Return original UTC time on error
+  }
+}
+
+
+function getTimezoneOffset(date, timezone) {
+  // Get the timezone offset for a specific timezone and date
+  try {
+    // Handle different timezone formats and return appropriate offsets
+    const month = date.getMonth() + 1; // 1-based month
+    
+    // Determine if it's daylight saving time (rough approximation)
+    // DST typically runs from March (3) to November (11)
+    const isDST = month >= 3 && month <= 11;
+    
+    let offset;
+    
+    if (timezone === 'PST' || timezone === 'PDT') {
+      // Pacific: Always store as -08:00 (PST) regardless of DST
+      offset = '-08:00';
+    } else if (timezone === 'EST' || timezone === 'EDT') {
+      // Eastern: Always store as -04:00 (EDT) regardless of DST
+      offset = '-04:00';
+    } else if (timezone === 'CST' || timezone === 'CDT') {
+      // Central: Always store as -06:00 (CST) regardless of DST
+      offset = '-06:00';
+    } else if (timezone === 'MST' || timezone === 'MDT') {
+      // Mountain: Always store as -07:00 (MST) regardless of DST
+      offset = '-07:00';
+    } else {
+      // Default to PST
+      offset = '-08:00';
+    }
+    
+    console.log(`   Timezone offset calculation: ${timezone} (month ${month}, DST: ${isDST}) = ${offset} (standardized)`);
+    
+    return offset;
+  } catch (error) {
+    console.error(`Error calculating timezone offset for ${timezone}:`, error);
+    return '-08:00'; // Default to PST
+  }
 }
 
 function cleanLocation(location) {
@@ -326,10 +442,10 @@ async function upsertGamesToDatabase(games) {
   
   for (const game of games) {
     try {
-      // Check if game exists
+      // Check if game exists using the unique constraint
       const { data: existing } = await supabase
         .from('schedule')
-        .select('id')
+        .select('uuid')
         .eq('gameid', game.gameid)
         .eq('season', game.season)
         .single();

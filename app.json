@@ -1,48 +1,73 @@
 {
   "expo": {
-    "name": "ahl-fresh",
-    "slug": "ahl-fresh",
-    "version": "1.0.0",
+    "name": "AHL Officials",
+    "slug": "ahl-test-6",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "ahlfresh",
+    "icon": "./assets/images/ahlLogo.png",
+    "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#000000"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dieter15.ahltest6",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information.",
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "background-fetch"
+        ]
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.dieter15.ahltest6",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
+      "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        "expo-build-properties",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
+          "ios": {
+            "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/ahlLogo.png",
+          "color": "#ffffff"
+        }
+      ],
+      "expo-contacts",
+      "expo-background-fetch",
+      "expo-task-manager"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d1103638-3c9e-4c41-8846-38a4a1486029"
+      }
     }
   }
 }

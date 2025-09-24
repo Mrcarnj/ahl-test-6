@@ -1,4 +1,13 @@
 // app/_layout.tsx
+// Polyfills for Node.js modules - must be imported before any other modules
+import 'react-native-url-polyfill/auto';
+// import { Buffer } from 'buffer';
+// import process from 'process';
+
+// // Make Buffer and process available globally
+// global.Buffer = Buffer;
+// global.process = process;
+
 import { Stack } from "expo-router";
 import AuthProvider from "../providers/AuthProvider";
 import { useAuth } from "../providers/AuthProvider";

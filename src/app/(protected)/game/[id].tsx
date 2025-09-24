@@ -255,7 +255,7 @@ const GameDetails = () => {
 
       <TouchableOpacity onPress={handleGroupChat}>
         <Text style={styles.groupChat}>
-          Start Group Chat <AntDesign name="message1" size={25} />
+          Start Group Chat <AntDesign name="message" size={25} />
         </Text>
       </TouchableOpacity>
 
@@ -386,7 +386,7 @@ const GameDetails = () => {
                   onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData?.eqphone}?body=`)}
                   style={styles.iconButton}
                 >
-                  <AntDesign name="message1" size={24} color="#ff6600" />
+                  <AntDesign name="message" size={24} color="#ff6600" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -586,7 +586,7 @@ const GameDetails = () => {
                   onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
                   style={styles.iconButton}
                 >
-                  <AntDesign name="message1" size={24} color="#ff6600" />
+                  <AntDesign name="message" size={24} color="#ff6600" />
                 </TouchableOpacity>
               </View>
             </View>

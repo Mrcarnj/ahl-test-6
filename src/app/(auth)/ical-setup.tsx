@@ -83,7 +83,7 @@ export default function ICalSetup() {
           text: 'Continue',
           onPress: () => {
             // Navigate to home page
-            router.replace('/(protected)/home');
+            router.replace('/(protected)/(tabs)/home');
           }
         }
       ]);

@@ -79,7 +79,7 @@ export default function Auth() {
       } else if (!rosterData.ical_url) {
         router.replace('/(auth)/ical-setup');
       } else {
-        router.replace('/(protected)/home');
+        router.replace('/(protected)/(tabs)/home');
       }
 
     } catch (error) {

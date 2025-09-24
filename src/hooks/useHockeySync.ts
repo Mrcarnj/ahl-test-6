@@ -50,7 +50,7 @@ export function useHockeySync() {
       console.error('Error loading sync status:', error);
       setSyncStatus(prev => ({
         ...prev,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       }));
     }
   };
@@ -71,7 +71,7 @@ export function useHockeySync() {
       console.error('Sync error:', error);
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
       setIsLoading(false);
@@ -88,7 +88,7 @@ export function useHockeySync() {
       console.error('Test sync error:', error);
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
       setIsLoading(false);
@@ -111,7 +111,7 @@ export function useHockeySync() {
       console.error('Force sync error:', error);
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
       setIsLoading(false);

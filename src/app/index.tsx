@@ -42,5 +42,5 @@ export default function Index() {
     }
 
     // If session exists, TOS is accepted, and iCal URL is set, go to protected home
-    return <Redirect href="/(protected)/home" />;
+    return <Redirect href="/(protected)/(tabs)/home" />;
 }

@@ -121,7 +121,7 @@ export default function TermsOfService() {
               router.replace('/(auth)/ical-setup');
             } else {
               console.log('🔄 Navigating to home page...');
-              router.replace('/(protected)/home');
+              router.replace('/(protected)/(tabs)/home');
             }
           }, 500);
         }
@@ -130,7 +130,7 @@ export default function TermsOfService() {
         // Continue even if verification fails
         setLoading(false);
         setTimeout(() => {
-          router.replace('/(protected)/home');
+          router.replace('/(protected)/(tabs)/home');
         }, 500);
       }
       

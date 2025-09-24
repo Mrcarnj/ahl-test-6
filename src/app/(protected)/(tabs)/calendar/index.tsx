@@ -109,12 +109,8 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Tap orange game days to access game details</Text>
-        {lastSyncTime && (
-          <Text style={styles.lastSyncText}>
-           Pull Down to Refresh // Last sync: {lastSyncTime}
-          </Text>
-        )}
+        <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Pull To Refresh</Text>
+        <Text style={styles.disclaimer}>Tap orange game days to access game details</Text>
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
         <ScrollView
           refreshControl={
@@ -169,6 +165,11 @@ export default function CalendarScreen() {
               );
             }}
           />
+          {lastSyncTime && (
+          <Text style={styles.lastSyncText}>
+           Last sync: {lastSyncTime}
+          </Text>
+        )}
           </ScrollView>
         </ViewShot>
       </View>
@@ -257,6 +258,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     height: '100%',
+    
   },
 });
 

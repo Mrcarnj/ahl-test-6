@@ -1,15 +1,14 @@
 // app/(protected)/(tabs)/roster/details.tsx
-import { View, Text, StyleSheet, ScrollView, Image, Alert, Linking, TouchableOpacity } from 'react-native';
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
-import { FontAwesome, FontAwesome6, AntDesign } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
-import { Platform } from 'react-native';
-import * as Contacts from 'expo-contacts';
 import { useContactsPermissions } from '@/src/hooks/useContactsPermissions';
-import * as FileSystem from 'expo-file-system';
+import { useRoster } from '@/src/providers/RosterProvider';
+import { AntDesign, FontAwesome, FontAwesome6 } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+import * as Contacts from 'expo-contacts';
+import * as FileSystem from 'expo-file-system/legacy';
+import { useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Details = () => {
     const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
@@ -24,15 +23,15 @@ const Details = () => {
         const fetchPhoto = async () => {
             if (selectedRoster?.photo) {
                 try {
-                    // Download the image to a temporary file
-                    const fileUri = FileSystem.cacheDirectory + 'temp_contact_photo.jpg';
+                    // Use only FileSystem.cacheDirectory, which is always available in Expo
+                    const cacheDir = FileSystem.cacheDirectory ?? '';
+                    const fileUri = `${cacheDir}temp_contact_photo.jpg`;
                     const downloadResult = await FileSystem.downloadAsync(
                         selectedRoster.photo,
                         fileUri
                     );
-                    
+
                     if (downloadResult.status === 200) {
-                        // Read the file as base64
                         const base64 = await FileSystem.readAsStringAsync(fileUri, {
                             encoding: FileSystem.EncodingType.Base64,
                         });
@@ -191,7 +190,7 @@ const Details = () => {
                                     }}
                                     style={styles.iconButton}
                                 >
-                                    <AntDesign name="message1" size={24} color="#ff6600" />
+                                    <AntDesign name="message" size={24} color="#ff6600" />
                                 </TouchableOpacity>
                             </View>
                         </View>

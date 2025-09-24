@@ -98,7 +98,7 @@ export default function ChangePassword() {
 
      await refreshRoster();
      Alert.alert('Success', 'Password updated successfully');
-     router.replace('/(protected)/home');
+     router.replace('/(protected)/(tabs)/home');
    } catch (error) {
      Alert.alert('Error', (error as Error).message);
    } finally {

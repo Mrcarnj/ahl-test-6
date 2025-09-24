@@ -2,7 +2,7 @@
 import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
-import  AsyncStorage  from "@react-native-async-storage/async-storage";
+import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 
 // Define the Roster type based on your table structure
 type Roster = {
@@ -51,7 +51,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
 
     const loadCachedData = async () => {
         try {
-            const cachedData = await AsyncStorage.getItem(CACHE_KEY);
+            const cachedData = await safeAsyncStorage.getItem(CACHE_KEY);
             if (cachedData) {
                 const { roster, allRosters, timestamp } = JSON.parse(cachedData);
                 const isExpired = new Date().getTime() - timestamp > CACHE_DURATION;
@@ -77,7 +77,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
                 allRosters: allRostersData,
                 timestamp: new Date().getTime()
             };
-            await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+            await safeAsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
         } catch (e) {
             console.error('Error saving to cache:', e);
         }

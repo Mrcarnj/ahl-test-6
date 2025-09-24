@@ -2,7 +2,7 @@
 import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { router } from 'expo-router';
 
 type AuthContext = {
@@ -53,7 +53,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 console.log('Setting up auth...');
 
                 // Try AsyncStorage first
-                const storedSession = await AsyncStorage.getItem('session');
+                const storedSession = await safeAsyncStorage.getItem('session');
                 console.log('Stored session from AsyncStorage:', storedSession ? 'exists' : 'none');
                 
                 if (storedSession) {
@@ -74,7 +74,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 if (currentSession) {
                     console.log('Setting current session');
                     setSession(currentSession);
-                    await AsyncStorage.setItem('session', JSON.stringify(currentSession));
+                    await safeAsyncStorage.setItem('session', JSON.stringify(currentSession));
                     // Check TOS for current session
                     await checkTosAcceptance(currentSession.user.id);
                 }
@@ -86,14 +86,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                         
                         if (session) {
                             setSession(session);
-                            await AsyncStorage.setItem('session', JSON.stringify(session));
+                            await safeAsyncStorage.setItem('session', JSON.stringify(session));
                             // Check TOS on auth state change
                             await checkTosAcceptance(session.user.id);
                         } else {
                             if (event === 'SIGNED_OUT') {
                                 console.log('Explicit sign out, clearing session');
                                 setSession(null);
-                                await AsyncStorage.removeItem('session');
+                                await safeAsyncStorage.removeItem('session');
                             } else {
                                 console.log('Session null but not signing out, event:', event);
                             }

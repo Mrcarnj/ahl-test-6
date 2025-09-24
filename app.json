@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dieter15.ahltest6",
+      "deploymentTarget": "15.1",
       "infoPlist": {
         "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information.",
         "UIBackgroundModes": [

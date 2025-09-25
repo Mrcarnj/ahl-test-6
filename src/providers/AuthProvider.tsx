@@ -1,9 +1,10 @@
 // providers/AuthProvider.tsx
-import { supabase } from "../lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
+import { router } from 'expo-router';
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
-import { router } from 'expo-router';
+import { performAutoSync } from '../lib/icalHockeySync';
+import { supabase } from "../lib/supabase";
 
 type AuthContext = {
     session: Session | null;
@@ -50,6 +51,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
     };
 
+    const triggerLoginSync = async () => {
+        try {
+            console.log('🔄 AUTH: Triggering login sync...');
+            const result = await performAutoSync();
+            
+            if (result.success) {
+                if ('skipped' in result && result.skipped) {
+                    console.log('⏭️ AUTH: Login sync skipped - recent sync found');
+                } else {
+                    console.log('✅ AUTH: Login sync completed successfully');
+                }
+            } else {
+                const errorMsg = 'error' in result ? result.error : 'Unknown error';
+                console.error('❌ AUTH: Login sync failed:', errorMsg);
+            }
+        } catch (error) {
+            console.error('❌ AUTH: Login sync error:', error);
+        }
+    };
+
     useEffect(() => {
         const setupAuth = async () => {
             try {
@@ -67,6 +88,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     // Check TOS for stored session
                     if (parsedSession.user) {
                         await checkTosAcceptance(parsedSession.user.id);
+                        // Trigger sync for stored session (app startup)
+                        console.log('🔄 AUTH: App started with stored session, triggering sync...');
+                        triggerLoginSync();
                     }
                 }
 
@@ -80,6 +104,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     await safeAsyncStorage.setItem('session', JSON.stringify(currentSession));
                     // Check TOS for current session
                     await checkTosAcceptance(currentSession.user.id);
+                    // Trigger sync for current session (app startup)
+                    console.log('🔄 AUTH: App started with current session, triggering sync...');
+                    triggerLoginSync();
                 }
 
                 // Set up auth listener
@@ -92,6 +119,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                             await safeAsyncStorage.setItem('session', JSON.stringify(session));
                             // Check TOS on auth state change
                             await checkTosAcceptance(session.user.id);
+                            
+                            // Trigger sync on successful authentication
+                            if (event === 'SIGNED_IN') {
+                                console.log('🔄 AUTH: User signed in, triggering sync...');
+                                // Run sync in background without blocking the auth flow
+                                triggerLoginSync();
+                            }
                         } else {
                             if (event === 'SIGNED_OUT') {
                                 console.log('Explicit sign out, clearing session');

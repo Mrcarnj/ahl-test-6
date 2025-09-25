@@ -37,13 +37,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             // Handle different auth states
             if (!data.changedpassword) {
                 console.log('Password needs to be changed');
-                router.replace('/(auth)/changepassword');
+                router.replace('/(loginflow)/changepassword');
             } else if (!data.accepted_tos) {
                 console.log('TOS needs to be accepted');
-                router.replace('/(auth)/tos');
+                router.replace('/(loginflow)/tos');
             } else if (!data.ical_url) {
                 console.log('iCal URL needs to be set up');
-                router.replace('/(auth)/ical-setup');
+                router.replace('/(loginflow)/ical-setup');
             }
         } catch (error) {
             console.error('Error in TOS check:', error);

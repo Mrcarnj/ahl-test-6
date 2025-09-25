@@ -73,11 +73,11 @@ export default function Auth() {
 
       // Handle the routing based on user status
       if (!rosterData.changedpassword) {
-        router.replace('/(auth)/changepassword');
+        router.replace('/(loginflow)/changepassword');
       } else if (!rosterData.accepted_tos) {
-        router.replace('/(auth)/tos');
+        router.replace('/(loginflow)/tos');
       } else if (!rosterData.ical_url) {
-        router.replace('/(auth)/ical-setup');
+        router.replace('/(loginflow)/ical-setup');
       } else {
         router.replace('/(protected)/(tabs)/home');
       }

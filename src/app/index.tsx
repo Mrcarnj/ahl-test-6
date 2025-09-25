@@ -33,12 +33,12 @@ export default function Index() {
 
     // Check if user needs to accept TOS
     if (roster && !roster.accepted_tos) {
-        return <Redirect href="/(auth)/tos" />;
+        return <Redirect href="/(loginflow)/tos" />;
     }
 
     // Check if user needs to set up iCal URL
     if (roster && roster.accepted_tos && !roster.ical_url) {
-        return <Redirect href="/(auth)/ical-setup" />;
+        return <Redirect href="/(loginflow)/ical-setup" />;
     }
 
     // If session exists, TOS is accepted, and iCal URL is set, go to protected home

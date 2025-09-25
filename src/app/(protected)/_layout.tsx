@@ -1,10 +1,7 @@
 // app/(protected)/_layout.tsx
 import { router, Tabs, Stack } from "expo-router";
-import { useAuth } from "../../providers/AuthProvider";
-import { useRoster } from "../../providers/RosterProvider";
 import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
-import { useProtectedRoute } from "../../hooks/useProtectedRoute";
 import { FontAwesome } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
@@ -24,16 +21,7 @@ type DetailsRouteParams = {
 export const APP_REFRESH_EVENT = 'app_refresh_event';
 
 export default function ProtectedLayout() {
-  useProtectedRoute();
-  const { roster } = useRoster();
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Add TOS check
-  useEffect(() => {
-    if (roster && !roster.accepted_tos) {
-      router.replace('/(auth)/tos');
-    }
-  }, [roster]);
 
   // Listen for app refresh events
   useEffect(() => {

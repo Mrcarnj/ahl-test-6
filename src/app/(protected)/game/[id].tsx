@@ -1,13 +1,11 @@
 // app/(protected)/game/[id].tsx
-import { View, Text, Linking, Alert, Platform, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, RefreshControl } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { formatGameDate, formatGameDateTime, useSchedule, formatGameTime, Schedule, getTeamLogo, getTeamCoach, formatGameDate2 } from '@/src/providers/ScheduleProvider';
-import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
-import { format } from 'date-fns';
+import { useRoster } from '@/src/providers/RosterProvider';
+import { formatGameDate2, formatGameTime, getTeamCoach, getTeamLogo, Schedule, useSchedule } from '@/src/providers/ScheduleProvider';
 import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useState } from 'react';
-import { useAuth } from '@/src/providers/AuthProvider';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Dimensions, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 
 
@@ -938,7 +936,7 @@ const styles = StyleSheet.create({
   },
   refereeContainer: {
     alignItems: 'center',
-    marginHorizontal: 30,
+    flex: 1,
   },
   profileImageRef: {
     width: 150,

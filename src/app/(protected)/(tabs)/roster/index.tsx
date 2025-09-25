@@ -94,7 +94,7 @@ const RosterScreen = () => {
                         onPress={() => setSearchQuery('')}
                         style={styles.clearButton}
                     >
-                        <AntDesign name="closecircle" size={16} color="#666" />
+                        <AntDesign name="close-circle" size={16} color="#666" />
                     </TouchableOpacity>
                 )}
             </View>

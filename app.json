@@ -4,7 +4,7 @@
     "slug": "ahl-test-6",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/ahlLogo.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -19,11 +19,15 @@
         "NSContactsUsageDescription": "Allow AHL Officials to access your contacts to add officials' contact information.",
         "UIBackgroundModes": [
           "fetch",
+          "remote-notification",
+          "fetch",
           "remote-notification"
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
+          "background-fetch",
           "background-fetch"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,7 +36,9 @@
         "android.permission.READ_CONTACTS",
         "android.permission.WRITE_CONTACTS",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
       ]
     },
     "web": {
@@ -53,7 +59,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/ahlLogo.png",
+          "icon": "./assets/images/icon.png",
           "color": "#ffffff"
         }
       ],

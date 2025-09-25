@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Alert, StyleSheet, View, TextInput, TouchableOpacity, Text } from 'react-native';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
-import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const validatePassword = (password: string): boolean => {
  // Check for common attack patterns and invalid characters
@@ -82,26 +82,67 @@ export default function ChangePassword() {
    if (!user || !allValidationsPassed || !validatePassword(newPassword)) return;
 
    setLoading(true);
+   
    try {
+     console.log('🔄 Starting password update...');
+     
+     console.log('🔄 Calling supabase.auth.updateUser...');
      const { error: authError } = await supabase.auth.updateUser({
        password: newPassword
      });
 
-     if (authError) throw authError;
+     if (authError) {
+       console.error('❌ Auth update error:', authError);
+       throw authError;
+     }
+     console.log('✅ Auth password updated');
+     
+     // Small delay to let auth state settle
+     console.log('🔄 Waiting for auth state to settle...');
+     await new Promise(resolve => setTimeout(resolve, 1000));
+     console.log('✅ Auth state settled');
 
+     console.log('🔄 Updating roster database...');
      const { error: rosterError } = await supabase
        .from('roster')
        .update({ changedpassword: true })
        .eq('auth_id', user.id);
 
      if (rosterError) throw rosterError;
+     console.log('✅ Roster updated');
 
-     await refreshRoster();
-     Alert.alert('Success', 'Password updated successfully');
-     router.replace('/(protected)/(tabs)/home');
+     console.log('🔄 Refreshing roster...');
+     
+     // Add timeout to prevent hanging
+     const rosterRefreshPromise = refreshRoster();
+     const timeoutPromise = new Promise((_, reject) => 
+       setTimeout(() => reject(new Error('Roster refresh timeout')), 5000)
+     );
+     
+     try {
+       await Promise.race([rosterRefreshPromise, timeoutPromise]);
+       console.log('✅ Roster refreshed');
+     } catch (error) {
+       console.warn('⚠️ Roster refresh failed or timed out:', error);
+       // Continue anyway - the password was updated successfully
+     }
+
+     setLoading(false); // Reset loading state
+     
+     Alert.alert('Success', 'Password updated successfully', [
+       {
+         text: 'OK',
+         onPress: async () => {
+           console.log('🔄 Redirecting to TOS...');
+           // Small delay to ensure roster data is refreshed
+           await new Promise(resolve => setTimeout(resolve, 500));
+           router.replace('/(loginflow)/tos');
+         }
+       }
+     ]);
    } catch (error) {
+     console.error('❌ Password update error:', error);
      Alert.alert('Error', (error as Error).message);
-   } finally {
      setLoading(false);
    }
  };

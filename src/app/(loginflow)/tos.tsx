@@ -118,7 +118,7 @@ export default function TermsOfService() {
           setTimeout(() => {
             if (!verifyData.ical_url) {
               console.log('🔄 Navigating to iCal setup...');
-              router.replace('/(auth)/ical-setup');
+              router.replace('/(loginflow)/ical-setup');
             } else {
               console.log('🔄 Navigating to home page...');
               router.replace('/(protected)/(tabs)/home');

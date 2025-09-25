@@ -1,9 +1,9 @@
 // Custom hook for hockey schedule sync functionality
 // Provides easy access to sync operations and status
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { backgroundSyncService } from '../lib/backgroundSyncService';
-import { fetchAndParseHockeySchedule, getLastSyncTime } from '../lib/icalHockeySync';
+import { fetchAndParseHockeySchedule } from '../lib/icalHockeySync';
 
 export interface SyncStatus {
   lastSyncTime: Date | null;
@@ -17,6 +17,7 @@ export interface SyncResult {
   gamesProcessed?: number;
   newGames?: number;
   updatedGames?: number;
+  skippedGames?: number;
   error?: string;
   skipped?: boolean;
 }

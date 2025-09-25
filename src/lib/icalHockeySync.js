@@ -2,8 +2,8 @@
 // Handles fetching and parsing iCal data from HorizonWebRef
 // Converts to Supabase format with proper timezone handling
 
-import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
 
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false) {
@@ -40,7 +40,8 @@ export async function fetchAndParseHockeySchedule(testMode = false) {
       success: true,
       gamesProcessed: games.length,
       newGames: results.newCount,
-      updatedGames: results.updateCount
+      updatedGames: results.updateCount,
+      skippedGames: results.skippedCount
     };
     
   } catch (error) {
@@ -439,40 +440,133 @@ async function convertOfficialName(firstLastName) {
 async function upsertGamesToDatabase(games) {
   let newCount = 0;
   let updateCount = 0;
+  let skippedCount = 0;
   
   for (const game of games) {
     try {
-      // Check if game exists using the unique constraint
+      // Get existing game data for comparison
       const { data: existing } = await supabase
         .from('schedule')
-        .select('uuid')
+        .select('*')
         .eq('gameid', game.gameid)
         .eq('season', game.season)
         .single();
       
-      const { error } = await supabase
-        .from('schedule')
-        .upsert(game, {
-          onConflict: 'gameid,season'
-        });
-        
-      if (error) {
-        console.error('Upsert error:', error);
-        continue;
-      }
-      
       if (existing) {
-        updateCount++;
+        // Compare fields to see if anything actually changed
+        const hasChanges = compareGameFields(game, existing);
+        
+        if (hasChanges) {
+          // Only update if there are actual changes
+          const { error } = await supabase
+            .from('schedule')
+            .update(game)
+            .eq('gameid', game.gameid)
+            .eq('season', game.season);
+            
+          if (error) {
+            console.error('Update error:', error);
+            continue;
+          }
+          
+          updateCount++;
+          console.log(`🔄 Updated game ${game.gameid}: ${getChangedFields(game, existing).join(', ')}`);
+        } else {
+          skippedCount++;
+          console.log(`⏭️ Skipped game ${game.gameid}: no changes detected`);
+        }
       } else {
+        // New game - insert it
+        const { error } = await supabase
+          .from('schedule')
+          .insert(game);
+          
+        if (error) {
+          console.error('Insert error:', error);
+          continue;
+        }
+        
         newCount++;
+        console.log(`➕ Added new game ${game.gameid}`);
       }
       
     } catch (error) {
-      console.error('Error upserting game:', game.gameid, error);
+      console.error('Error processing game:', game.gameid, error);
     }
   }
   
-  return { newCount, updateCount };
+  console.log(`📊 Sync Summary: ${newCount} new, ${updateCount} updated, ${skippedCount} skipped`);
+  return { newCount, updateCount, skippedCount };
+}
+
+// Field comparison utilities
+function compareGameFields(newGame, existingGame) {
+  // Define the fields we want to compare (excluding auto-generated fields)
+  const fieldsToCompare = [
+    'awayteam',
+    'hometeam', 
+    'gamedate',
+    'gametime',
+    'linesperson1',
+    'linesperson2',
+    'referee1',
+    'referee2',
+    'gamecode'
+  ];
+  
+  for (const field of fieldsToCompare) {
+    const newValue = normalizeFieldValue(newGame[field]);
+    const existingValue = normalizeFieldValue(existingGame[field]);
+    
+    if (newValue !== existingValue) {
+      return true; // Found a difference
+    }
+  }
+  
+  return false; // No differences found
+}
+
+function getChangedFields(newGame, existingGame) {
+  const fieldsToCompare = [
+    'awayteam',
+    'hometeam',
+    'gamedate', 
+    'gametime',
+    'linesperson1',
+    'linesperson2',
+    'referee1',
+    'referee2',
+    'gamecode'
+  ];
+  
+  const changedFields = [];
+  
+  for (const field of fieldsToCompare) {
+    const newValue = normalizeFieldValue(newGame[field]);
+    const existingValue = normalizeFieldValue(existingGame[field]);
+    
+    if (newValue !== existingValue) {
+      changedFields.push(`${field}: "${existingValue}" → "${newValue}"`);
+    }
+  }
+  
+  return changedFields;
+}
+
+function normalizeFieldValue(value) {
+  // Normalize values for comparison
+  if (value === null || value === undefined) {
+    return null;
+  }
+  
+  // Convert to string and trim whitespace
+  let normalized = String(value).trim();
+  
+  // Normalize timezone formats for gametime field
+  // Convert -08:00 to -08 and +05:00 to +05 for consistent comparison
+  normalized = normalized.replace(/([+-]\d{2}):(\d{2})$/, '$1');
+  
+  return normalized;
 }
 
 // Background sync utilities

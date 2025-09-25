@@ -62,21 +62,21 @@ export class BackgroundSyncService {
         console.log('Performing background sync...');
         const result = await performAutoSync();
         
-        if (result.success && !result.skipped) {
+        if (result.success && !('skipped' in result && result.skipped)) {
           console.log('Background sync completed successfully');
           await this.logSyncResult(result);
-        } else if (result.skipped) {
+        } else if ('skipped' in result && result.skipped) {
           console.log('Background sync skipped - recent sync found');
         } else {
-          console.error('Background sync failed:', result.error);
-          await this.logSyncError(result.error);
+          console.error('Background sync failed:', result.error || 'Unknown error');
+          await this.logSyncError(result.error || 'Unknown error');
         }
       } else {
         console.log('Background sync not needed - recent sync found');
       }
     } catch (error) {
       console.error('Background sync check error:', error);
-      await this.logSyncError(error.message);
+      await this.logSyncError(error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -127,7 +127,7 @@ export class BackgroundSyncService {
     if (result.success) {
       await this.logSyncResult(result);
     } else {
-      await this.logSyncError(result.error);
+      await this.logSyncError(result.error || 'Unknown error');
     }
     
     return result;
@@ -149,7 +149,7 @@ export class BackgroundSyncService {
         lastSyncTime: null,
         lastSyncLog: null,
         isInitialized: this.isInitialized,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

@@ -1,9 +1,9 @@
 // Background Sync Service for Hockey Schedule
 // Handles automatic syncing based on app state and time intervals
 
-import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { performAutoSync, shouldAutoSync, getLastSyncTime } from './icalHockeySync';
+import { AppState, AppStateStatus } from 'react-native';
+import { getLastSyncTime, performAutoSync, shouldAutoSync } from './icalHockeySync';
 
 export class BackgroundSyncService {
   private static instance: BackgroundSyncService;
@@ -68,8 +68,9 @@ export class BackgroundSyncService {
         } else if ('skipped' in result && result.skipped) {
           console.log('Background sync skipped - recent sync found');
         } else {
-          console.error('Background sync failed:', result.error || 'Unknown error');
-          await this.logSyncError(result.error || 'Unknown error');
+          const errorMessage = 'error' in result ? result.error : 'Unknown error';
+          console.error('Background sync failed:', errorMessage);
+          await this.logSyncError(errorMessage);
         }
       } else {
         console.log('Background sync not needed - recent sync found');
@@ -127,7 +128,8 @@ export class BackgroundSyncService {
     if (result.success) {
       await this.logSyncResult(result);
     } else {
-      await this.logSyncError(result.error || 'Unknown error');
+      const errorMessage = 'error' in result ? result.error : 'Unknown error';
+      await this.logSyncError(errorMessage);
     }
     
     return result;

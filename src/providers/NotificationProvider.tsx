@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useState, PropsWithChildren } from 'react';
+import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
+import { createContext, PropsWithChildren, useContext, useEffect, useState } from 'react';
+import { DeviceEventEmitter } from 'react-native';
+import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
-import { router } from 'expo-router';
-import * as Notifications from 'expo-notifications';
-import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
-import { DeviceEventEmitter } from 'react-native';
 
 type NotificationContextType = {
   pushToken: string | null;
@@ -42,7 +42,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       const gameId = response.notification.request.content.data?.gameId;
       if (gameId) {
-        router.push(`/(protected)/home/${gameId}`);
+        router.push(`/(protected)/game/${gameId}`);
       }
     });
 

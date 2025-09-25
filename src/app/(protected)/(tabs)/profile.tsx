@@ -1,12 +1,12 @@
 // app/(protected)/(tabs)/profile.tsx
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
-import React, { useMemo, useState, useEffect } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { requestNotificationPermissions } from '@/src/lib/notificationService';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { getOfficialPhoto, useRoster } from '@/src/providers/RosterProvider';
+import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
-import { router } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {
     const { user } = useAuth();
@@ -311,6 +311,15 @@ const Profile = () => {
                         )}
                     </View>
 
+                    {/* Notification Settings */}
+                    <TouchableOpacity
+                        style={styles.notificationButton}
+                        onPress={() => user?.id && requestNotificationPermissions(user.id)}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.notificationButtonText}>🔔 Enable Notifications</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity 
                         style={styles.linkButton} 
                         onPress={() => supabase.auth.signOut()}
@@ -370,6 +379,19 @@ const styles = StyleSheet.create({
         fontSize: 20,
         color: '#ff6600',
         textAlign: 'center',
+        fontWeight: 'bold',
+    },
+    notificationButton: {
+        backgroundColor: '#ff6600',
+        padding: 12,
+        marginHorizontal: 20,
+        marginBottom: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    notificationButtonText: {
+        color: '#fff',
+        fontSize: 16,
         fontWeight: 'bold',
     },
     breakdownContainer: {

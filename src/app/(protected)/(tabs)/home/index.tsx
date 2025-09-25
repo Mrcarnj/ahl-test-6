@@ -1,15 +1,13 @@
 // app/(protected)/(tabs)/home/index.tsx
-import { View, Text, StyleSheet, ScrollView, Button, TouchableOpacity, Linking, Image } from 'react-native';
-import React, { useCallback, useMemo } from 'react';
-import { formatGameDateTime, useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
-import { format, parse, isBefore, isToday as checkIsToday, differenceInDays, addDays } from 'date-fns';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { supabase } from '@/src/lib/supabase';
-import { Entypo, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useRoster } from '@/src/providers/RosterProvider';
-import { useAuth } from '@/src/providers/AuthProvider';
 import AppRefreshControl from '@/src/components/AppRefreshControl';
+import { useRoster } from '@/src/providers/RosterProvider';
+import { formatGameTime, useSchedule } from '@/src/providers/ScheduleProvider';
+import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { addDays, isToday as checkIsToday, differenceInDays, format, parse } from 'date-fns';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useMemo } from 'react';
+import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 
 const TestScheduleScreen = () => {

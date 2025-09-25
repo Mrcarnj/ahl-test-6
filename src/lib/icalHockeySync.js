@@ -4,6 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
+import { sendGameChangeNotification } from './notificationService';
 
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false) {
@@ -470,7 +471,11 @@ async function upsertGamesToDatabase(games) {
           }
           
           updateCount++;
-          console.log(`🔄 Updated game ${game.gameid}: ${getChangedFields(game, existing).join(', ')}`);
+          const changedFields = getChangedFields(game, existing);
+          console.log(`🔄 Updated game ${game.gameid}: ${changedFields.join(', ')}`);
+          
+          // Send notifications to affected users
+          await sendNotificationsForGameChange(game, existing, changedFields);
         } else {
           skippedCount++;
           console.log(`⏭️ Skipped game ${game.gameid}: no changes detected`);
@@ -567,6 +572,57 @@ function normalizeFieldValue(value) {
   normalized = normalized.replace(/([+-]\d{2}):(\d{2})$/, '$1');
   
   return normalized;
+}
+
+// Notification helper for game changes
+async function sendNotificationsForGameChange(newGame, existingGame, changedFields) {
+  try {
+    // Send notifications for official assignment changes AND game time changes
+    const notificationFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2', 'gametime'];
+    const notificationChanges = changedFields.filter(field => 
+      notificationFields.some(notificationField => field.startsWith(notificationField))
+    );
+    
+    if (notificationChanges.length === 0) {
+      console.log(`📱 No notification-worthy changes for game ${newGame.gameid}, skipping notifications`);
+      return;
+    }
+    
+    // Determine who was replaced (if any) - only for official changes
+    const officialFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2'];
+    const officialChanges = notificationChanges.filter(field => 
+      officialFields.some(official => field.startsWith(official))
+    );
+    
+    let replacedPerson = null;
+    for (const change of officialChanges) {
+      const field = change.split(':')[0];
+      const oldValue = change.split('"')[1]; // Extract old value
+      if (oldValue && oldValue !== 'null') {
+        replacedPerson = oldValue;
+        break; // Take the first replaced person
+      }
+    }
+    
+    console.log(`📱 Sending notifications for game ${newGame.gameid} changes: ${notificationChanges.join(', ')}`);
+    
+    // Send notification
+    await sendGameChangeNotification(
+      newGame.gameid,
+      newGame.season,
+      {
+        awayteam: newGame.awayteam,
+        hometeam: newGame.hometeam,
+        gamedate: newGame.gamedate,
+        gametime: newGame.gametime
+      },
+      notificationChanges,
+      replacedPerson
+    );
+    
+  } catch (error) {
+    console.error(`Error sending notifications for game ${newGame.gameid}:`, error);
+  }
 }
 
 // Background sync utilities

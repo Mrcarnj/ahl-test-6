@@ -3,14 +3,40 @@
 // Converts to Supabase format with proper timezone handling
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './supabase';
 import { sendGameChangeNotification } from './notificationService';
+import { supabase } from './supabase';
 
 // Exact parsing code based on HorizonWebRef iCal format
-export async function fetchAndParseHockeySchedule(testMode = false) {
-  const icalUrl = 'https://www.horizonwebref.com/syncICS?o=1IBN&enc=96c1fb9db288fce606cd7b7fd1e16d44fafb007c';
-  
+export async function fetchAndParseHockeySchedule(testMode = false, userId = null) {
   try {
+    // Get the user's iCal URL from the roster table
+    if (!userId || userId === undefined) {
+      // If no userId provided, try to get current user from session
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('No user session found');
+      }
+      userId = user.id;
+    }
+
+    console.log(`🔍 Fetching iCal URL for user: ${userId}`);
+    const { data: rosterData, error: rosterError } = await supabase
+      .from('roster')
+      .select('ical_url')
+      .eq('auth_id', userId)
+      .single();
+
+    if (rosterError || !rosterData) {
+      throw new Error(`Could not find roster data for user: ${rosterError?.message || 'User not found'}`);
+    }
+
+    if (!rosterData.ical_url) {
+      throw new Error('User has not set up their iCal URL yet');
+    }
+
+    const icalUrl = rosterData.ical_url;
+    console.log(`🌐 Using user's iCal URL: ${icalUrl}`);
+    
     console.log('🌐 Fetching iCal data from HorizonWebRef...');
     const response = await fetch(icalUrl);
     const icalText = await response.text();
@@ -163,16 +189,20 @@ function parseDescription(description) {
     const officialsText = officialsSection[1];
     
     // Match all officials with their roles - more precise pattern
-    const officialMatches = officialsText.matchAll(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s\((Referee|Linesperson)\)/gi);
+    // Exclude "Season" from the name capture
+    const officialMatches = officialsText.matchAll(/(?:(?:Season\s+)?)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s\((Referee|Linesperson)\)/gi);
     
     for (const match of officialMatches) {
       const name = match[1].trim();
       const role = match[2];
       
+      // Additional cleanup: remove "Season" if it somehow got through
+      const cleanName = name.replace(/^Season\s+/i, '');
+      
       if (role.toLowerCase() === 'referee') {
-        referees.push(name);
+        referees.push(cleanName);
       } else if (role.toLowerCase() === 'linesperson') {
-        linespeople.push(name);
+        linespeople.push(cleanName);
       }
     }
   }
@@ -233,64 +263,51 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     
     const teamTimezone = teamData.timezone;
     
-    // Parse the iCal time format
-    const year = icalTime.substring(0, 4);
-    const month = icalTime.substring(4, 6);
-    const day = icalTime.substring(6, 8);
-    const hour = icalTime.substring(9, 11);
-    const minute = icalTime.substring(11, 13);
-    const second = icalTime.substring(13, 15);
-    
-    // CRITICAL FIX: HorizonWebRef iCal incorrectly labels times as UTC when they're actually Eastern Time
-    // Create Eastern Time date instead of UTC
-    const easternDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`); // EDT
-    // Note: Use -05:00 for EST during standard time months (roughly Nov-Mar)
-    
-    console.log(`   Converting from EDT: ${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`);
-    
-    // Simple timezone conversion - just subtract hours based on timezone
-    let convertedHour = parseInt(hour, 10);
-    let convertedMinute = parseInt(minute, 10);
-    
-    // Calculate time difference from EDT to target timezone
-    if (teamTimezone === 'PST' || teamTimezone === 'PDT') {
-      // EDT to PST: subtract 4 hours
-      convertedHour -= 4;
-    } else if (teamTimezone === 'CST' || teamTimezone === 'CDT') {
-      // EDT to CST: subtract 1 hour
-      convertedHour -= 1;
-    } else if (teamTimezone === 'MST' || teamTimezone === 'MDT') {
-      // EDT to MST: subtract 2 hours
-      convertedHour -= 2;
+    // Parse the iCal time format - handle both UTC (Z) and timezone offset formats
+    const timeMatch = icalTime.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z|[+-]\d{2})$/);
+    if (!timeMatch) {
+      console.warn(`Invalid iCal time format: ${icalTime}`);
+      return icalTime;
     }
     
+    const [, year, month, day, hour, minute, second, offsetStr] = timeMatch;
+    
+    console.log(`🕐 Timezone Conversion for ${homeTeam}:`);
+    console.log(`   iCal Time: ${icalTime} (${offsetStr === 'Z' ? 'UTC' : `UTC${offsetStr}`})`);
+    console.log(`   Team Timezone: ${teamTimezone}`);
+    
+    // CORRECTION: iCal times appear to be 4 hours ahead of actual game times
+    // For example: 20:00:00Z should be 16:00:00Z (4pm UTC, not 8pm UTC)
+    let correctedHour = parseInt(hour, 10) - 4;
+    
     // Handle day rollover
-    if (convertedHour < 0) {
-      convertedHour += 24;
+    if (correctedHour < 0) {
+      correctedHour += 24;
       // Note: We're not handling day changes in this simple version
     }
     
-    const localTime = {
-      year: { value: year },
-      month: { value: month },
-      day: { value: day },
-      hour: { value: convertedHour.toString().padStart(2, '0') },
-      minute: { value: convertedMinute.toString().padStart(2, '0') },
-      second: { value: second }
+    const correctedTime = {
+      year,
+      month,
+      day,
+      hour: correctedHour.toString().padStart(2, '0'),
+      minute,
+      second
     };
     
+    console.log(`   Time Correction: ${hour}:${minute} -> ${correctedTime.hour}:${minute} (subtracted 4 hours)`);
+    
     // Get the timezone offset for the team's timezone
-    const offset = getTimezoneOffset(easternDate, teamTimezone);
+    const date = new Date(`${year}-${month}-${day}T${correctedTime.hour}:${minute}:${second}`);
+    const offset = getTimezoneOffset(date, teamTimezone);
     
-    const convertedTime = `${localTime.year.value}-${localTime.month.value}-${localTime.day.value}T${localTime.hour.value}:${localTime.minute.value}:${localTime.second.value}${offset}`;
+    // For UTC times (Z), we need to convert to the team's timezone
+    // For offset times, we keep the same offset but with corrected time
+    const finalOffset = offsetStr === 'Z' ? offset : offsetStr;
     
-    // Log the timezone conversion for debugging
-    console.log(`🕐 Timezone Conversion for ${homeTeam}:`);
-    console.log(`   iCal Time (labeled UTC but actually EDT): ${icalTime}`);
-    console.log(`   Corrected as Eastern Time: ${year}-${month}-${day}T${hour}:${minute}:${second}-04:00`);
-    console.log(`   Team Timezone: ${teamTimezone}`);
-    console.log(`   Simple Conversion: ${hour}:${minute} EDT -> ${localTime.hour.value}:${localTime.minute.value} ${teamTimezone}`);
-    console.log(`   Final Time with Offset: ${convertedTime}`);
+    const convertedTime = `${correctedTime.year}-${correctedTime.month}-${correctedTime.day}T${correctedTime.hour}:${correctedTime.minute}:${correctedTime.second}${finalOffset}`;
+    
+    console.log(`   Final Time: ${convertedTime}`);
     
     return convertedTime;
     

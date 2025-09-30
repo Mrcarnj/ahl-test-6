@@ -28,7 +28,7 @@ const GameDetails = () => {
   }
 
   const generateUrl = (gameId: any, isGamesheet = false) => {
-    const baseNumericID = 1026475;
+    const baseNumericID = 1027774;
     const numericID = baseNumericID + parseInt(gameId) - 1;
 
     if (isGamesheet) {

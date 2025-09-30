@@ -145,7 +145,7 @@ const Profile = () => {
         return (
             <View style={styles.gameItem}>
                 <Text style={styles.gameText}>
-                    {formatDate(game.gamedate)} - {game.hometeam} vs {game.awayteam}
+                    {formatDate(game.gamedate)} - {game.awayteam} @ {game.hometeam}
                 </Text>
             </View>
         );

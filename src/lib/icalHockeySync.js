@@ -38,7 +38,11 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     console.log(`🌐 Using user's iCal URL: ${icalUrl}`);
     
     console.log('🌐 Fetching iCal data from HorizonWebRef...');
-    const response = await fetch(icalUrl);
+    const response = await fetch(icalUrl, {
+      headers: {
+        'User-Agent': 'DietrichApp/v1.0.1'
+      }
+    });
     const icalText = await response.text();
     
     console.log(`📄 iCal data received: ${icalText.length} characters`);

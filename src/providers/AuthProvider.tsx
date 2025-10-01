@@ -4,6 +4,7 @@ import { createContext, PropsWithChildren, useContext, useEffect, useState } fro
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { performAutoSync } from '../lib/icalHockeySync';
 import { supabase } from "../lib/supabase";
+import { clearAllRosterCaches } from './RosterProvider';
 
 type AuthContext = {
     session: Session | null;
@@ -148,6 +149,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                                 console.log('Explicit sign out, clearing session');
                                 setSession(null);
                                 await safeAsyncStorage.removeItem('session');
+                                // Clear all user-specific caches on logout
+                                await clearAllRosterCaches();
                             } else {
                                 console.log('Session null but not signing out, event:', event);
                             }

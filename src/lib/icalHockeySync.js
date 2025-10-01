@@ -53,22 +53,53 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
       return { success: true, testOutput: games };
     }
     
-    // Process each game for database
-    const processedGames = [];
+    // Filter games by organizer BEFORE processing - only process games with Stephen Thomson as organizer
+    const filteredGames = [];
     for (const game of games) {
-      const dbGame = await convertToDbFormat(game);
-      processedGames.push(dbGame);
+      if (game.organizer === "Stephen Thomson") {
+        filteredGames.push(game);
+        console.log(`✅ Including game ${game.gameId} - organizer: ${game.organizer}`);
+      } else {
+        console.log(`⏭️ Skipping game ${game.gameId || 'unknown'} - organizer: ${game.organizer || 'not found'}`);
+      }
     }
     
-    // Upsert to database
+    // Process only the filtered games for database
+    const processedGames = [];
+    for (const game of filteredGames) {
+      const dbGame = await convertToDbFormat(game);
+      if (dbGame) {
+        processedGames.push(dbGame);
+      }
+    }
+    
+    // Debug: Show all processed games
+    console.log('📊 === PROCESSED GAMES FOR DATABASE ===');
+    processedGames.forEach((game, index) => {
+      console.log(`Game ${index + 1}:`);
+      console.log(`  Game ID: ${game.gameid}`);
+      console.log(`  Teams: ${game.awayteam} @ ${game.hometeam}`);
+      console.log(`  Date: ${game.gamedate}`);
+      console.log(`  Time: ${game.gametime}`);
+      console.log('---');
+    });
+    console.log('📊 === END PROCESSED GAMES ===');
+    
+    // Upload to database
     const results = await upsertGamesToDatabase(processedGames);
     
     return {
       success: true,
-      gamesProcessed: games.length,
+      gamesProcessed: processedGames.length,
       newGames: results.newCount,
       updatedGames: results.updateCount,
-      skippedGames: results.skippedCount
+      skippedGames: results.skippedCount,
+      debugInfo: processedGames.map(game => ({
+        gameid: game.gameid,
+        teams: `${game.awayteam} @ ${game.hometeam}`,
+        date: game.gamedate,
+        time: game.gametime
+      }))
     };
     
   } catch (error) {
@@ -95,13 +126,35 @@ async function parseIcalToGames(icalText) {
 
 async function parseEvent(eventText) {
   try {
+    // Debug: Show raw ORGANIZER lines
+    const organizerLines = eventText.match(/ORGANIZER.*$/gm);
+    if (organizerLines) {
+      console.log('🔍 Found ORGANIZER lines:', organizerLines);
+    }
+    
     // Extract basic fields using regex
     const uid = extractField(eventText, 'UID');
     const dtstart = extractField(eventText, 'DTSTART');
     const dtend = extractField(eventText, 'DTEND');
     const location = extractField(eventText, 'LOCATION');
     const description = extractField(eventText, 'DESCRIPTION');
-    const organizer = extractField(eventText, 'ORGANIZER;CN="(.+?)"');
+    // Try multiple organizer patterns
+    let organizer = extractField(eventText, 'ORGANIZER;CN="(.+?)"');
+    if (!organizer) {
+      organizer = extractField(eventText, 'ORGANIZER:mailto:(.+?)@');
+    }
+    if (!organizer) {
+      organizer = extractField(eventText, 'ORGANIZER:(.+?)$');
+    }
+    if (!organizer) {
+      // Try to extract from ORGANIZER field without CN parameter
+      const organizerMatch = eventText.match(/ORGANIZER:(.+?)(?:\n|$)/);
+      if (organizerMatch) {
+        organizer = organizerMatch[1].trim();
+      }
+    }
+    
+    console.log('📋 Extracted organizer:', organizer);
     
     if (!uid || !dtstart || !description) {
       return null; // Skip incomplete events
@@ -190,7 +243,8 @@ function parseDescription(description) {
     
     // Match all officials with their roles - more precise pattern
     // Exclude "Season" from the name capture
-    const officialMatches = officialsText.matchAll(/(?:(?:Season\s+)?)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s\((Referee|Linesperson)\)/gi);
+    // Updated regex to include hyphens and apostrophes in names
+    const officialMatches = officialsText.matchAll(/(?:(?:Season\s+)?)([A-Z][a-z]+(?:[\s'-][A-Za-z]+)*)\s\((Referee|Linesperson)\)/gi);
     
     for (const match of officialMatches) {
       const name = match[1].trim();
@@ -198,6 +252,8 @@ function parseDescription(description) {
       
       // Additional cleanup: remove "Season" if it somehow got through
       const cleanName = name.replace(/^Season\s+/i, '');
+      
+      console.log(`🔍 Extracted official: "${cleanName}" (${role})`);
       
       if (role.toLowerCase() === 'referee') {
         referees.push(cleanName);
@@ -407,6 +463,8 @@ async function convertToDbFormat(game) {
 async function convertOfficialName(firstLastName) {
   if (!firstLastName) return null;
   
+  console.log(`🔍 Converting official name: "${firstLastName}"`);
+  
   try {
     // Strategy 1: Try exact match with firstlast column
     const { data: exactMatch } = await supabase
@@ -415,10 +473,14 @@ async function convertOfficialName(firstLastName) {
       .eq('firstlast', firstLastName)
       .single();
       
-    if (exactMatch) return exactMatch.lastfirstfullname;
+    if (exactMatch) {
+      console.log(`✅ Exact match found: "${firstLastName}" -> "${exactMatch.lastfirstfullname}"`);
+      return exactMatch.lastfirstfullname;
+    }
     
     // Strategy 2: Normalized matching
     const normalizedInput = firstLastName.replace(/\s+/g, '').toLowerCase();
+    console.log(`🔍 Trying normalized match: "${normalizedInput}"`);
     
     const { data: allRoster } = await supabase
       .from('roster')
@@ -428,6 +490,7 @@ async function convertOfficialName(firstLastName) {
       for (const person of allRoster) {
         const normalizedRoster = `${person.firstname}${person.lastname}`.replace(/\s+/g, '').toLowerCase();
         if (normalizedRoster === normalizedInput) {
+          console.log(`✅ Normalized match found: "${firstLastName}" -> "${person.lastfirstfullname}"`);
           return person.lastfirstfullname;
         }
       }
@@ -436,6 +499,7 @@ async function convertOfficialName(firstLastName) {
     // Strategy 3: Simple split
     const [firstName, ...lastNameParts] = firstLastName.split(' ');
     const lastName = lastNameParts.join(' ');
+    console.log(`🔍 Trying split match: firstName="${firstName}", lastName="${lastName}"`);
     
     const { data: splitMatch } = await supabase
       .from('roster')
@@ -444,9 +508,26 @@ async function convertOfficialName(firstLastName) {
       .ilike('lastname', lastName)
       .single();
       
-    if (splitMatch) return splitMatch.lastfirstfullname;
+    if (splitMatch) {
+      console.log(`✅ Split match found: "${firstLastName}" -> "${splitMatch.lastfirstfullname}"`);
+      return splitMatch.lastfirstfullname;
+    }
     
-    console.warn(`Official not found in roster: "${firstLastName}"`);
+    // Strategy 4: Try partial last name match (for hyphenated names)
+    console.log(`🔍 Trying partial last name match for: "${lastName}"`);
+    const { data: partialMatch } = await supabase
+      .from('roster')
+      .select('lastfirstfullname')
+      .ilike('firstname', firstName)
+      .ilike('lastname', `%${lastName}%`)
+      .single();
+      
+    if (partialMatch) {
+      console.log(`✅ Partial match found: "${firstLastName}" -> "${partialMatch.lastfirstfullname}"`);
+      return partialMatch.lastfirstfullname;
+    }
+    
+    console.warn(`❌ Official not found in roster: "${firstLastName}"`);
     return null;
     
   } catch (error) {

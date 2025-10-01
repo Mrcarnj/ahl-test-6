@@ -8,7 +8,6 @@ import {
     View,
 } from 'react-native';
 import { fetchAndParseHockeySchedule, getLastSyncTime } from '../lib/icalHockeySync';
-import { useAuth } from '../providers/AuthProvider';
 
 interface HockeySyncButtonProps {
   onSyncComplete?: (result: any) => void;
@@ -23,7 +22,6 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
   textStyle,
   showLastSync = true,
 }) => {
-  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
@@ -46,7 +44,7 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
     setIsLoading(true);
     
     try {
-      const result = await fetchAndParseHockeySchedule(false, user?.id as any);
+      const result = await fetchAndParseHockeySchedule(false);
       
       if (result.success) {
         // Update last sync time display

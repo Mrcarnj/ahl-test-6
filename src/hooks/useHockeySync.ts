@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import { backgroundSyncService } from '../lib/backgroundSyncService';
 import { fetchAndParseHockeySchedule } from '../lib/icalHockeySync';
-import { useAuth } from '../providers/AuthProvider';
 
 export interface SyncStatus {
   lastSyncTime: Date | null;
@@ -24,7 +23,6 @@ export interface SyncResult {
 }
 
 export function useHockeySync() {
-  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     lastSyncTime: null,
@@ -62,7 +60,7 @@ export function useHockeySync() {
     setIsLoading(true);
     
     try {
-      const result = await fetchAndParseHockeySchedule(false, user?.id as any);
+      const result = await fetchAndParseHockeySchedule(false);
       
       if (result.success) {
         // Refresh sync status after successful sync
@@ -85,7 +83,7 @@ export function useHockeySync() {
     setIsLoading(true);
     
     try {
-      const result = await fetchAndParseHockeySchedule(true, user?.id as any);
+      const result = await fetchAndParseHockeySchedule(true);
       return result;
     } catch (error) {
       console.error('Test sync error:', error);

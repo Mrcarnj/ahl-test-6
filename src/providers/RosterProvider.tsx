@@ -1,8 +1,8 @@
 //src/providers/RosterProvider.tsx
-import { supabase } from "../lib/supabase";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { useAuth } from "./AuthProvider"; // Adjust import path as needed
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
+import { supabase } from "../lib/supabase";
+import { useAuth } from "./AuthProvider"; // Adjust import path as needed
 
 // Define the Roster type based on your table structure
 type Roster = {
@@ -48,7 +48,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const [lastFetch, setLastFetch] = useState<Date | null>(null);
     
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-    const CACHE_KEY = 'rosterCache';
+    const CACHE_KEY = user?.id ? `rosterCache_${user.id}` : 'rosterCache';
 
     const loadCachedData = async () => {
         try {
@@ -132,6 +132,17 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         }
     };
 
+    // Clear roster data when user changes or logs out
+    useEffect(() => {
+        if (!user?.id) {
+            console.log('🧹 No user ID, clearing roster data');
+            setRoster(null);
+            setAllRosters([]);
+            setLastFetch(null);
+            setError(null);
+        }
+    }, [user?.id]);
+
     // Initial load - try cache first, then fetch if needed
     useEffect(() => {
         const initializeData = async () => {
@@ -170,3 +181,25 @@ export const getOfficialPhoto = (lastfirstfullname: string) => {
 };
 
 export const useRoster = () => useContext(RosterContext);
+
+// Function to clear all roster caches (called on logout)
+export const clearAllRosterCaches = async () => {
+    try {
+        console.log('🧹 Clearing all roster caches...');
+        const keys = await safeAsyncStorage.getAllKeys();
+        const rosterCacheKeys = keys.filter(key => key.startsWith('rosterCache'));
+        
+        for (const key of rosterCacheKeys) {
+            await safeAsyncStorage.removeItem(key);
+            console.log(`✅ Cleared cache: ${key}`);
+        }
+        
+        if (rosterCacheKeys.length === 0) {
+            console.log('ℹ️ No roster caches found to clear');
+        } else {
+            console.log(`✅ Cleared ${rosterCacheKeys.length} roster cache(s)`);
+        }
+    } catch (error) {
+        console.error('❌ Error clearing roster caches:', error);
+    }
+};

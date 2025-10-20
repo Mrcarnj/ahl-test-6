@@ -57,12 +57,24 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
       return { success: true, testOutput: games };
     }
     
-    // Filter games by organizer BEFORE processing - only process games with Stephen Thomson as organizer
+    // Filter games by organizer BEFORE processing - only process games with Stephen Thomson or Riley Yerkovich (after 11/9/2025)
     const filteredGames = [];
+    const cutoffDate = new Date('2025-11-10'); // 11/10/2025 (day after 11/9/2025)
+    
     for (const game of games) {
       if (game.organizer === "Stephen Thomson") {
         filteredGames.push(game);
         console.log(`✅ Including game ${game.gameId} - organizer: ${game.organizer}`);
+      } else if (game.organizer === "Riley Yerkovich") {
+        // Parse the game date from the start time
+        const gameDate = new Date(game.startTime.split('T')[0]);
+        
+        if (gameDate >= cutoffDate) {
+          filteredGames.push(game);
+          console.log(`✅ Including game ${game.gameId} - organizer: ${game.organizer} (date: ${gameDate.toISOString().split('T')[0]})`);
+        } else {
+          console.log(`⏭️ Skipping game ${game.gameId || 'unknown'} - organizer: ${game.organizer} (date: ${gameDate.toISOString().split('T')[0]} is before cutoff)`);
+        }
       } else {
         console.log(`⏭️ Skipping game ${game.gameId || 'unknown'} - organizer: ${game.organizer || 'not found'}`);
       }
@@ -336,29 +348,59 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     console.log(`   iCal Time: ${icalTime} (${offsetStr === 'Z' ? 'UTC' : `UTC${offsetStr}`})`);
     console.log(`   Team Timezone: ${teamTimezone}`);
     
-    // CORRECTION: iCal times appear to be 4 hours ahead of actual game times
-    // For example: 20:00:00Z should be 16:00:00Z (4pm UTC, not 8pm UTC)
-    let correctedHour = parseInt(hour, 10) - 4;
+    // CORRECTION: iCal times appear to be ahead of actual game times
+    // The offset varies based on daylight saving time:
+    // - During DST (roughly March-November): 4 hours ahead
+    // - During standard time (roughly November-March): 5 hours ahead
+    // For example: 20:00:00Z should be 16:00:00Z (4pm UTC, not 8pm UTC) during DST
+    //             20:00:00Z should be 15:00:00Z (3pm UTC, not 8pm UTC) during standard time
     
-    // Handle day rollover
+    // Determine if DST is in effect for this date
+    const gameDate = new Date(`${year}-${month}-${day}T12:00:00Z`);
+    const isDST = isDaylightSavingTime(gameDate);
+    const timeCorrection = isDST ? 4 : 5;
+    
+    console.log(`   DST Status: ${isDST ? 'DST active' : 'Standard time'} (correction: ${timeCorrection} hours)`);
+    
+    let correctedHour = parseInt(hour, 10) - timeCorrection;
+    let correctedDay = parseInt(day, 10);
+    let correctedMonth = parseInt(month, 10);
+    let correctedYear = parseInt(year, 10);
+    
+    // Handle day rollover when hour goes negative
     if (correctedHour < 0) {
       correctedHour += 24;
-      // Note: We're not handling day changes in this simple version
+      correctedDay -= 1; // Move to previous day
+      
+      // Handle month rollover
+      if (correctedDay < 1) {
+        correctedMonth -= 1;
+        
+        // Handle year rollover
+        if (correctedMonth < 1) {
+          correctedMonth = 12;
+          correctedYear -= 1;
+        }
+        
+        // Get the last day of the previous month
+        const lastDayOfMonth = new Date(correctedYear, correctedMonth, 0).getDate();
+        correctedDay = lastDayOfMonth;
+      }
     }
     
     const correctedTime = {
-      year,
-      month,
-      day,
+      year: correctedYear.toString(),
+      month: correctedMonth.toString().padStart(2, '0'),
+      day: correctedDay.toString().padStart(2, '0'),
       hour: correctedHour.toString().padStart(2, '0'),
       minute,
       second
     };
     
-    console.log(`   Time Correction: ${hour}:${minute} -> ${correctedTime.hour}:${minute} (subtracted 4 hours)`);
+    console.log(`   Time Correction: ${year}-${month}-${day} ${hour}:${minute} -> ${correctedTime.year}-${correctedTime.month}-${correctedTime.day} ${correctedTime.hour}:${minute} (subtracted ${timeCorrection} hours)`);
     
     // Get the timezone offset for the team's timezone
-    const date = new Date(`${year}-${month}-${day}T${correctedTime.hour}:${minute}:${second}`);
+    const date = new Date(`${correctedTime.year}-${correctedTime.month}-${correctedTime.day}T${correctedTime.hour}:${minute}:${second}`);
     const offset = getTimezoneOffset(date, teamTimezone);
     
     // For UTC times (Z), we need to convert to the team's timezone
@@ -424,6 +466,47 @@ function cleanLocation(location) {
     .replace(/\\,/g, ',')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function isDaylightSavingTime(date) {
+  // DST in the US typically runs from the second Sunday in March to the first Sunday in November
+  // This is a simplified calculation that should work for most cases
+  
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // 1-based month
+  const day = date.getDate();
+  
+  // DST typically ends on the first Sunday in November (clocks fall back)
+  // DST typically starts on the second Sunday in March (clocks spring forward)
+  
+  // If we're in November or later in the year, check if we're before the first Sunday
+  if (month >= 11) {
+    const firstSundayNov = getFirstSundayOfMonth(year, 11);
+    return day < firstSundayNov;
+  }
+  
+  // If we're in March or later but before November, check if we're after the second Sunday in March
+  if (month >= 3 && month < 11) {
+    const secondSundayMar = getSecondSundayOfMonth(year, 3);
+    const marchDate = month === 3 ? day : 32; // 32 will always be > any March date
+    return marchDate >= secondSundayMar;
+  }
+  
+  // January and February are definitely standard time
+  return false;
+}
+
+function getFirstSundayOfMonth(year, month) {
+  // Get the first day of the month and find the first Sunday
+  const firstDay = new Date(year, month - 1, 1);
+  const dayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const daysUntilSunday = (7 - dayOfWeek) % 7;
+  return daysUntilSunday === 0 ? 1 : 1 + daysUntilSunday;
+}
+
+function getSecondSundayOfMonth(year, month) {
+  const firstSunday = getFirstSundayOfMonth(year, month);
+  return firstSunday + 7;
 }
 
 function determineSeasonFromDate(gameDate) {
@@ -548,12 +631,17 @@ async function upsertGamesToDatabase(games) {
   for (const game of games) {
     try {
       // Get existing game data for comparison
-      const { data: existing } = await supabase
+      const { data: existing, error: fetchError } = await supabase
         .from('schedule')
         .select('*')
         .eq('gameid', game.gameid)
         .eq('season', game.season)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid errors
+      
+      if (fetchError) {
+        console.error(`Error fetching existing game ${game.gameid}:`, fetchError);
+        continue;
+      }
       
       if (existing) {
         // Compare fields to see if anything actually changed
@@ -561,14 +649,14 @@ async function upsertGamesToDatabase(games) {
         
         if (hasChanges) {
           // Only update if there are actual changes
-          const { error } = await supabase
+          const { error: updateError } = await supabase
             .from('schedule')
             .update(game)
             .eq('gameid', game.gameid)
             .eq('season', game.season);
             
-          if (error) {
-            console.error('Update error:', error);
+          if (updateError) {
+            console.error(`Update error for game ${game.gameid}:`, updateError);
             continue;
           }
           
@@ -584,12 +672,18 @@ async function upsertGamesToDatabase(games) {
         }
       } else {
         // New game - insert it
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from('schedule')
           .insert(game);
           
-        if (error) {
-          console.error('Insert error:', error);
+        if (insertError) {
+          // Check if it's a duplicate key error - this shouldn't happen with proper logic
+          if (insertError.code === '23505') {
+            console.warn(`⚠️ Duplicate key error for game ${game.gameid} - this suggests a race condition or logic error`);
+            skippedCount++;
+          } else {
+            console.error(`Insert error for game ${game.gameid}:`, insertError);
+          }
           continue;
         }
         
@@ -598,7 +692,7 @@ async function upsertGamesToDatabase(games) {
       }
       
     } catch (error) {
-      console.error('Error processing game:', game.gameid, error);
+      console.error(`Unexpected error processing game ${game.gameid}:`, error);
     }
   }
   

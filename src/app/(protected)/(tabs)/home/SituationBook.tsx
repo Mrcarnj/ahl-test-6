@@ -7,7 +7,7 @@ import ruleBookText from '../../../../lib/SituationBookPdfText.json';  // Adjust
 
 export default function SituationBook() {
     const source = {
-        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?t=2024-11-11T00%3A19%3A09.244Z',
+        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf',
         cache: true
     };
 
@@ -92,7 +92,7 @@ export default function SituationBook() {
                         onPress={() => setSearchTerm('')}
                         style={styles.clearButton}
                     >
-                        <AntDesign name="closecircle" size={16} color="#666" />
+                        <AntDesign name="close-circle" size={16} color="#666" />
                     </TouchableOpacity>
                 )}
             </View>

@@ -20,8 +20,10 @@ const GameDetails = () => {
   const [refreshing, setRefreshing] = useState(false);
   const { refreshSchedule } = useSchedule();
 
+  // Current season constant
+  const CURRENT_SEASON = '2025-26';
 
-  const game = myGames.find(g => g.gameid === id);
+  const game = myGames.find(g => g.gameid === id && g.season === CURRENT_SEASON);
 
   if (!game) {
     return <Text>Game not found</Text>;

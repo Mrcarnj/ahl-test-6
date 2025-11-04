@@ -261,7 +261,7 @@ const TestScheduleScreen = () => {
                     )}
                     <TouchableOpacity
                         style={styles.gameCard}
-                        onPress={() => router.push("/(protected)/home/AllGames")}
+                        onPress={() => router.push("/(protected)/(tabs)/home/AllGames")}
                     >
                         <Text style={styles.link}>View All Games</Text>
                         <Ionicons name="chevron-forward" size={24} color="#ff6600" />

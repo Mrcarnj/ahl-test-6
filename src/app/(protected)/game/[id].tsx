@@ -465,22 +465,36 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PPG</Text>
           </View>
 
-          {teamRoster.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
-              </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.goals}</Text>
-              <Text style={styles.playerText}>{player.assists}</Text>
-              <Text style={styles.playerText}>{player.points}</Text>
-              <Text style={styles.playerText}>{player.plusMinus}</Text>
-              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
-              <Text style={styles.playerText}>{player.power_play_goals}</Text>
-            </View>
-          ))}
+          {teamRoster.map((player) => {
+            const playerName = player.player_name.replace(/\s\+-\s*$/, '');
+            const statusIndicators = [];
+            if (player.veteran === true) {
+              statusIndicators.push('(V)');
+            }
+            if (player.rookie === true) {
+              statusIndicators.push('(R)');
+            }
+            const displayName = statusIndicators.length > 0 
+              ? `${playerName} ${statusIndicators.join(' ')}`
+              : playerName;
+
+            return (
+              <View key={player.id} style={styles.playerRow}>
+                <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
+                <Text style={[styles.playerText, { flex: 4 }]}>
+                  {displayName}
+                </Text>
+                <Text style={styles.playerText}>{player.position}</Text>
+                <Text style={styles.playerText}>{player.games_played}</Text>
+                <Text style={styles.playerText}>{player.goals}</Text>
+                <Text style={styles.playerText}>{player.assists}</Text>
+                <Text style={styles.playerText}>{player.points}</Text>
+                <Text style={styles.playerText}>{player.plusMinus}</Text>
+                <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+                <Text style={styles.playerText}>{player.power_play_goals}</Text>
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
     );
@@ -665,22 +679,36 @@ const GameDetails = () => {
             <Text style={styles.headerText}>PPG</Text>
           </View>
 
-          {teamRoster.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
-              </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.goals}</Text>
-              <Text style={styles.playerText}>{player.assists}</Text>
-              <Text style={styles.playerText}>{player.points}</Text>
-              <Text style={styles.playerText}>{player.plusMinus}</Text>
-              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
-              <Text style={styles.playerText}>{player.power_play_goals}</Text>
-            </View>
-          ))}
+          {teamRoster.map((player) => {
+            const playerName = player.player_name.replace(/\s\+-\s*$/, '');
+            const statusIndicators = [];
+            if (player.veteran === true) {
+              statusIndicators.push('(V)');
+            }
+            if (player.rookie === true) {
+              statusIndicators.push('(R)');
+            }
+            const displayName = statusIndicators.length > 0 
+              ? `${playerName} ${statusIndicators.join(' ')}`
+              : playerName;
+
+            return (
+              <View key={player.id} style={styles.playerRow}>
+                <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
+                <Text style={[styles.playerText, { flex: 4 }]}>
+                  {displayName}
+                </Text>
+                <Text style={styles.playerText}>{player.position}</Text>
+                <Text style={styles.playerText}>{player.games_played}</Text>
+                <Text style={styles.playerText}>{player.goals}</Text>
+                <Text style={styles.playerText}>{player.assists}</Text>
+                <Text style={styles.playerText}>{player.points}</Text>
+                <Text style={styles.playerText}>{player.plusMinus}</Text>
+                <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+                <Text style={styles.playerText}>{player.power_play_goals}</Text>
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
     );
@@ -715,15 +743,39 @@ const GameDetails = () => {
         <Text style={styles.gameDate}>{formatGameDate2(game.gamedate)}</Text>
         <Text style={styles.gameID}>Game# {game.gameid}</Text>
         <View style={styles.teamsContainer}>
-          <Image
-            source={{ uri: getTeamLogo(game.awayTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.teamLogo}
-          />
+          <View style={styles.teamWithStats}>
+            <Image
+              source={{ uri: getTeamLogo(game.awayTeamData) || 'https://via.placeholder.com/150' }}
+              style={styles.teamLogo}
+            />
+            {game.awayTeamData && (
+              <>
+                <Text style={styles.teamStats}>
+                  GP: {game.awayTeamData.games_played || '0'}, {game.awayTeamData.wins || '0'}-{game.awayTeamData.losses || '0'}-{game.awayTeamData.otl || '0'}-{game.awayTeamData.sol || '0'} // Pts: {game.awayTeamData.points || '0'}
+                </Text>
+                <Text style={styles.teamRank}>
+                  {game.awayTeamData.division || 'N/A'} #{game.awayTeamData.division_rank || ''} // Overall #{game.awayTeamData.overall_rank || 'N/A'}
+                </Text>
+              </>
+            )}
+          </View>
           <Text style={styles.atSymbol}>@</Text>
-          <Image
-            source={{ uri: getTeamLogo(game.homeTeamData) || 'https://via.placeholder.com/150' }}
-            style={styles.teamLogo}
-          />
+          <View style={styles.teamWithStats}>
+            <Image
+              source={{ uri: getTeamLogo(game.homeTeamData) || 'https://via.placeholder.com/150' }}
+              style={styles.teamLogo}
+            />
+            {game.homeTeamData && (
+              <>
+                <Text style={styles.teamStats}>
+                  GP: {game.homeTeamData.games_played || '0'}, {game.homeTeamData.wins || '0'}-{game.homeTeamData.losses || '0'}-{game.homeTeamData.otl || '0'}-{game.homeTeamData.sol || '0'} // Pts: {game.homeTeamData.points || '0'}
+                </Text>
+                <Text style={styles.teamRank}>
+                  {game.homeTeamData.division || 'N/A'} #{game.homeTeamData.division_rank || ''} // Overall #{game.homeTeamData.overall_rank || 'N/A'}
+                </Text>
+              </>
+            )}
+          </View>
         </View>
         <View style={styles.gameInfoContainer}>
           <Text style={styles.gameTime}>
@@ -848,11 +900,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  teamWithStats: {
+    alignItems: 'center',
+    flex: 1,
+  },
   teamLogo: {
     width: 80,
     height: 80,
     resizeMode: 'contain',
     marginHorizontal: 20,
+    marginBottom: 8,
+  },
+  teamStats: {
+    fontSize: 12,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  teamRank: {
+    fontSize: 12,
+    color: '#666666',
+    textAlign: 'center',
   },
   atSymbol: {
     fontSize: 24,

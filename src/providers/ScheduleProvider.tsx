@@ -1,9 +1,10 @@
 //src/providers/ScheduleProvider.tsx
-import { supabase } from "../lib/supabase";
-import { createContext, PropsWithChildren, useContext, useEffect, useState, useRef } from "react";
-import { useRoster } from "./RosterProvider";
 import { format, parse } from "date-fns";
+import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
+import { performPlayerSyncs } from "../lib/playerStatsSync";
+import { supabase } from "../lib/supabase";
+import { useRoster } from "./RosterProvider";
 
 // Import or define interfaces
 export interface Roster {
@@ -59,6 +60,15 @@ export interface Team {
     parking_longitude: number;
     parking_instructions: string;
     locker_room_instructions: string;
+    division: string | null;
+    games_played: string | null;
+    wins: string | null;
+    losses: string | null;
+    otl: string | null;
+    sol: string | null;
+    points: string | null;
+    division_rank: string | null;
+    overall_rank: string | null;
 }
 
 export interface TeamRoster {
@@ -73,7 +83,9 @@ export interface TeamRoster {
     plusMinus: number;
     penalty_minutes: number;
     power_play_goals: number;
-    number: string;
+    number: string | null;
+    rookie: boolean | null;
+    veteran: boolean | null;
 }
 
 type ScheduleContext = {
@@ -250,6 +262,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('👤 Roster data changed, triggering schedule fetch...');
             console.log('📋 Current state - loading:', loading, 'refreshing:', isRefreshing);
             fetchSchedule();
+            
+            // Also run player stats sync on first load (but not on manual refresh)
+            // This runs in the background and doesn't block the UI
+            performPlayerSyncs().catch(error => {
+                console.error('❌ PLAYER SYNC: Error in background sync:', error);
+            });
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
@@ -283,6 +301,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         .catch(error => {
                             console.error('❌ SCHEDULE: Background refresh timed out or failed:', error);
                         });
+                    
+                    // Also run player stats sync on app refresh (daily refresh)
+                    // This runs in the background and doesn't block the UI
+                    performPlayerSyncs().catch(error => {
+                        console.error('❌ PLAYER SYNC: Error in background sync:', error);
+                    });
                         
                     console.log('✅ SCHEDULE: Background refresh complete');
                 } catch (error) {

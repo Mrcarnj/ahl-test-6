@@ -20,7 +20,7 @@
 		13B07F961A680F5B00A75B9A /* AHLOfficials.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AHLOfficials.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = AHLOfficials/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = AHLOfficials/Info.plist; sourceTree = "<group>"; };
-		3833516A491F32446F929D05 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = AHLOfficials/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3833516A491F32446F929D05 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = AHLOfficials/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		593DEBB0FA3338F1A57C4D70 /* Pods-AHLOfficials.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AHLOfficials.debug.xcconfig"; path = "Target Support Files/Pods-AHLOfficials/Pods-AHLOfficials.debug.xcconfig"; sourceTree = "<group>"; };
 		7CA04706E6590D5C46E020E5 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AHLOfficials/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = AHLOfficials/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -111,7 +111,6 @@
 				593DEBB0FA3338F1A57C4D70 /* Pods-AHLOfficials.debug.xcconfig */,
 				CE3742D73CA10E9552E12D3C /* Pods-AHLOfficials.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -357,6 +356,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = AHLOfficials/AHLOfficials.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K7F2MY5SHH;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -393,6 +393,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = AHLOfficials/AHLOfficials.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K7F2MY5SHH;
 				INFOPLIST_FILE = AHLOfficials/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

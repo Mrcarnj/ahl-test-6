@@ -168,6 +168,11 @@ const TestScheduleScreen = () => {
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
+            {loading && (
+                <View style={styles.syncBanner}>
+                    <Text style={styles.syncBannerText}>Sync in progress…</Text>
+                </View>
+            )}
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
@@ -327,6 +332,17 @@ const styles = StyleSheet.create({
     headerText: {
         color: '#ffffff',
         fontSize: 20,
+    },
+    syncBanner: {
+        backgroundColor: '#ff6600',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+    },
+    syncBannerText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     headericon: {
         color: '#ff6600',

@@ -1,12 +1,11 @@
 // app/(protected)/(tabs)/profile.tsx
 import { requestNotificationPermissions } from '@/src/lib/notificationService';
-import { forceSyncAll } from '@/src/lib/playerStatsSync';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {
@@ -22,9 +21,6 @@ const Profile = () => {
     const [isEditingIcalUrl, setIsEditingIcalUrl] = useState(false);
     const [icalUrlValue, setIcalUrlValue] = useState(roster?.ical_url || '');
     const [savingIcalUrl, setSavingIcalUrl] = useState(false);
-    
-    // State for player stats sync
-    const [syncingPlayerStats, setSyncingPlayerStats] = useState(false);
 
     // Cache the profile data and game breakdown
     const profileData = useMemo(() => {
@@ -115,20 +111,6 @@ const Profile = () => {
     const cancelEditIcalUrl = () => {
         setIcalUrlValue(roster?.ical_url || '');
         setIsEditingIcalUrl(false);
-    };
-
-    // Handle player stats sync
-    const handlePlayerStatsSync = async () => {
-        try {
-            setSyncingPlayerStats(true);
-            await forceSyncAll();
-            Alert.alert('Success', 'Player stats sync completed. Check console for details.');
-        } catch (error) {
-            console.error('Error syncing player stats:', error);
-            Alert.alert('Error', 'Failed to sync player stats. Check console for details.');
-        } finally {
-            setSyncingPlayerStats(false);
-        }
     };
 
     // Toggle functions for collapsible sections
@@ -338,20 +320,6 @@ const Profile = () => {
                         <Text style={styles.notificationButtonText}>🔔 Enable Notifications</Text>
                     </TouchableOpacity>
 
-                    {/* Temporary Test Button - Player Stats Sync */}
-                    <TouchableOpacity
-                        style={[styles.notificationButton, styles.testButton, syncingPlayerStats && styles.testButtonDisabled]}
-                        onPress={handlePlayerStatsSync}
-                        activeOpacity={0.7}
-                        disabled={syncingPlayerStats}
-                    >
-                        {syncingPlayerStats ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                            <Text style={styles.notificationButtonText}>🔄 Sync Player Stats (Test)</Text>
-                        )}
-                    </TouchableOpacity>
-
                     <TouchableOpacity 
                         style={styles.linkButton} 
                         onPress={() => supabase.auth.signOut()}
@@ -425,13 +393,6 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
-    },
-    testButton: {
-        backgroundColor: '#0066cc',
-        marginTop: 10,
-    },
-    testButtonDisabled: {
-        opacity: 0.6,
     },
     breakdownContainer: {
         width: '100%',

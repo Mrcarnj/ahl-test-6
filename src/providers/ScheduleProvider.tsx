@@ -3,6 +3,7 @@ import { format, parse } from "date-fns";
 import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 import { performPlayerSyncs } from "../lib/playerStatsSync";
+import { sendGameChangeNotification } from "../lib/notificationService";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 
@@ -227,9 +228,75 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                                data.linesperson2 === roster.lastfirstfullname;
                     };
                     
-                    // If the change affects the current user's games, refresh the schedule
+                    // If the change affects the current user's games
                     if (isRelevantToUser(newData) || isRelevantToUser(oldData)) {
-                        console.log('🔄 Change affects current user, refreshing schedule...');
+                        console.log('🔄 Change affects current user, processing...');
+                        
+                        // Detect what changed and send notification if needed
+                        if (oldData && newData && payload.eventType === 'UPDATE') {
+                            // Helper function to normalize field values for comparison
+                            const normalizeValue = (value: any): string | null => {
+                                if (value === null || value === undefined) return null;
+                                let normalized = String(value).trim();
+                                // Normalize timezone formats
+                                normalized = normalized.replace(/([+-]\d{2}):(\d{2})$/, '$1');
+                                return normalized;
+                            };
+                            
+                            // Fields that trigger notifications
+                            const notificationFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2', 'gametime'];
+                            const changedFields: string[] = [];
+                            
+                            for (const field of notificationFields) {
+                                const oldValue = normalizeValue(oldData[field as keyof Schedule]);
+                                const newValue = normalizeValue(newData[field as keyof Schedule]);
+                                
+                                if (oldValue !== newValue) {
+                                    changedFields.push(`${field}: "${oldValue}" → "${newValue}"`);
+                                }
+                            }
+                            
+                            // Send notification if there are notification-worthy changes
+                            if (changedFields.length > 0) {
+                                console.log(`📱 Real-time change detected: ${changedFields.join(', ')}`);
+                                
+                                // Determine who was replaced (if any)
+                                let replacedPerson: string | undefined = undefined;
+                                const officialFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2'];
+                                for (const change of changedFields) {
+                                    if (officialFields.some(field => change.startsWith(field))) {
+                                        const oldValueMatch = change.match(/→ "([^"]+)"/);
+                                        const oldValueBeforeMatch = change.match(/"([^"]+)" →/);
+                                        if (oldValueBeforeMatch && oldValueBeforeMatch[1] !== 'null') {
+                                            replacedPerson = oldValueBeforeMatch[1];
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                // Send notification
+                                try {
+                                    await sendGameChangeNotification(
+                                        newData.gameid,
+                                        newData.season,
+                                        {
+                                            awayteam: newData.awayteam,
+                                            hometeam: newData.hometeam,
+                                            gamedate: newData.gamedate,
+                                            gametime: newData.gametime,
+                                        },
+                                        changedFields,
+                                        replacedPerson
+                                    );
+                                    console.log('✅ Notification sent for real-time change');
+                                } catch (error) {
+                                    console.error('❌ Error sending notification for real-time change:', error);
+                                }
+                            }
+                        }
+                        
+                        // Refresh the schedule to update the UI
+                        console.log('🔄 Refreshing schedule...');
                         await fetchSchedule();
                     } else {
                         console.log('ℹ️ Change does not affect current user, skipping refresh');

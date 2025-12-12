@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, loading } = useSchedule();
+    const { myGames, loading, syncingPlayerStats } = useSchedule();
     const { roster } = useRoster();
 
     const externalLinks = [
@@ -168,7 +168,7 @@ const TestScheduleScreen = () => {
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
-            {loading && (
+            {(loading || syncingPlayerStats) && (
                 <View style={styles.syncBanner}>
                     <Text style={styles.syncBannerText}>Sync in progress…</Text>
                 </View>

@@ -2,6 +2,7 @@
 import { router, Tabs, Stack } from "expo-router";
 import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
+import { NotificationProvider } from "../../providers/NotificationProvider";
 import { FontAwesome } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
@@ -39,40 +40,42 @@ export default function ProtectedLayout() {
   }, []);
 
   return (
-    <RosterProvider key={`roster-${refreshKey}`}>
-      <ScheduleProvider key={`schedule-${refreshKey}`}>
-        <Stack>
-          <Stack.Screen 
-            name="(tabs)" 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="game/[id]" 
-            options={({ route }) => ({
-              headerTitle: "Game Details",
-              // Type assertion to access params
-              headerBackTitle: (route.params as GameRouteParams)?.source === 'calendar' ? 'Calendar' : 'Home',
-              headerShown: true,
-              headerStyle: {
-                backgroundColor: '#000000',
-              },
-              headerTintColor: '#ffffff',
-            })}
-          />
-          <Stack.Screen 
-            name="official/[rosterId]" 
-            options={({ route }) => ({
-              headerTitle: "Official's Details",
-              headerBackTitle: (route.params as DetailsRouteParams)?.source === 'game' ? 'Game' : 'Roster',
-              headerShown: true,
-              headerStyle: {
-                backgroundColor: '#000000',
-              },
-              headerTintColor: '#ffffff',
-            })}
-          />
-        </Stack>
-      </ScheduleProvider>
-    </RosterProvider>
+    <NotificationProvider>
+      <RosterProvider key={`roster-${refreshKey}`}>
+        <ScheduleProvider key={`schedule-${refreshKey}`}>
+          <Stack>
+            <Stack.Screen 
+              name="(tabs)" 
+              options={{ headerShown: false }} 
+            />
+            <Stack.Screen 
+              name="game/[id]" 
+              options={({ route }) => ({
+                headerTitle: "Game Details",
+                // Type assertion to access params
+                headerBackTitle: (route.params as GameRouteParams)?.source === 'calendar' ? 'Calendar' : 'Home',
+                headerShown: true,
+                headerStyle: {
+                  backgroundColor: '#000000',
+                },
+                headerTintColor: '#ffffff',
+              })}
+            />
+            <Stack.Screen 
+              name="official/[rosterId]" 
+              options={({ route }) => ({
+                headerTitle: "Official's Details",
+                headerBackTitle: (route.params as DetailsRouteParams)?.source === 'game' ? 'Game' : 'Roster',
+                headerShown: true,
+                headerStyle: {
+                  backgroundColor: '#000000',
+                },
+                headerTintColor: '#ffffff',
+              })}
+            />
+          </Stack>
+        </ScheduleProvider>
+      </RosterProvider>
+    </NotificationProvider>
   );
 }

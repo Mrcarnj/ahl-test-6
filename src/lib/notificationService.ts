@@ -1,20 +1,76 @@
 import { parse } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
+import * as BackgroundFetch from 'expo-background-fetch';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Schedule } from '../providers/ScheduleProvider';
+// Import background task handler to register it
+import '../lib/backgroundNotificationSync';
 
 // Configure how notifications should be handled
+// This handler processes notifications in both foreground and background
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    console.log('📱 Notification handler processing notification:', notification.request.identifier);
+    const data = notification.request.content.data;
+    
+    // If this is a game change notification with content-available, 
+    // the app will be woken in background to process it
+    if (data?.type === 'game_change' || data?.gameId) {
+      console.log('🔄 Game change notification detected in handler');
+    }
+    
+    // Always show notification, even in background
+    return {
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowAlert: true,
+      shouldShowList: true,
+    };
+  },
 });
+
+// Set up notification categories for iOS and channels for Android
+async function setupNotificationCategories() {
+  try {
+    // Define notification category for game changes (iOS)
+    await Notifications.setNotificationCategoryAsync('GAME_CHANGE', [
+      {
+        identifier: 'VIEW_GAME',
+        buttonTitle: 'View Game',
+        options: { opensAppToForeground: true },
+      },
+    ], {
+      intentIdentifiers: [],
+      hiddenPreviewsBodyPlaceholder: 'Game change notification',
+      categorySummaryFormat: '%u more game changes',
+    });
+    
+    // Set up Android notification channel for game changes
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('game_changes', {
+        name: 'Game Changes',
+        description: 'Notifications for game assignment and time changes',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    }
+    
+    console.log('✅ Notification categories and channels set up successfully');
+  } catch (error) {
+    console.error('Error setting up notification categories:', error);
+  }
+}
+
+// Initialize notification categories and channels on module load
+setupNotificationCategories();
 
 export async function registerForPushNotificationsAsync(authId: string) {
   console.log('📱 Starting push notification registration for user:', authId);
@@ -73,15 +129,8 @@ export async function registerForPushNotificationsAsync(authId: string) {
 
     console.log('✅ Push token stored successfully in database');
 
-    // Additional setup for iOS
-    if (Platform.OS === 'ios') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
+    // Note: Notification channels are set up in setupNotificationCategories()
+    // which runs on module load, so they should already be available
 
     return token;
   } catch (error) {
@@ -203,15 +252,30 @@ export async function sendGameChangeNotification(
       console.log(`📱 No push tokens found for assigned people on game ${gameId}`);
       console.log(`📱 Sending local notification for testing...`);
       
-      // Send local notification for testing
+      // Send local notification for testing with expandable content
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
           body,
+          // iOS category for expandable notifications
+          categoryIdentifier: 'GAME_CHANGE',
+          // Android channel
+          ...(Platform.OS === 'android' && {
+            android: {
+              channelId: 'game_changes',
+              priority: Notifications.AndroidNotificationPriority.HIGH,
+              // Use BigTextStyle for expandable content on Android
+              style: {
+                type: Notifications.AndroidNotificationStyle.BIGTEXT,
+                text: body, // Full message for expanded view
+              },
+            },
+          }),
           data: { 
             gameId, 
             type: 'game_change',
-            changes: changesText 
+            changes: changesText,
+            fullMessage: body, // Store full message for expansion
           },
         },
         trigger: null, // Show immediately
@@ -221,16 +285,37 @@ export async function sendGameChangeNotification(
       return;
     }
     
-    // Send push notifications
+    // Send push notifications with expandable content
+    // Format according to Expo Push API: https://docs.expo.dev/push-notifications/sending-notifications/
     const messages = pushTokens.map(token => ({
       to: token.push_token,
       sound: 'default',
       title,
       body,
+      // iOS-specific: category for expandable notifications
+      categoryId: 'GAME_CHANGE',
+      // Ensure notification appears even when app is in background
+      priority: 'high',
+      // iOS: content-available wakes the app in background to process the notification
+      // This allows the app to sync data when notification is received
+      'content-available': 1,
+      // Android-specific configuration
+      android: {
+        channelId: 'game_changes',
+        priority: 'high',
+        // BigTextStyle for expandable notifications on Android
+        // Note: Expo handles this automatically when body is long enough
+        sound: 'default',
+        vibrate: [0, 250, 250, 250],
+      },
       data: { 
         gameId, 
         type: 'game_change',
-        changes: changesText 
+        changes: changesText,
+        fullMessage: body, // Store full message for expansion
+        isTimeChange: isTimeChange.toString(),
+        // Include task name to trigger background sync
+        taskName: 'background-notification-sync',
       },
     }));
     
@@ -360,17 +445,110 @@ function formatGameTime(timeString: string): string {
   }
 }
 
-// Function to manually trigger notification permission request (for testing)
+// Function to check background refresh status (iOS only)
+export async function checkBackgroundRefreshStatus(): Promise<{
+  available: boolean;
+  needsSettings: boolean;
+  message?: string;
+}> {
+  if (Platform.OS !== 'ios') {
+    // Android doesn't have this restriction for push notifications
+    return { available: true, needsSettings: false };
+  }
+
+  try {
+    const status = await BackgroundFetch.getStatusAsync();
+    
+    switch (status) {
+      case BackgroundFetch.BackgroundFetchStatus.Available:
+        return { available: true, needsSettings: false };
+      
+      case BackgroundFetch.BackgroundFetchStatus.Restricted:
+      case BackgroundFetch.BackgroundFetchStatus.Denied:
+        return {
+          available: false,
+          needsSettings: true,
+          message: 'Background App Refresh is disabled. Please enable it in Settings > AHL Officials > Background App Refresh to receive notifications when the app is closed.',
+        };
+      
+      default:
+        return { available: false, needsSettings: false };
+    }
+  } catch (error) {
+    console.error('Error checking background refresh status:', error);
+    return { available: false, needsSettings: false };
+  }
+}
+
+// Function to open app settings (iOS) or notification settings (Android)
+export async function openAppSettings() {
+  try {
+    if (Platform.OS === 'ios') {
+      await Linking.openURL('app-settings:');
+    } else {
+      await Linking.openSettings();
+    }
+  } catch (error) {
+    console.error('Error opening settings:', error);
+    Alert.alert(
+      'Open Settings',
+      'Please go to Settings > AHL Officials to enable Background App Refresh and Notifications.',
+    );
+  }
+}
+
+// Function to manually trigger notification permission request with background refresh check
 export async function requestNotificationPermissions(authId: string) {
   console.log('🔔 Manually requesting notification permissions...');
   
   try {
+    // First, request notification permissions
     const result = await registerForPushNotificationsAsync(authId);
+    
     if (result) {
       console.log('✅ Notification permissions granted and token registered');
+      
+      // Check background refresh status (iOS)
+      if (Platform.OS === 'ios') {
+        const bgStatus = await checkBackgroundRefreshStatus();
+        
+        if (bgStatus.needsSettings) {
+          Alert.alert(
+            'Background App Refresh Recommended',
+            bgStatus.message || 'To receive notifications when the app is closed, please enable Background App Refresh in Settings.',
+            [
+              {
+                text: 'Later',
+                style: 'cancel',
+              },
+              {
+                text: 'Open Settings',
+                onPress: () => openAppSettings(),
+              },
+            ],
+          );
+        }
+      }
+      
+      return result;
     } else {
       console.log('❌ Notification permissions denied or failed');
+      Alert.alert(
+        'Notifications Disabled',
+        'To receive game change notifications, please enable notifications in Settings.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => openAppSettings(),
+          },
+        ],
+      );
     }
+    
     return result;
   } catch (error) {
     console.error('❌ Error requesting notification permissions:', error);

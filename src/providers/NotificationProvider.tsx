@@ -1,8 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from 'react';
-import { DeviceEventEmitter } from 'react-native';
+import { AppState, DeviceEventEmitter } from 'react-native';
 import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
+import { performAutoSync } from '../lib/icalHockeySync';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
 
@@ -33,21 +34,67 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, [user?.id]);
 
   useEffect(() => {
-    // Handle notifications when app is foregrounded
-    const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Received notification:', notification);
+    // Handle notifications when app is in foreground or background
+    // This listener fires for all notifications, regardless of app state
+    // When a notification with content-available: 1 is received:
+    // - iOS: App is woken briefly in background to process the notification
+    // - Android: Notification is processed when received
+    const notificationSubscription = Notifications.addNotificationReceivedListener(async notification => {
+      const appState = AppState.currentState;
+      console.log(`📱 Received notification (app state: ${appState}):`, notification);
+      const data = notification.request.content.data;
+      console.log('📱 Notification data:', data);
+      
+      // Check if this is a game change notification
+      if (data?.type === 'game_change' || data?.gameId) {
+        console.log('🔄 Game change notification received, triggering sync...');
+        console.log(`📱 App state: ${appState} - ${appState === 'background' ? 'Background sync triggered' : 'Foreground sync triggered'}`);
+        
+        // Trigger sync when game change notification is received
+        // This works in both foreground and background (when app is woken by content-available)
+        // Note: On iOS, background processing is limited to ~30 seconds
+        try {
+          const result = await performAutoSync();
+          
+          if (result.success) {
+            console.log('✅ Sync completed after notification');
+            if ('newGames' in result) {
+              console.log(`📊 New games: ${result.newGames}, Updated games: ${result.updatedGames}`);
+            }
+            // Emit event to refresh schedule data in providers
+            DeviceEventEmitter.emit('appRefresh', { source: 'notification', gameId: data?.gameId });
+          } else {
+            const errorMsg = 'error' in result ? result.error : 'Unknown error';
+            console.error('❌ Sync failed after notification:', errorMsg);
+          }
+        } catch (error) {
+          console.error('❌ Error syncing after notification:', error);
+        }
+      }
+      
+      // The notification will automatically show as a banner
+      // On iOS: User can pull down to expand and see full message
+      // On Android: User can tap to expand and see full message (BigTextStyle)
     });
 
     // Handle notification response (when user taps notification)
+    // This fires when user taps the notification, whether app is in foreground or background
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const gameId = response.notification.request.content.data?.gameId;
+      console.log('📱 Notification tapped:', response);
+      const data = response.notification.request.content.data;
+      const gameId = data?.gameId;
+      
       if (gameId) {
+        console.log(`📱 Navigating to game ${gameId}`);
+        // Navigate to the game page
         router.push(`/(protected)/game/${gameId}`);
+      } else {
+        console.log('📱 No gameId in notification data');
       }
     });
 
     return () => {
-      foregroundSubscription.remove();
+      notificationSubscription.remove();
       responseSubscription.remove();
     };
   }, []);

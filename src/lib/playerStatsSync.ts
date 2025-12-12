@@ -1,12 +1,8 @@
 // Player Stats Sync Service
 // Fetches player stats and roster data from HockeyTech API and updates Supabase
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
-const PLAYER_STATS_LAST_SYNC_KEY = 'player_stats_last_sync';
-const PLAYER_ROSTER_LAST_SYNC_KEY = 'player_roster_last_sync';
-const TEAM_STANDINGS_LAST_SYNC_KEY = 'team_standings_last_sync';
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
 
 // API endpoints
@@ -43,15 +39,26 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 
 /**
  * Check if player stats sync is needed (24 hours since last sync)
+ * Checks the lastSynced column in teamRosters table
  */
 export async function shouldSyncPlayerStats(): Promise<boolean> {
   try {
-    const lastSyncStr = await AsyncStorage.getItem(PLAYER_STATS_LAST_SYNC_KEY);
-    if (!lastSyncStr) {
-      return true; // Never synced, sync now
+    // Get the most recent lastSynced timestamp from any player
+    // If all lastSynced are NULL, this will return no rows and we'll sync
+    const { data, error } = await supabase
+      .from('teamRosters')
+      .select('lastSynced')
+      .not('lastSynced', 'is', null)
+      .order('lastSynced', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    // If error, no data, or all lastSynced are NULL, sync now
+    if (error || !data || !data.lastSynced) {
+      return true;
     }
 
-    const lastSync = new Date(lastSyncStr);
+    const lastSync = new Date(data.lastSynced);
     const now = new Date();
     const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
@@ -64,15 +71,26 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
 
 /**
  * Check if player roster sync is needed (24 hours since last sync)
+ * Checks the lastSynced column in teamRosters table
  */
 export async function shouldSyncPlayerRoster(): Promise<boolean> {
   try {
-    const lastSyncStr = await AsyncStorage.getItem(PLAYER_ROSTER_LAST_SYNC_KEY);
-    if (!lastSyncStr) {
-      return true; // Never synced, sync now
+    // Get the most recent lastSynced timestamp from any player
+    // If all lastSynced are NULL, this will return no rows and we'll sync
+    const { data, error } = await supabase
+      .from('teamRosters')
+      .select('lastSynced')
+      .not('lastSynced', 'is', null)
+      .order('lastSynced', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    // If error, no data, or all lastSynced are NULL, sync now
+    if (error || !data || !data.lastSynced) {
+      return true;
     }
 
-    const lastSync = new Date(lastSyncStr);
+    const lastSync = new Date(data.lastSynced);
     const now = new Date();
     const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
@@ -243,22 +261,39 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
     
     console.log(`✅ PLAYER STATS: New: ${newCount}, Updated: ${updatedCount}, Unchanged: ${unchangedCount}`);
     
+    const currentTime = new Date().toISOString();
+    
     if (playersToWrite.length === 0) {
       console.log('✅ PLAYER STATS: No changes detected');
-      await AsyncStorage.setItem(PLAYER_STATS_LAST_SYNC_KEY, new Date().toISOString());
+      // Still update lastSynced timestamp even if no changes
+      const { error: updateError } = await supabase
+        .from('teamRosters')
+        .update({ lastSynced: currentTime })
+        .not('id', 'is', null)
+        .limit(1);
+      
+      if (updateError) {
+        console.error('⚠️ PLAYER STATS: Error updating lastSynced:', updateError);
+      }
       return { success: true, updated: 0, inserted: 0 };
     }
     
-    // Write in batches
+    // Write in batches and update lastSynced
     const batchSize = 100;
     let totalWritten = 0;
     
     for (let i = 0; i < playersToWrite.length; i += batchSize) {
       const batch = playersToWrite.slice(i, i + batchSize);
       
+      // Add lastSynced timestamp to each player
+      const batchWithTimestamp = batch.map(player => ({
+        ...player,
+        lastSynced: currentTime
+      }));
+      
       const { error: upsertError } = await supabase
         .from('teamRosters')
-        .upsert(batch, { onConflict: 'id' });
+        .upsert(batchWithTimestamp, { onConflict: 'id' });
       
       if (upsertError) {
         throw upsertError;
@@ -267,8 +302,30 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
       totalWritten += batch.length;
     }
     
-    // Update last sync time
-    await AsyncStorage.setItem(PLAYER_STATS_LAST_SYNC_KEY, new Date().toISOString());
+    // Also update lastSynced for unchanged players (so we know when the sync ran)
+    if (unchangedCount > 0) {
+      const unchangedPlayerIds = players
+        .filter(p => {
+          const existing = existingMap.get(String(p.id));
+          if (!existing) return false;
+          const fieldsToCompare = ['team', 'player_name', 'position', 'games_played', 'goals', 
+                                   'assists', 'points', 'plusMinus', 'penalty_minutes', 
+                                   'power_play_goals'];
+          return !fieldsToCompare.some(field => p[field] !== existing[field]);
+        })
+        .map(p => p.id);
+      
+      if (unchangedPlayerIds.length > 0) {
+        // Update in batches to avoid query size limits
+        for (let i = 0; i < unchangedPlayerIds.length; i += batchSize) {
+          const batch = unchangedPlayerIds.slice(i, i + batchSize);
+          await supabase
+            .from('teamRosters')
+            .update({ lastSynced: currentTime })
+            .in('id', batch);
+        }
+      }
+    }
     
     console.log(`✅ PLAYER STATS: Sync complete - ${totalWritten} players written`);
     
@@ -365,6 +422,8 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     let totalProcessed = 0;
     let teamsProcessed = 0;
     let teamsFailed = 0;
+    const allProcessedPlayerIds: number[] = [];
+    const currentTime = new Date().toISOString();
     
     for (const teamId of TEAM_IDS) {
       console.log(`📋 PLAYER ROSTER: Processing team ${teamId}...`);
@@ -423,6 +482,11 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
         const existing = existingMap.get(player.id);
         if (!existing) continue; // Skip if player doesn't exist in database
         
+        // Track this player as processed
+        if (!allProcessedPlayerIds.includes(player.id)) {
+          allProcessedPlayerIds.push(player.id);
+        }
+        
         // Normalize values for comparison
         const playerNumber = normalizeValue(player.number);
         const playerRookie = normalizeValue(player.rookie);
@@ -457,6 +521,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
               number: playerNumber,
               rookie: playerRookie,
               veteran: playerVeteran,
+              lastSynced: currentTime,
             })
             .eq('id', player.id);
           
@@ -480,8 +545,18 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       teamsProcessed++;
     }
     
-    // Update last sync time
-    await AsyncStorage.setItem(PLAYER_ROSTER_LAST_SYNC_KEY, new Date().toISOString());
+    // Update lastSynced timestamp for all players that were processed but unchanged
+    // (updated players already have lastSynced set in the update above)
+    if (allProcessedPlayerIds.length > 0) {
+      const batchSize = 100;
+      for (let i = 0; i < allProcessedPlayerIds.length; i += batchSize) {
+        const batch = allProcessedPlayerIds.slice(i, i + batchSize);
+        await supabase
+          .from('teamRosters')
+          .update({ lastSynced: currentTime })
+          .in('id', batch);
+      }
+    }
     
     console.log(`✅ PLAYER ROSTER: Sync complete - ${totalUpdated} players updated across ${teamsProcessed} teams`);
     
@@ -497,15 +572,26 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
 
 /**
  * Check if team standings sync is needed (24 hours since last sync)
+ * Checks the lastSynced column in teams table
  */
 export async function shouldSyncTeamStandings(): Promise<boolean> {
   try {
-    const lastSyncStr = await AsyncStorage.getItem(TEAM_STANDINGS_LAST_SYNC_KEY);
-    if (!lastSyncStr) {
-      return true; // Never synced, sync now
+    // Get the most recent lastSynced timestamp from any team
+    // If all lastSynced are NULL, this will return no rows and we'll sync
+    const { data, error } = await supabase
+      .from('teams')
+      .select('lastSynced')
+      .not('lastSynced', 'is', null)
+      .order('lastSynced', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    // If error, no data, or all lastSynced are NULL, sync now
+    if (error || !data || !data.lastSynced) {
+      return true;
     }
 
-    const lastSync = new Date(lastSyncStr);
+    const lastSync = new Date(data.lastSynced);
     const now = new Date();
     const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
@@ -641,6 +727,7 @@ export async function syncTeamStandings(): Promise<{ success: boolean; error?: s
       const hasChanges = fieldsToCompare.some(field => team[field] !== existing[field]);
       
       if (hasChanges) {
+        const currentTime = new Date().toISOString();
         const { error: updateError } = await supabase
           .from('teams')
           .update({
@@ -653,6 +740,7 @@ export async function syncTeamStandings(): Promise<{ success: boolean; error?: s
             points: team.points,
             division_rank: team.division_rank,
             overall_rank: team.overall_rank,
+            lastSynced: currentTime,
           })
           .eq('id', existing.id);
         
@@ -672,8 +760,21 @@ export async function syncTeamStandings(): Promise<{ success: boolean; error?: s
       console.log(`⊘ TEAM STANDINGS: All ${unchangedCount} teams unchanged, Not found: ${notFoundCount}`);
     }
     
-    // Update last sync time
-    await AsyncStorage.setItem(TEAM_STANDINGS_LAST_SYNC_KEY, new Date().toISOString());
+    // Update lastSynced timestamp for all teams (both updated and unchanged)
+    const currentTime = new Date().toISOString();
+    const allTeamIds = teams.map(t => existingMap.get(t.abbreviation)?.id).filter(Boolean);
+    
+    if (allTeamIds.length > 0) {
+      // Update in batches
+      const batchSize = 100;
+      for (let i = 0; i < allTeamIds.length; i += batchSize) {
+        const batch = allTeamIds.slice(i, i + batchSize);
+        await supabase
+          .from('teams')
+          .update({ lastSynced: currentTime })
+          .in('id', batch);
+      }
+    }
     
     if (updatedCount > 0) {
       console.log(`✅ TEAM STANDINGS: Sync complete - ${updatedCount} teams updated`);

@@ -93,6 +93,7 @@ type ScheduleContext = {
     myGames: Schedule[];
     teamRosters: TeamRoster[];
     loading: boolean;
+    syncingPlayerStats: boolean;
     error: string | null;
     refreshSchedule: () => Promise<void>;
     realtimeEnabled: boolean;
@@ -103,6 +104,7 @@ const ScheduleContext = createContext<ScheduleContext>({
     myGames: [],
     teamRosters: [],
     loading: false,
+    syncingPlayerStats: false,
     error: null,
     refreshSchedule: async () => { },
     realtimeEnabled: false,
@@ -113,6 +115,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [allGames, setAllGames] = useState<Schedule[]>([]);
     const [myGames, setMyGames] = useState<Schedule[]>([]);
     const [loading, setLoading] = useState(false);
+    const [syncingPlayerStats, setSyncingPlayerStats] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -265,9 +268,14 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             
             // Also run player stats sync on first load (but not on manual refresh)
             // This runs in the background and doesn't block the UI
-            performPlayerSyncs().catch(error => {
-                console.error('❌ PLAYER SYNC: Error in background sync:', error);
-            });
+            setSyncingPlayerStats(true);
+            performPlayerSyncs()
+                .catch(error => {
+                    console.error('❌ PLAYER SYNC: Error in background sync:', error);
+                })
+                .finally(() => {
+                    setSyncingPlayerStats(false);
+                });
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
@@ -304,9 +312,14 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     
                     // Also run player stats sync on app refresh (daily refresh)
                     // This runs in the background and doesn't block the UI
-                    performPlayerSyncs().catch(error => {
-                        console.error('❌ PLAYER SYNC: Error in background sync:', error);
-                    });
+                    setSyncingPlayerStats(true);
+                    performPlayerSyncs()
+                        .catch(error => {
+                            console.error('❌ PLAYER SYNC: Error in background sync:', error);
+                        })
+                        .finally(() => {
+                            setSyncingPlayerStats(false);
+                        });
                         
                     console.log('✅ SCHEDULE: Background refresh complete');
                 } catch (error) {
@@ -370,6 +383,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             myGames,
             teamRosters,
             loading: loading || isRefreshing,
+            syncingPlayerStats,
             error,
             refreshSchedule,
             realtimeEnabled

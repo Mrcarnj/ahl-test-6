@@ -1,10 +1,13 @@
 // providers/AuthProvider.tsx
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import { DeviceEventEmitter } from 'react-native';
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { performAutoSync } from '../lib/icalHockeySync';
 import { supabase } from "../lib/supabase";
 import { clearAllRosterCaches } from './RosterProvider';
+import { APP_REFRESH_EVENT } from '../lib/events';
+import { emitSyncToast } from '../lib/syncToast';
 
 type AuthContext = {
     session: Session | null;
@@ -85,6 +88,18 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     console.log('⏭️ AUTH: Login sync skipped - recent sync found');
                 } else {
                     console.log('✅ AUTH: Login sync completed successfully');
+
+                    // If the sync applied changes, request a schedule refresh so the UI shows the latest data.
+                    const newGames = 'newGames' in result ? (result.newGames ?? 0) : 0;
+                    const updatedGames = 'updatedGames' in result ? (result.updatedGames ?? 0) : 0;
+                    if (newGames > 0 || updatedGames > 0) {
+                        emitSyncToast({
+                            type: 'success',
+                            message: 'Schedule updated in background',
+                            detail: `New: ${newGames}, Updated: ${updatedGames}`,
+                        });
+                        DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'login_sync' });
+                    }
                 }
             } else {
                 const errorMsg = 'error' in result ? result.error : 'Unknown error';

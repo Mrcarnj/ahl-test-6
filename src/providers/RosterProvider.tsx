@@ -28,7 +28,7 @@ type RosterContext = {
     allRosters: Roster[]; // Add this
     loading: boolean;
     error: string | null;
-    refreshRoster: () => Promise<void>;
+    refreshRoster: () => Promise<{ success: boolean; error?: string }>;
 };
 
 const RosterContext = createContext<RosterContext>({
@@ -36,7 +36,7 @@ const RosterContext = createContext<RosterContext>({
     allRosters: [],
     loading: false,
     error: null,
-    refreshRoster: async () => {},
+    refreshRoster: async () => ({ success: false }),
 });
 
 export default function RosterProvider({ children }: PropsWithChildren) {
@@ -47,6 +47,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const [allRosters, setAllRosters] = useState<Roster[]>([]); // Add this
     const [lastFetch, setLastFetch] = useState<Date | null>(null);
     
+    const ROSTER_CACHE_VERSION = 1;
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
     const CACHE_KEY = user?.id ? `rosterCache_${user.id}` : 'rosterCache';
 
@@ -54,7 +55,12 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         try {
             const cachedData = await safeAsyncStorage.getItem(CACHE_KEY);
             if (cachedData) {
-                const { roster, allRosters, timestamp } = JSON.parse(cachedData);
+                const { roster, allRosters, timestamp, cacheVersion } = JSON.parse(cachedData);
+                if (cacheVersion !== ROSTER_CACHE_VERSION) {
+                    console.log('🧹 ROSTER: Cache version mismatch, clearing roster cache');
+                    await safeAsyncStorage.removeItem(CACHE_KEY);
+                    return false;
+                }
                 const isExpired = new Date().getTime() - timestamp > CACHE_DURATION;
                 
                 if (!isExpired) {
@@ -76,7 +82,8 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             const cacheData = {
                 roster: rosterData,
                 allRosters: allRostersData,
-                timestamp: new Date().getTime()
+                timestamp: new Date().getTime(),
+                cacheVersion: ROSTER_CACHE_VERSION,
             };
             await safeAsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
         } catch (e) {
@@ -84,13 +91,13 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         }
     };
 
-    const fetchRoster = async (force = false) => {
-        if (!user?.id) return;
+    const fetchRoster = async (force = false): Promise<{ success: boolean; error?: string }> => {
+        if (!user?.id) return { success: false, error: 'No user' };
 
         // Check if we can use cached data
         if (!force && lastFetch && (new Date().getTime() - lastFetch.getTime() < CACHE_DURATION)) {
             console.log('Using memory-cached roster data');
-            return;
+            return { success: true };
         }
 
         try {
@@ -121,12 +128,14 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             // Save to cache
             await saveToCache(userRosterData, allRostersData || []);
 
+            return { success: true };
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'An error occurred';
             console.error('Fetch roster error:', errorMessage);
             setError(errorMessage);
             setRoster(null);
             setAllRosters([]);
+            return { success: false, error: errorMessage };
         } finally {
             setLoading(false);
         }
@@ -163,7 +172,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     };
 
     return (
-        <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster: fetchRoster }}>
+        <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster }}>
             {children}
         </RosterContext.Provider>
     );

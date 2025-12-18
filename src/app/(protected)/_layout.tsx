@@ -4,8 +4,7 @@ import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
 import { NotificationProvider } from "../../providers/NotificationProvider";
 import { FontAwesome } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { DeviceEventEmitter } from 'react-native';
+import SyncToastHost from '@/src/components/SyncToastHost';
 
 // Define the type for our route params
 type GameRouteParams = {
@@ -18,31 +17,12 @@ type DetailsRouteParams = {
   source: 'roster' | 'game';
 }
 
-// Event name for app refresh
-export const APP_REFRESH_EVENT = 'app_refresh_event';
-
 export default function ProtectedLayout() {
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Listen for app refresh events
-  useEffect(() => {
-    const subscription = DeviceEventEmitter.addListener(
-      APP_REFRESH_EVENT,
-      () => {
-        console.log('🔄 App refresh event received, remounting providers...');
-        setRefreshKey(prevKey => prevKey + 1);
-      }
-    );
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   return (
     <NotificationProvider>
-      <RosterProvider key={`roster-${refreshKey}`}>
-        <ScheduleProvider key={`schedule-${refreshKey}`}>
+      <RosterProvider>
+        <ScheduleProvider>
+          <SyncToastHost />
           <Stack>
             <Stack.Screen 
               name="(tabs)" 

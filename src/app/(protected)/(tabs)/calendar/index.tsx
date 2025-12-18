@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/calendar/index.tsx
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -12,6 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import { fetchAndParseHockeySchedule } from '@/src/lib/icalHockeySync';
+import { emitSyncToast } from '@/src/lib/syncToast';
 
 const screenWidth = Dimensions.get('window').width;
 const calendarWidth = screenWidth * 0.98;
@@ -27,10 +28,9 @@ export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const { myGames, loading } = useSchedule();
+  const { myGames, loading, refreshSchedule } = useSchedule();
   const router = useRouter();
-  const { getSyncStatusText } = useHockeySync();
+  const { syncStatus, refreshSyncStatus } = useHockeySync();
 
   // Create marked dates object from myGames
   const markedDates = React.useMemo(() => {
@@ -84,14 +84,30 @@ export default function CalendarScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    emitSyncToast({ type: 'info', message: 'Syncing schedule…' });
     try {
       const result = await fetchAndParseHockeySchedule(false);
       if (result.success) {
-        setLastSyncTime(new Date().toLocaleString());
+        // Pull updated schedule rows after sync updates the backend schedule table
+        await refreshSchedule();
+        emitSyncToast({
+          type: 'success',
+          message: 'Schedule sync complete',
+          detail: `New: ${result.newGames ?? 0}, Updated: ${result.updatedGames ?? 0}`,
+        });
+      } else {
+        emitSyncToast({ type: 'error', message: 'Schedule sync failed', detail: result.error });
       }
     } catch (error) {
       console.error('Sync error:', error);
+      emitSyncToast({
+        type: 'error',
+        message: 'Schedule sync failed',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
+      // Always reload persisted sync status so the "Last sync" line is consistent across devices.
+      await refreshSyncStatus();
       setRefreshing(false);
     }
   };
@@ -165,11 +181,9 @@ export default function CalendarScreen() {
               );
             }}
           />
-          {lastSyncTime && (
           <Text style={styles.lastSyncText}>
-           Last sync: {lastSyncTime}
+            Last sync: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
           </Text>
-        )}
           </ScrollView>
         </ViewShot>
       </View>

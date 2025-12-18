@@ -4,6 +4,7 @@ import { createContext, PropsWithChildren, useContext, useEffect, useState } fro
 import { AppState, DeviceEventEmitter } from 'react-native';
 import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
 import { performAutoSync } from '../lib/icalHockeySync';
+import { APP_REFRESH_EVENT } from '../lib/events';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
 
@@ -62,7 +63,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
               console.log(`📊 New games: ${result.newGames}, Updated games: ${result.updatedGames}`);
             }
             // Emit event to refresh schedule data in providers
-            DeviceEventEmitter.emit('appRefresh', { source: 'notification', gameId: data?.gameId });
+            DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'notification', gameId: data?.gameId });
           } else {
             const errorMsg = 'error' in result ? result.error : 'Unknown error';
             console.error('❌ Sync failed after notification:', errorMsg);
@@ -127,7 +128,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     
     console.log('🔄 NOTIFICATION: Setting up app refresh listener...');
     
-    const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async (data) => {
+    const appRefreshListener = DeviceEventEmitter.addListener(APP_REFRESH_EVENT, async (data) => {
       console.log('📱 NOTIFICATION: App refresh event received - ' + new Date().toISOString(), data);
       
       // We don't need to do anything here as notifications will be rescheduled

@@ -2,10 +2,18 @@
 import { format, parse } from "date-fns";
 import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
-import { performPlayerSyncs } from "../lib/playerStatsSync";
+import {
+    shouldSyncPlayerRoster,
+    shouldSyncPlayerStats,
+    shouldSyncTeamStandings,
+    syncPlayerRoster,
+    syncPlayerStats,
+    syncTeamStandings,
+} from "../lib/playerStatsSync";
 import { sendGameChangeNotification } from "../lib/notificationService";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
+import { APP_REFRESH_EVENT } from "../lib/events";
 
 // Import or define interfaces
 export interface Roster {
@@ -94,9 +102,12 @@ type ScheduleContext = {
     myGames: Schedule[];
     teamRosters: TeamRoster[];
     loading: boolean;
-    syncingPlayerStats: boolean;
+    syncingPlayerStats: boolean; // kept for compatibility (stats OR standings)
+    syncingSchedule: boolean;
+    syncingStats: boolean;
+    syncingStandings: boolean;
     error: string | null;
-    refreshSchedule: () => Promise<void>;
+    refreshSchedule: () => Promise<{ success: boolean; error?: string }>;
     realtimeEnabled: boolean;
 };
 
@@ -106,8 +117,11 @@ const ScheduleContext = createContext<ScheduleContext>({
     teamRosters: [],
     loading: false,
     syncingPlayerStats: false,
+    syncingSchedule: false,
+    syncingStats: false,
+    syncingStandings: false,
     error: null,
-    refreshSchedule: async () => { },
+    refreshSchedule: async () => ({ success: false }),
     realtimeEnabled: false,
 });
 
@@ -116,17 +130,18 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [allGames, setAllGames] = useState<Schedule[]>([]);
     const [myGames, setMyGames] = useState<Schedule[]>([]);
     const [loading, setLoading] = useState(false);
-    const [syncingPlayerStats, setSyncingPlayerStats] = useState(false);
+    const [syncingStats, setSyncingStats] = useState(false);
+    const [syncingStandings, setSyncingStandings] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [realtimeEnabled, setRealtimeEnabled] = useState(false);
     const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
-    const fetchSchedule = async () => {
+    const fetchSchedule = async (): Promise<{ success: boolean; error?: string }> => {
         if (!roster?.lastfirstfullname) {
             console.log('❌ SCHEDULE: Fetch aborted - No roster data available');
-            return;
+            return { success: false, error: 'No roster data available' };
         }
     
         try {
@@ -182,13 +197,57 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setMyGames(processedGames);
             console.log(`✅ SCHEDULE: Found ${processedGames.length} assigned games`);
             console.log('✅ SCHEDULE: Fetch and processing complete - ' + new Date().toISOString());
+            return { success: true };
     
         } catch (error) {
             console.error('❌ SCHEDULE: Fetch error:', error);
-            setError(error instanceof Error ? error.message : 'An error occurred');
+            const msg = error instanceof Error ? error.message : 'An error occurred';
+            setError(msg);
+            return { success: false, error: msg };
         } finally {
             setLoading(false);
             console.log('🔄 SCHEDULE: Loading state reset');
+        }
+    };
+
+    const runBackgroundSyncs = async () => {
+        try {
+            const shouldStats = await shouldSyncPlayerStats();
+            const shouldRoster = await shouldSyncPlayerRoster();
+            const shouldStandings = await shouldSyncTeamStandings();
+
+            if (shouldStats || shouldRoster) {
+                setSyncingStats(true);
+            }
+            if (shouldStandings) {
+                setSyncingStandings(true);
+            }
+
+            if (shouldStats) {
+                console.log('🔄 PLAYER SYNC: Running player stats sync...');
+                await syncPlayerStats();
+            } else {
+                console.log('⏭️ PLAYER SYNC: Player stats sync not needed (recent sync found)');
+            }
+
+            if (shouldRoster) {
+                console.log('🔄 PLAYER SYNC: Running player roster sync...');
+                await syncPlayerRoster();
+            } else {
+                console.log('⏭️ PLAYER SYNC: Player roster sync not needed (recent sync found)');
+            }
+
+            if (shouldStandings) {
+                console.log('🔄 TEAM SYNC: Running team standings sync...');
+                await syncTeamStandings();
+            } else {
+                console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
+            }
+        } catch (e) {
+            console.error('❌ SYNC: Error performing background syncs:', e);
+        } finally {
+            setSyncingStats(false);
+            setSyncingStandings(false);
         }
     };
     
@@ -335,14 +394,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             
             // Also run player stats sync on first load (but not on manual refresh)
             // This runs in the background and doesn't block the UI
-            setSyncingPlayerStats(true);
-            performPlayerSyncs()
-                .catch(error => {
-                    console.error('❌ PLAYER SYNC: Error in background sync:', error);
-                })
-                .finally(() => {
-                    setSyncingPlayerStats(false);
-                });
+            runBackgroundSyncs();
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
@@ -352,13 +404,13 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
     }, [roster?.lastfirstfullname]);
 
-    // Listen for app refresh events (when app comes back from background)
+    // Listen for app refresh events (triggered by notification/background sync)
     useEffect(() => {
         if (!roster?.lastfirstfullname) return;
         
         console.log('🔄 SCHEDULE: Setting up app refresh listener...');
         
-        const appRefreshListener = DeviceEventEmitter.addListener('appRefresh', async (data) => {
+        const appRefreshListener = DeviceEventEmitter.addListener(APP_REFRESH_EVENT, async (data) => {
             console.log('📱 SCHEDULE: App refresh event received - ' + new Date().toISOString(), data);
             
             if (!loading && !isRefreshing) {
@@ -379,14 +431,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     
                     // Also run player stats sync on app refresh (daily refresh)
                     // This runs in the background and doesn't block the UI
-                    setSyncingPlayerStats(true);
-                    performPlayerSyncs()
-                        .catch(error => {
-                            console.error('❌ PLAYER SYNC: Error in background sync:', error);
-                        })
-                        .finally(() => {
-                            setSyncingPlayerStats(false);
-                        });
+                    runBackgroundSyncs();
                         
                     console.log('✅ SCHEDULE: Background refresh complete');
                 } catch (error) {
@@ -407,10 +452,10 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     }, [roster?.lastfirstfullname, loading, isRefreshing]);
 
     // Expose the refresh function
-    const refreshSchedule = async () => {
+    const refreshSchedule = async (): Promise<{ success: boolean; error?: string }> => {
         if (isRefreshing || loading) {
             console.log('⚠️ SCHEDULE: Refresh already in progress, skipping...');
-            return;
+            return { success: false, error: 'Refresh already in progress' };
         }
         
         try {
@@ -426,17 +471,14 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             );
             
             // Attempt to fetch with timeout protection
-            await Promise.race([fetchSchedule(), timeoutPromise])
-                .catch(error => {
-                    console.error('❌ SCHEDULE: Manual refresh timed out or failed:', error);
-                    // If we time out, we still want to reset the loading state
-                    throw error;
-                });
+            const result = await Promise.race([fetchSchedule(), timeoutPromise]) as { success: boolean; error?: string };
                 
             console.log('✅ SCHEDULE: Manual refresh complete');
+            return result;
         } catch (error) {
             console.error('❌ SCHEDULE: Manual refresh error:', error);
             // Reset state even on error
+            return { success: false, error: error instanceof Error ? error.message : 'An error occurred' };
         } finally {
             // Ensure we always reset the loading state
             setIsRefreshing(false);
@@ -450,7 +492,10 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             myGames,
             teamRosters,
             loading: loading || isRefreshing,
-            syncingPlayerStats,
+            syncingPlayerStats: syncingStats || syncingStandings,
+            syncingSchedule: loading || isRefreshing,
+            syncingStats,
+            syncingStandings,
             error,
             refreshSchedule,
             realtimeEnabled

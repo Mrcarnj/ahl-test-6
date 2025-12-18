@@ -6,9 +6,62 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendGameChangeNotification } from './notificationService';
 import { supabase } from './supabase';
 
+// ------------------------------------------------------------
+// Cache/versioning
+// ------------------------------------------------------------
+// NOTE: Do NOT clear auth/session storage here. Only clear hockey-sync specific keys.
+const HOCKEY_SYNC_CACHE_VERSION = 1;
+const HOCKEY_SYNC_CACHE_VERSION_KEY = 'hockey_sync_cache_version';
+let hockeySyncCacheVersionEnsured = false;
+
+async function ensureHockeySyncCacheVersion() {
+  if (hockeySyncCacheVersionEnsured) return;
+
+  try {
+    const storedVersion = await AsyncStorage.getItem(HOCKEY_SYNC_CACHE_VERSION_KEY);
+    const expected = String(HOCKEY_SYNC_CACHE_VERSION);
+
+    if (storedVersion !== expected) {
+      console.log(
+        `🧹 HOCKEY SYNC: Cache version mismatch (stored=${storedVersion}, expected=${expected}) - clearing hockey sync storage keys`
+      );
+
+      const keysToRemove = [
+        HOCKEY_SYNC_CACHE_VERSION_KEY,
+        SYNC_STORAGE_KEYS.LAST_SYNC,
+        SYNC_STORAGE_KEYS.SYNC_COUNT,
+        SYNC_STORAGE_KEYS.LAST_ERROR,
+        'hockey_sync_log',
+      ];
+
+      if (AsyncStorage.multiRemove) {
+        await AsyncStorage.multiRemove(keysToRemove);
+      } else {
+        // Fallback for older AsyncStorage implementations
+        for (const k of keysToRemove) {
+          try {
+            await AsyncStorage.removeItem(k);
+          } catch (e) {
+            // swallow
+          }
+        }
+      }
+
+      await AsyncStorage.setItem(HOCKEY_SYNC_CACHE_VERSION_KEY, expected);
+    }
+
+    hockeySyncCacheVersionEnsured = true;
+  } catch (error) {
+    console.error('HOCKEY SYNC: Error ensuring cache version:', error);
+    // Don't throw; syncing should still work without cache/version metadata.
+  }
+}
+
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false, userId = null) {
   try {
+    await ensureHockeySyncCacheVersion();
+
     // Get the user's iCal URL from the roster table
     if (!userId || userId === undefined) {
       // If no userId provided, try to get current user from session
@@ -103,6 +156,10 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     
     // Upload to database
     const results = await upsertGamesToDatabase(processedGames);
+
+    // Persist last sync time for ALL successful manual syncs (not just auto sync).
+    // This is used across screens to consistently display "Last sync".
+    await setLastSyncTime();
     
     return {
       success: true,
@@ -120,6 +177,18 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     
   } catch (error) {
     console.error('Hockey schedule sync error:', error);
+
+    // Best-effort persist last error for debugging/UI.
+    try {
+      await ensureHockeySyncCacheVersion();
+      await AsyncStorage.setItem(
+        SYNC_STORAGE_KEYS.LAST_ERROR,
+        (error && error.message) ? String(error.message) : String(error)
+      );
+    } catch (e) {
+      // swallow
+    }
+
     return { success: false, error: error.message };
   }
 }
@@ -830,6 +899,7 @@ export const SYNC_STORAGE_KEYS = {
 
 export async function getLastSyncTime() {
   try {
+    await ensureHockeySyncCacheVersion();
     const lastSync = await AsyncStorage.getItem(SYNC_STORAGE_KEYS.LAST_SYNC);
     return lastSync ? new Date(lastSync) : null;
   } catch (error) {
@@ -840,6 +910,7 @@ export async function getLastSyncTime() {
 
 export async function setLastSyncTime() {
   try {
+    await ensureHockeySyncCacheVersion();
     await AsyncStorage.setItem(SYNC_STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
   } catch (error) {
     console.error('Error setting last sync time:', error);
@@ -848,6 +919,7 @@ export async function setLastSyncTime() {
 
 export async function shouldAutoSync() {
   try {
+    await ensureHockeySyncCacheVersion();
     const lastSync = await getLastSyncTime();
     if (!lastSync) return true;
     
@@ -864,6 +936,7 @@ export async function shouldAutoSync() {
 
 export async function performAutoSync() {
   try {
+    await ensureHockeySyncCacheVersion();
     const shouldSync = await shouldAutoSync();
     if (!shouldSync) {
       console.log('Auto sync skipped - last sync was recent');

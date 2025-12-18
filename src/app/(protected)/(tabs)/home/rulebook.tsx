@@ -7,8 +7,8 @@ import ruleBookText from '../../../../lib/RuleBookPdfText.json';  // Adjust path
 
 export default function Rulebook() {
     const source = {
-        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20AHL%20Rule%20Book.pdf',
-        cache: true
+        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2025-26_AHLRuleBook.pdf',
+        cache: false
     };
 
     const [currentPage, setCurrentPage] = useState(1);

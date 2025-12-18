@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, loading, syncingPlayerStats } = useSchedule();
+    const { myGames, loading, syncingSchedule, syncingStats, syncingStandings } = useSchedule();
     const { roster } = useRoster();
 
     const externalLinks = [
@@ -165,12 +165,22 @@ const TestScheduleScreen = () => {
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
+    const syncBannerText = useMemo(() => {
+        const syncing: string[] = [];
+        if (syncingSchedule) syncing.push('Schedule');
+        if (syncingStats) syncing.push('Stats');
+        if (syncingStandings) syncing.push('Standings');
+        if (syncing.length === 0) return null;
+        if (syncing.length === 1) return `${syncing[0]} Sync in progress…`;
+        return `Sync in progress: ${syncing.join(', ')}`;
+    }, [syncingSchedule, syncingStats, syncingStandings]);
+
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
-            {(loading || syncingPlayerStats) && (
+            {!!syncBannerText && (
                 <View style={styles.syncBanner}>
-                    <Text style={styles.syncBannerText}>Sync in progress…</Text>
+                    <Text style={styles.syncBannerText}>{syncBannerText}</Text>
                 </View>
             )}
             <ScrollView

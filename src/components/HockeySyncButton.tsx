@@ -47,8 +47,8 @@ export const HockeySyncButton: React.FC<HockeySyncButtonProps> = ({
       const result = await fetchAndParseHockeySchedule(false);
       
       if (result.success) {
-        // Update last sync time display
-        setLastSyncTime(new Date().toLocaleString());
+        // Reload from persisted storage to keep a single source of truth across the app
+        await loadLastSyncTime();
         
         // Show success message
         Alert.alert(

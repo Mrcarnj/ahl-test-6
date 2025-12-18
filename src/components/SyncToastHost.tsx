@@ -14,6 +14,7 @@ type ToastState = {
 export default function SyncToastHost() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const colors = useMemo(() => {
     const type = toast?.type ?? 'info';
@@ -26,6 +27,11 @@ export default function SyncToastHost() {
     const sub = DeviceEventEmitter.addListener(SYNC_TOAST_EVENT, (payload: SyncToastPayload) => {
       const durationMs = payload.durationMs ?? (payload.type === 'error' ? 6000 : 2500);
 
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+
       setToast({
         visible: true,
         type: payload.type,
@@ -34,19 +40,28 @@ export default function SyncToastHost() {
         durationMs,
       });
 
-      Animated.stopAnimation(opacity);
+      // stopAnimation is a method on Animated.Value (not Animated module)
+      // Some RN runtimes don't have Animated.stopAnimation.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (opacity as any).stopAnimation?.();
       opacity.setValue(0);
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
 
       // Auto-hide
-      setTimeout(() => {
+      hideTimerRef.current = setTimeout(() => {
         Animated.timing(opacity, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => {
           setToast(null);
         });
       }, durationMs);
     });
 
-    return () => sub.remove();
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      sub.remove();
+    };
   }, [opacity]);
 
   if (!toast?.visible) return null;
@@ -91,5 +106,6 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
 });
+
 
 

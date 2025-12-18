@@ -8,12 +8,15 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useHockeySync } from '@/src/hooks/useHockeySync';
+import SyncBannerHost from '@/src/components/SyncBannerHost';
 
 
 const TestScheduleScreen = () => {
     const router = useRouter();
     const { myGames, loading, syncingSchedule, syncingStats, syncingStandings } = useSchedule();
     const { roster } = useRoster();
+    const { syncStatus } = useHockeySync();
 
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
@@ -165,29 +168,17 @@ const TestScheduleScreen = () => {
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
-    const syncBannerText = useMemo(() => {
-        const syncing: string[] = [];
-        if (syncingSchedule) syncing.push('Schedule');
-        if (syncingStats) syncing.push('Stats');
-        if (syncingStandings) syncing.push('Standings');
-        if (syncing.length === 0) return null;
-        if (syncing.length === 1) return `${syncing[0]} Sync in progress…`;
-        return `Sync in progress: ${syncing.join(', ')}`;
-    }, [syncingSchedule, syncingStats, syncingStandings]);
+    // Banner is now global (SyncBannerHost in protected layout)
 
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
-            {!!syncBannerText && (
-                <View style={styles.syncBanner}>
-                    <Text style={styles.syncBannerText}>{syncBannerText}</Text>
-                </View>
-            )}
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
                 refreshControl={<AppRefreshControl />}
             >
+                <SyncBannerHost />
                 <View style={styles.header}>
                     <Image
                         source={require('../../../../../assets/images/ahlLogo.png')}
@@ -315,6 +306,11 @@ const TestScheduleScreen = () => {
                         </TouchableOpacity>
                     ))}
                 </View>
+                <View style={styles.lastSyncRow}>
+                    <Text style={styles.lastSyncText}>
+                        Last refresh: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
+                    </Text>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -353,6 +349,17 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 14,
         fontWeight: 'bold',
+    },
+    lastSyncRow: {
+        paddingHorizontal: 16,
+        paddingTop: 6,
+        paddingBottom: 18,
+        backgroundColor: '#000',
+    },
+    lastSyncText: {
+        color: '#ccc',
+        fontSize: 12,
+        textAlign: 'center',
     },
     headericon: {
         color: '#ff6600',

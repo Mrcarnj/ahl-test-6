@@ -11,8 +11,8 @@ import { useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
-import { fetchAndParseHockeySchedule } from '@/src/lib/icalHockeySync';
-import { emitSyncToast } from '@/src/lib/syncToast';
+import { withTimeout } from '@/src/lib/withTimeout';
+import SyncBannerHost from '@/src/components/SyncBannerHost';
 
 const screenWidth = Dimensions.get('window').width;
 const calendarWidth = screenWidth * 0.98;
@@ -28,7 +28,7 @@ export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
-  const { myGames, loading, refreshSchedule } = useSchedule();
+  const { myGames, loading, syncScheduleFromIcal } = useSchedule();
   const router = useRouter();
   const { syncStatus, refreshSyncStatus } = useHockeySync();
 
@@ -84,31 +84,14 @@ export default function CalendarScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    emitSyncToast({ type: 'info', message: 'Syncing schedule…' });
     try {
-      const result = await fetchAndParseHockeySchedule(false);
-      if (result.success) {
-        // Pull updated schedule rows after sync updates the backend schedule table
-        await refreshSchedule();
-        emitSyncToast({
-          type: 'success',
-          message: 'Schedule sync complete',
-          detail: `New: ${result.newGames ?? 0}, Updated: ${result.updatedGames ?? 0}`,
-        });
-      } else {
-        emitSyncToast({ type: 'error', message: 'Schedule sync failed', detail: result.error });
-      }
+      await withTimeout(syncScheduleFromIcal({ source: 'manual', showInBanner: true }), 65000, 'Schedule sync');
     } catch (error) {
       console.error('Sync error:', error);
-      emitSyncToast({
-        type: 'error',
-        message: 'Schedule sync failed',
-        detail: error instanceof Error ? error.message : 'Unknown error',
-      });
     } finally {
-      // Always reload persisted sync status so the "Last sync" line is consistent across devices.
-      await refreshSyncStatus();
       setRefreshing(false);
+      // Never block UI completion on AsyncStorage/status reads (some devices can hang).
+      void withTimeout(refreshSyncStatus(), 4000, 'Sync status refresh').catch(() => {});
     }
   };
 
@@ -138,6 +121,7 @@ export default function CalendarScreen() {
             />
           }
         >
+          <SyncBannerHost />
           <Calendar
             current={format(currentMonth, 'yyyy-MM-dd')}
             onMonthChange={onMonthChange}

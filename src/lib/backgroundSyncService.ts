@@ -28,10 +28,12 @@ export class BackgroundSyncService {
     
     // Set up app state listener
     this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
-    
-    // Perform initial sync check
-    await this.checkAndPerformSync();
-    
+
+    // NOTE:
+    // We intentionally do NOT perform an immediate sync here.
+    // Startup/foreground schedule sync is handled elsewhere (AuthProvider),
+    // and running here can duplicate network work and create race conditions.
+
     this.isInitialized = true;
     console.log('Background sync service initialized');
   }

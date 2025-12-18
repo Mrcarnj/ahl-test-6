@@ -1,13 +1,11 @@
 // providers/AuthProvider.tsx
 import { Session, User } from "@supabase/supabase-js";
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { DeviceEventEmitter } from 'react-native';
+import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from "react";
+import { AppState, AppStateStatus, DeviceEventEmitter } from 'react-native';
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
-import { performAutoSync } from '../lib/icalHockeySync';
 import { supabase } from "../lib/supabase";
 import { clearAllRosterCaches } from './RosterProvider';
 import { APP_REFRESH_EVENT } from '../lib/events';
-import { emitSyncToast } from '../lib/syncToast';
 
 type AuthContext = {
     session: Session | null;
@@ -21,6 +19,9 @@ const AuthContext = createContext<AuthContext>({
 
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
+    const [lastForegroundSyncAt, setLastForegroundSyncAt] = useState<number>(0);
+    const startupSyncTriggeredRef = useRef(false);
+    const lastBackgroundAtRef = useRef<number | null>(null);
 
     // const checkTosAcceptance = async (userId: string, skipRedirect = false) => {
     //     try {
@@ -79,36 +80,40 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // };
 
     const triggerLoginSync = async () => {
-        try {
-            console.log('🔄 AUTH: Triggering login sync...');
-            const result = await performAutoSync();
-            
-            if (result.success) {
-                if ('skipped' in result && result.skipped) {
-                    console.log('⏭️ AUTH: Login sync skipped - recent sync found');
-                } else {
-                    console.log('✅ AUTH: Login sync completed successfully');
-
-                    // If the sync applied changes, request a schedule refresh so the UI shows the latest data.
-                    const newGames = 'newGames' in result ? (result.newGames ?? 0) : 0;
-                    const updatedGames = 'updatedGames' in result ? (result.updatedGames ?? 0) : 0;
-                    if (newGames > 0 || updatedGames > 0) {
-                        emitSyncToast({
-                            type: 'success',
-                            message: 'Schedule updated in background',
-                            detail: `New: ${newGames}, Updated: ${updatedGames}`,
-                        });
-                        DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'login_sync' });
-                    }
-                }
-            } else {
-                const errorMsg = 'error' in result ? result.error : 'Unknown error';
-                console.error('❌ AUTH: Login sync failed:', errorMsg);
-            }
-        } catch (error) {
-            console.error('❌ AUTH: Login sync error:', error);
-        }
+        // Schedule sync is orchestrated by ScheduleProvider so we have one consistent pipeline
+        // (iCal sync -> DB refresh -> stats/standings -> banner status).
+        console.log('🔄 AUTH: Startup requested; schedule sync handled by ScheduleProvider');
+        DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'auth_startup' });
     };
+
+    // On app foreground, request a schedule sync refresh (debounced).
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', async (next: AppStateStatus) => {
+            if (next === 'background' || next === 'inactive') {
+                lastBackgroundAtRef.current = Date.now();
+                return;
+            }
+            if (next !== 'active') return;
+            if (!session?.user) return;
+
+            // Only force a “freshen up” sync if we were away long enough.
+            const lastBg = lastBackgroundAtRef.current;
+            if (lastBg && Date.now() - lastBg < 10 * 60 * 1000) {
+                return;
+            }
+
+            const now = Date.now();
+            // Debounce to avoid re-syncing too frequently when users bounce in/out quickly.
+            if (now - lastForegroundSyncAt < 5 * 60 * 1000) {
+                return;
+            }
+            setLastForegroundSyncAt(now);
+
+            DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'foreground', blocking: true });
+        });
+
+        return () => sub.remove();
+    }, [session?.user, lastForegroundSyncAt]);
 
     useEffect(() => {
         const setupAuth = async () => {
@@ -127,7 +132,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     // Trigger sync for stored session (app startup)
                     if (parsedSession.user) {
                         console.log('🔄 AUTH: App started with stored session, triggering sync...');
-                        triggerLoginSync();
+                        if (!startupSyncTriggeredRef.current) {
+                            startupSyncTriggeredRef.current = true;
+                            triggerLoginSync();
+                        }
                     }
                 }
 
@@ -141,7 +149,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     await safeAsyncStorage.setItem('session', JSON.stringify(currentSession));
                     // Trigger sync for current session (app startup)
                     console.log('🔄 AUTH: App started with current session, triggering sync...');
-                    triggerLoginSync();
+                    if (!startupSyncTriggeredRef.current) {
+                        startupSyncTriggeredRef.current = true;
+                        triggerLoginSync();
+                    }
                 }
 
                 // Set up auth listener

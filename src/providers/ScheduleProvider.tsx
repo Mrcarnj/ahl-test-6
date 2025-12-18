@@ -10,10 +10,12 @@ import {
     syncPlayerStats,
     syncTeamStandings,
 } from "../lib/playerStatsSync";
+import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
 import { sendGameChangeNotification } from "../lib/notificationService";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 import { APP_REFRESH_EVENT } from "../lib/events";
+import { withTimeout } from "../lib/withTimeout";
 
 // Import or define interfaces
 export interface Roster {
@@ -106,8 +108,20 @@ type ScheduleContext = {
     syncingSchedule: boolean;
     syncingStats: boolean;
     syncingStandings: boolean;
+    scheduleSyncStatus: {
+        status: 'idle' | 'running' | 'success' | 'error';
+        source?: 'startup' | 'foreground' | 'manual' | 'other';
+        showInBanner?: boolean;
+        newGames?: number;
+        updatedGames?: number;
+        skippedGames?: number;
+        error?: string;
+        finishedAt?: number;
+    };
+    blockingOverlayVisible: boolean;
     error: string | null;
     refreshSchedule: () => Promise<{ success: boolean; error?: string }>;
+    syncScheduleFromIcal: (options?: { blocking?: boolean; source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }) => Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }>;
     realtimeEnabled: boolean;
 };
 
@@ -120,8 +134,11 @@ const ScheduleContext = createContext<ScheduleContext>({
     syncingSchedule: false,
     syncingStats: false,
     syncingStandings: false,
+    scheduleSyncStatus: { status: 'idle', source: 'other', showInBanner: false },
+    blockingOverlayVisible: false,
     error: null,
     refreshSchedule: async () => ({ success: false }),
+    syncScheduleFromIcal: async () => ({ success: false }),
     realtimeEnabled: false,
 });
 
@@ -132,6 +149,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [loading, setLoading] = useState(false);
     const [syncingStats, setSyncingStats] = useState(false);
     const [syncingStandings, setSyncingStandings] = useState(false);
+    const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContext['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
+    const [blockingOverlayVisible, setBlockingOverlayVisible] = useState(false);
+    const blockingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -153,25 +173,33 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             const fetchStart = Date.now();
             
             // Fetch all games with team data
-            const { data: scheduleData, error: scheduleError } = await supabase
-                .from('schedule')
-                .select(`
-                    *,
-                    homeTeamData:teams!schedule_hometeam_fkey(*),
-                    awayTeamData:teams!schedule_awayteam_fkey(*)
-                `)
-                .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
-                .order('gamedate', { ascending: true })
-                .order('gametime', { ascending: true });
+            const { data: scheduleData, error: scheduleError } = await withTimeout(
+                supabase
+                    .from('schedule')
+                    .select(`
+                        *,
+                        homeTeamData:teams!schedule_hometeam_fkey(*),
+                        awayTeamData:teams!schedule_awayteam_fkey(*)
+                    `)
+                    .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
+                    .order('gamedate', { ascending: true })
+                    .order('gametime', { ascending: true }),
+                20000,
+                'Schedule fetch'
+            );
                 
             console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
     
             console.log('👥 SCHEDULE: Fetching team rosters data...');
             const rostersStart = Date.now();
             
-            const { data: rostersData, error: rostersError } = await supabase
-                .from('teamRosters')
-                .select('*');
+            const { data: rostersData, error: rostersError } = await withTimeout(
+                supabase
+                    .from('teamRosters')
+                    .select('*'),
+                20000,
+                'Team rosters fetch'
+            );
                 
             console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms`);
     
@@ -248,6 +276,76 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         } finally {
             setSyncingStats(false);
             setSyncingStandings(false);
+        }
+    };
+
+    const syncScheduleFromIcal = async (options?: { blocking?: boolean; source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }): Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }> => {
+        if (!roster?.auth_id) {
+            return { success: false, error: 'No user roster/auth_id' };
+        }
+
+        // If already syncing, don't start another
+        if (scheduleSyncStatus.status === 'running') {
+            return { success: false, error: 'Schedule sync already in progress' };
+        }
+
+        const source = options?.source ?? 'other';
+        const showInBanner = options?.showInBanner ?? false;
+
+        if (options?.blocking) {
+            if (blockingHideTimerRef.current) {
+                clearTimeout(blockingHideTimerRef.current);
+                blockingHideTimerRef.current = null;
+            }
+            setBlockingOverlayVisible(true);
+        }
+        setScheduleSyncStatus({ status: 'running', source, showInBanner });
+
+        try {
+            // 1) Fetch + parse + upsert schedule from iCal
+            const result = await withTimeout(
+                fetchAndParseHockeySchedule(false, roster.auth_id),
+                45000,
+                'Schedule iCal sync'
+            );
+
+            if (!result?.success) {
+                const msg = result?.error || 'Unknown schedule sync error';
+                setScheduleSyncStatus({ status: 'error', source, showInBanner, error: msg, finishedAt: Date.now() });
+                return { success: false, error: msg };
+            }
+
+            // 2) Refresh schedule rows so UI shows latest DB state
+            await withTimeout(fetchSchedule(), 20000, 'Schedule fetch after iCal sync');
+
+            const summary = {
+                status: 'success' as const,
+                source,
+                showInBanner,
+                newGames: result.newGames ?? 0,
+                updatedGames: result.updatedGames ?? 0,
+                skippedGames: result.skippedGames ?? 0,
+                finishedAt: Date.now(),
+            };
+            setScheduleSyncStatus(summary);
+
+            // 3) Stats/standings sync (24h gated), non-blocking
+            void runBackgroundSyncs();
+
+            return { success: true, ...summary };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Unknown schedule sync error';
+            setScheduleSyncStatus({ status: 'error', source, showInBanner, error: msg, finishedAt: Date.now() });
+            return { success: false, error: msg };
+        } finally {
+            if (options?.blocking) {
+                // Keep the blocking overlay up briefly after completion so users see the result,
+                // then dismiss everything at once.
+                blockingHideTimerRef.current = setTimeout(() => {
+                    setBlockingOverlayVisible(false);
+                    blockingHideTimerRef.current = null;
+                }, 5000);
+            }
         }
     };
     
@@ -390,11 +488,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         if (roster?.lastfirstfullname && !loading && !isRefreshing) {
             console.log('👤 Roster data changed, triggering schedule fetch...');
             console.log('📋 Current state - loading:', loading, 'refreshing:', isRefreshing);
-            fetchSchedule();
-            
-            // Also run player stats sync on first load (but not on manual refresh)
-            // This runs in the background and doesn't block the UI
-            runBackgroundSyncs();
+            // IMPORTANT:
+            // Run iCal sync first, then fetch schedule, so initial UI reflects newly inserted games.
+            void syncScheduleFromIcal({ blocking: true, source: 'startup', showInBanner: false });
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
@@ -424,14 +520,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     );
                     
                     // Attempt to refresh with timeout protection
-                    await Promise.race([fetchSchedule(), timeoutPromise])
+                    await Promise.race([syncScheduleFromIcal({ blocking: !!data?.blocking, source: data?.source ? 'foreground' : 'other', showInBanner: false }), timeoutPromise])
                         .catch(error => {
                             console.error('❌ SCHEDULE: Background refresh timed out or failed:', error);
                         });
                     
-                    // Also run player stats sync on app refresh (daily refresh)
-                    // This runs in the background and doesn't block the UI
-                    runBackgroundSyncs();
+                    // runBackgroundSyncs is triggered after a successful iCal schedule sync
                         
                     console.log('✅ SCHEDULE: Background refresh complete');
                 } catch (error) {
@@ -474,6 +568,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             const result = await Promise.race([fetchSchedule(), timeoutPromise]) as { success: boolean; error?: string };
                 
             console.log('✅ SCHEDULE: Manual refresh complete');
+
+            // After schedule refresh, run stats/standings syncs (24h gated).
+            // Do NOT block the UI on these; they can take time.
+            if (result?.success) {
+                void runBackgroundSyncs();
+            }
             return result;
         } catch (error) {
             console.error('❌ SCHEDULE: Manual refresh error:', error);
@@ -493,11 +593,14 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             teamRosters,
             loading: loading || isRefreshing,
             syncingPlayerStats: syncingStats || syncingStandings,
-            syncingSchedule: loading || isRefreshing,
+            syncingSchedule: loading || isRefreshing || scheduleSyncStatus.status === 'running',
             syncingStats,
             syncingStandings,
+            scheduleSyncStatus,
+            blockingOverlayVisible,
             error,
             refreshSchedule,
+            syncScheduleFromIcal,
             realtimeEnabled
         }}>
             {children}

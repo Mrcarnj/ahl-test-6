@@ -1,6 +1,7 @@
 //src/providers/RosterProvider.tsx
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
+import { withTimeout } from '../lib/withTimeout';
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
 
@@ -105,18 +106,26 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setError(null);
 
             // Fetch user's roster
-            const { data: userRosterData, error: userRosterError } = await supabase
-                .from('roster')
-                .select('*')
-                .eq('auth_id', user.id)
-                .single();
+            const { data: userRosterData, error: userRosterError } = await withTimeout(
+                supabase
+                    .from('roster')
+                    .select('*')
+                    .eq('auth_id', user.id)
+                    .single(),
+                12000,
+                'Roster fetch'
+            );
 
             if (userRosterError) throw userRosterError;
 
             // Fetch all rosters
-            const { data: allRostersData, error: allRostersError } = await supabase
-                .from('roster')
-                .select('*');
+            const { data: allRostersData, error: allRostersError } = await withTimeout(
+                supabase
+                    .from('roster')
+                    .select('*'),
+                15000,
+                'All rosters fetch'
+            );
 
             if (allRostersError) throw allRostersError;
 

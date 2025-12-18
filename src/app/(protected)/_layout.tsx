@@ -4,7 +4,7 @@ import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
 import { NotificationProvider } from "../../providers/NotificationProvider";
 import { FontAwesome } from '@expo/vector-icons';
-import SyncToastHost from '@/src/components/SyncToastHost';
+import SyncBlockingOverlayHost from '@/src/components/SyncBlockingOverlayHost';
 
 // Define the type for our route params
 type GameRouteParams = {
@@ -22,7 +22,7 @@ export default function ProtectedLayout() {
     <NotificationProvider>
       <RosterProvider>
         <ScheduleProvider>
-          <SyncToastHost />
+          <SyncBlockingOverlayHost />
           <Stack>
             <Stack.Screen 
               name="(tabs)" 

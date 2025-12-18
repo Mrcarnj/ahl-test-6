@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { backgroundSyncService } from '../lib/backgroundSyncService';
 import { fetchAndParseHockeySchedule } from '../lib/icalHockeySync';
+import { withTimeout } from '../lib/withTimeout';
 
 export interface SyncStatus {
   lastSyncTime: Date | null;
@@ -45,7 +46,7 @@ export function useHockeySync() {
 
   const loadSyncStatus = async () => {
     try {
-      const status = await backgroundSyncService.getSyncStatus();
+      const status = await withTimeout(backgroundSyncService.getSyncStatus(), 4000, 'Load sync status');
       setSyncStatus(status);
     } catch (error) {
       console.error('Error loading sync status:', error);

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { RefreshControl } from 'react-native';
-import { emitSyncToast } from '@/src/lib/syncToast';
+import { withTimeout } from '@/src/lib/withTimeout';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 
@@ -11,7 +11,7 @@ interface AppRefreshControlProps {
 
 /**
  * A custom RefreshControl component that performs a real refresh of
- * key app data and shows a success/failure cue via the global SyncToast.
+ * key app data.
  */
 export const AppRefreshControl: React.FC<AppRefreshControlProps> = ({ 
   colors = ['#ff6600'], 
@@ -19,41 +19,30 @@ export const AppRefreshControl: React.FC<AppRefreshControlProps> = ({
 }) => {
   const [refreshing, setRefreshing] = useState(false);
   const { refreshRoster } = useRoster();
-  const { refreshSchedule } = useSchedule();
+  const { syncScheduleFromIcal } = useSchedule();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    emitSyncToast({ type: 'info', message: 'Refreshing…' });
-
     try {
-      const [rosterRes, scheduleRes] = await Promise.all([
-        refreshRoster(),
-        refreshSchedule(),
-      ]);
+      // Manual refresh flow:
+      // 1) Run iCal schedule sync (always)
+      // 2) Refresh roster
+      const syncResult = await withTimeout(syncScheduleFromIcal({ source: 'manual', showInBanner: true }), 65000, 'Schedule sync');
+      const rosterRes = await withTimeout(refreshRoster(), 15000, 'Roster refresh');
 
       const errors: string[] = [];
       if (!rosterRes.success) errors.push(rosterRes.error || 'Roster refresh failed');
-      if (!scheduleRes.success) errors.push(scheduleRes.error || 'Schedule refresh failed');
+      if (!syncResult.success) errors.push(syncResult.error || 'Schedule sync failed');
 
       if (errors.length > 0) {
-        emitSyncToast({
-          type: 'error',
-          message: 'Refresh failed',
-          detail: errors.join('\n'),
-        });
-      } else {
-        emitSyncToast({ type: 'success', message: 'Refresh complete' });
+        console.error('Refresh failed:', errors.join(' | '));
       }
     } catch (e) {
-      emitSyncToast({
-        type: 'error',
-        message: 'Refresh failed',
-        detail: e instanceof Error ? e.message : 'Unknown error',
-      });
+      console.error('Refresh failed:', e);
     } finally {
       setRefreshing(false);
     }
-  }, [refreshRoster, refreshSchedule]);
+  }, [refreshRoster, syncScheduleFromIcal]);
 
   return (
     <RefreshControl

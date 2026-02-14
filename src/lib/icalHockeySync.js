@@ -401,17 +401,60 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     // For example: 20:00:00Z should be 16:00:00Z (4pm UTC, not 8pm UTC) during DST
     //             20:00:00Z should be 15:00:00Z (3pm UTC, not 8pm UTC) during standard time
     
-    // Determine if DST is in effect for this date
-    const gameDate = new Date(`${year}-${month}-${day}T12:00:00Z`);
-    const isDST = isDaylightSavingTime(gameDate);
+    // First, calculate what the local date would be using standard time (5 hour correction)
+    // This helps us determine the actual game date, which we then use to check DST
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+    const dayNum = parseInt(day, 10);
+    const hourNum = parseInt(hour, 10);
+    
+    // Calculate local date/time assuming standard time first
+    let tempHour = hourNum - 5; // Assume standard time (5 hour correction)
+    let tempDay = dayNum;
+    let tempMonth = monthNum;
+    let tempYear = yearNum;
+    
+    // Handle day rollover
+    if (tempHour < 0) {
+      tempHour += 24;
+      tempDay -= 1;
+      if (tempDay < 1) {
+        tempMonth -= 1;
+        if (tempMonth < 1) {
+          tempMonth = 12;
+          tempYear -= 1;
+        }
+        const lastDayOfMonth = new Date(tempYear, tempMonth, 0).getDate();
+        tempDay = lastDayOfMonth;
+      }
+    }
+    
+    // Now check DST based on the LOCAL game date (not the iCal UTC date)
+    // DST starts at 2:00 AM on the second Sunday of March
+    const isDST = isDaylightSavingTime(tempYear, tempMonth, tempDay, tempHour);
     const timeCorrection = isDST ? 4 : 5;
     
-    console.log(`   DST Status: ${isDST ? 'DST active' : 'Standard time'} (correction: ${timeCorrection} hours)`);
+    // Enhanced logging for debugging DST issues
+    const secondSundayMar = getSecondSundayOfMonth(tempYear, 3);
+    const firstSundayMar = getFirstSundayOfMonth(tempYear, 3);
+    console.log(`   iCal UTC Date: ${year}-${month}-${day} ${hour}:${minute}`);
+    console.log(`   Local Game Date (after std time calc): ${tempYear}-${String(tempMonth).padStart(2, '0')}-${String(tempDay).padStart(2, '0')} at ${String(tempHour).padStart(2, '0')}:${minute}`);
+    console.log(`   DST Calculation based on LOCAL date:`);
+    console.log(`     First Sunday in March ${tempYear}: ${firstSundayMar}`);
+    console.log(`     Second Sunday in March ${tempYear}: ${secondSundayMar}`);
+    console.log(`     Local day of month: ${tempDay}`);
+    console.log(`     Local hour: ${tempHour}`);
+    if (tempMonth === 3 && tempDay === secondSundayMar) {
+      console.log(`     On second Sunday - checking if hour >= 2: ${tempHour >= 2 ? 'Yes (DST)' : 'No (Standard time)'}`);
+    }
+    console.log(`     DST Status: ${isDST ? 'DST active (4hr correction)' : 'Standard time (5hr correction)'}`);
+    console.log(`     Time correction applied: ${timeCorrection} hours`);
     
-    let correctedHour = parseInt(hour, 10) - timeCorrection;
-    let correctedDay = parseInt(day, 10);
-    let correctedMonth = parseInt(month, 10);
-    let correctedYear = parseInt(year, 10);
+    // Now apply the correct time correction
+    let correctedHour = hourNum - timeCorrection;
+    let correctedDay = dayNum;
+    let correctedMonth = monthNum;
+    let correctedYear = yearNum;
     
     // Handle day rollover when hour goes negative
     if (correctedHour < 0) {
@@ -514,28 +557,48 @@ function cleanLocation(location) {
     .trim();
 }
 
-function isDaylightSavingTime(date) {
+function isDaylightSavingTime(year, month, day, hour = null) {
   // DST in the US typically runs from the second Sunday in March to the first Sunday in November
-  // This is a simplified calculation that should work for most cases
+  // This function now accepts year, month, day directly to avoid timezone issues with Date objects
+  // month and day are expected to be 1-based (e.g., March = 3, not 2)
+  // hour is optional and should be 0-23 (local time)
   
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1; // 1-based month
-  const day = date.getDate();
-  
-  // DST typically ends on the first Sunday in November (clocks fall back)
-  // DST typically starts on the second Sunday in March (clocks spring forward)
+  // DST typically ends on the first Sunday in November at 2:00 AM (clocks fall back)
+  // DST typically starts on the second Sunday in March at 2:00 AM (clocks spring forward)
+  // Note: DST starts at 2:00 AM, so times before 2:00 AM on the second Sunday are still standard time
   
   // If we're in November or later in the year, check if we're before the first Sunday
   if (month >= 11) {
     const firstSundayNov = getFirstSundayOfMonth(year, 11);
+    // If it's the first Sunday but before 2:00 AM, still in DST (clocks fall back at 2 AM)
+    if (day === firstSundayNov && hour !== null && hour < 2) {
+      return true; // Still DST before 2 AM
+    }
     return day < firstSundayNov;
   }
   
-  // If we're in March or later but before November, check if we're after the second Sunday in March
+  // If we're in March or later but before November, check if we're on or after the second Sunday in March
   if (month >= 3 && month < 11) {
     const secondSundayMar = getSecondSundayOfMonth(year, 3);
-    const marchDate = month === 3 ? day : 32; // 32 will always be > any March date
-    return marchDate >= secondSundayMar;
+    // For March, check if the day is on or after the second Sunday
+    if (month === 3) {
+      // March: day must be > secondSundayMar, or == secondSundayMar and hour >= 2
+      if (day > secondSundayMar) {
+        return true; // After the second Sunday
+      } else if (day === secondSundayMar) {
+        // On the second Sunday: DST starts at 2:00 AM
+        if (hour !== null) {
+          return hour >= 2; // DST if 2 AM or later
+        }
+        // If hour not provided, assume DST for the whole day (conservative)
+        return true;
+      } else {
+        return false; // Before the second Sunday
+      }
+    } else {
+      // April through October: always in DST
+      return true;
+    }
   }
   
   // January and February are definitely standard time

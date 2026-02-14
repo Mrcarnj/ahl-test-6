@@ -6,70 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendGameChangeNotification } from './notificationService';
 import { supabase } from './supabase';
 
-// ------------------------------------------------------------
-// Cache/versioning
-// ------------------------------------------------------------
-// NOTE: Do NOT clear auth/session storage here. Only clear hockey-sync specific keys.
-const HOCKEY_SYNC_CACHE_VERSION = 1;
-const HOCKEY_SYNC_CACHE_VERSION_KEY = 'hockey_sync_cache_version';
-const SCHEDULE_SYNC_PAST_DAYS = 14; // Only process games from the last N days onward (speeds up sync)
-let hockeySyncCacheVersionEnsured = false;
-let hockeySyncInFlight = null;
-
-async function ensureHockeySyncCacheVersion() {
-  if (hockeySyncCacheVersionEnsured) return;
-
-  try {
-    const storedVersion = await AsyncStorage.getItem(HOCKEY_SYNC_CACHE_VERSION_KEY);
-    const expected = String(HOCKEY_SYNC_CACHE_VERSION);
-
-    if (storedVersion !== expected) {
-      console.log(
-        `🧹 HOCKEY SYNC: Cache version mismatch (stored=${storedVersion}, expected=${expected}) - clearing hockey sync storage keys`
-      );
-
-      const keysToRemove = [
-        HOCKEY_SYNC_CACHE_VERSION_KEY,
-        SYNC_STORAGE_KEYS.LAST_SYNC,
-        SYNC_STORAGE_KEYS.SYNC_COUNT,
-        SYNC_STORAGE_KEYS.LAST_ERROR,
-        'hockey_sync_log',
-      ];
-
-      if (AsyncStorage.multiRemove) {
-        await AsyncStorage.multiRemove(keysToRemove);
-      } else {
-        // Fallback for older AsyncStorage implementations
-        for (const k of keysToRemove) {
-          try {
-            await AsyncStorage.removeItem(k);
-          } catch (e) {
-            // swallow
-          }
-        }
-      }
-
-      await AsyncStorage.setItem(HOCKEY_SYNC_CACHE_VERSION_KEY, expected);
-    }
-
-    hockeySyncCacheVersionEnsured = true;
-  } catch (error) {
-    console.error('HOCKEY SYNC: Error ensuring cache version:', error);
-    // Don't throw; syncing should still work without cache/version metadata.
-  }
-}
-
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false, userId = null) {
-  // Deduplicate normal sync runs so we don't accidentally run multiple heavy syncs at once.
-  if (!testMode && hockeySyncInFlight) {
-    return hockeySyncInFlight;
-  }
-
-  const run = (async () => {
   try {
-    await ensureHockeySyncCacheVersion();
-
     // Get the user's iCal URL from the roster table
     if (!userId || userId === undefined) {
       // If no userId provided, try to get current user from session
@@ -99,14 +38,11 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     console.log(`🌐 Using user's iCal URL: ${icalUrl}`);
     
     console.log('🌐 Fetching iCal data from HorizonWebRef...');
-    const controller = new AbortController();
-    const fetchTimeout = setTimeout(() => controller.abort(), 20000);
     const response = await fetch(icalUrl, {
       headers: {
         'User-Agent': 'DietrichApp/v1.0.1'
-      },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(fetchTimeout));
+      }
+    });
     const icalText = await response.text();
     
     console.log(`📄 iCal data received: ${icalText.length} characters`);
@@ -130,16 +66,28 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
         filteredGames.push(game);
         console.log(`✅ Including game ${game.gameId} - organizer: ${game.organizer}`);
       } else if (game.organizer === "Riley Yerkovich") {
-        // Parse the game date from the start time
-        if (!game.startTime || typeof game.startTime !== 'string' || !game.startTime.includes('T')) {
-          console.warn(`⏭️ ICAL: Skipping game ${game.gameId || 'unknown'} - invalid startTime`, {
-            reason: 'invalid_startTime',
-            gameId: game.gameId || null,
-            organizer: game.organizer || null,
-            startTime: game.startTime ?? null,
-          });
+        // Check if startTime is valid before parsing
+        if (!game.startTime) {
+          console.error('🚨 ========== MISSING STARTTIME DIAGNOSTIC DATA ==========');
+          console.error(`Game ID: ${game.gameId || 'unknown'}`);
+          console.error(`Organizer: ${game.organizer || 'unknown'}`);
+          console.error(`Home Team: ${game.homeTeam || 'null'}`);
+          console.error(`Away Team: ${game.awayTeam || 'null'}`);
+          console.error(`Raw DTSTART: ${game._rawDtstart || 'null'}`);
+          console.error(`Raw DTEND: ${game._rawDtend || 'null'}`);
+          console.error(`Raw Description: ${game._rawDescription || 'null'}`);
+          console.error(`Game Code: ${game.gameCode || 'null'}`);
+          console.error(`Venue: ${game.venue || 'null'}`);
+          console.error(`UID: ${game.uid || 'null'}`);
+          console.error(`End Time: ${game.endTime || 'null'}`);
+          console.error(`Referees: ${JSON.stringify(game.referees || [])}`);
+          console.error(`Linespeople: ${JSON.stringify(game.linespeople || [])}`);
+          console.error('🚨 ========== END DIAGNOSTIC DATA ==========');
+          // Still skip to prevent crash, but now we have all the data
           continue;
         }
+        
+        // Parse the game date from the start time
         const gameDate = new Date(game.startTime.split('T')[0]);
         
         if (gameDate >= cutoffDate) {
@@ -152,28 +100,10 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
         console.log(`⏭️ Skipping game ${game.gameId || 'unknown'} - organizer: ${game.organizer || 'not found'}`);
       }
     }
-
-    // Further reduce work: only process games from the last N days onward.
-    // This keeps the schedule current without re-processing old completed games.
-    const minDate = new Date();
-    minDate.setHours(0, 0, 0, 0);
-    minDate.setDate(minDate.getDate() - SCHEDULE_SYNC_PAST_DAYS);
-
-    const windowedGames = filteredGames.filter((g) => {
-      try {
-        const dateStr = (g.startTime || '').split('T')[0];
-        if (!dateStr) return false;
-        const gameDate = new Date(`${dateStr}T00:00:00`);
-        return gameDate >= minDate;
-      } catch {
-        return false;
-      }
-    });
-    console.log(`🗓️ Windowed games: ${windowedGames.length}/${filteredGames.length} (from ${minDate.toISOString().split('T')[0]} onward)`);
     
     // Process only the filtered games for database
     const processedGames = [];
-    for (const game of windowedGames) {
+    for (const game of filteredGames) {
       const dbGame = await convertToDbFormat(game);
       if (dbGame) {
         processedGames.push(dbGame);
@@ -194,10 +124,6 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     
     // Upload to database
     const results = await upsertGamesToDatabase(processedGames);
-
-    // Persist last sync time for ALL successful manual syncs (not just auto sync).
-    // This is used across screens to consistently display "Last sync".
-    await setLastSyncTime();
     
     return {
       success: true,
@@ -215,30 +141,8 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     
   } catch (error) {
     console.error('Hockey schedule sync error:', error);
-
-    // Best-effort persist last error for debugging/UI.
-    try {
-      await ensureHockeySyncCacheVersion();
-      await AsyncStorage.setItem(
-        SYNC_STORAGE_KEYS.LAST_ERROR,
-        (error && error.message) ? String(error.message) : String(error)
-      );
-    } catch (e) {
-      // swallow
-    }
-
     return { success: false, error: error.message };
   }
-  })();
-
-  if (!testMode) {
-    hockeySyncInFlight = run.finally(() => {
-      hockeySyncInFlight = null;
-    });
-    return hockeySyncInFlight;
-  }
-
-  return run;
 }
 
 async function parseIcalToGames(icalText) {
@@ -271,7 +175,6 @@ async function parseEvent(eventText) {
     const dtend = extractField(eventText, 'DTEND');
     const location = extractField(eventText, 'LOCATION');
     const description = extractField(eventText, 'DESCRIPTION');
-    const summary = extractField(eventText, 'SUMMARY');
     // Try multiple organizer patterns
     let organizer = extractField(eventText, 'ORGANIZER;CN="(.+?)"');
     if (!organizer) {
@@ -296,51 +199,10 @@ async function parseEvent(eventText) {
     
     // Parse description for game details
     const gameDetails = parseDescription(description);
-    if ((!gameDetails?.homeTeam || !gameDetails?.awayTeam) && summary) {
-      const teamsFromSummary = parseTeamsFromSummary(summary);
-      if (teamsFromSummary) {
-        gameDetails.homeTeam = gameDetails.homeTeam || teamsFromSummary.homeTeam;
-        gameDetails.awayTeam = gameDetails.awayTeam || teamsFromSummary.awayTeam;
-      }
-    }
-
-    // If we can't extract essential game info, skip this VEVENT.
-    // This prevents invalid inserts (e.g. awayteam/hometeam NOT NULL in DB).
-    if (!gameDetails?.gameId || !gameDetails?.homeTeam || !gameDetails?.awayTeam) {
-      console.warn('⚠️ ICAL: Skipping VEVENT due to missing required game details', {
-        reason: 'missing_game_details',
-        uid,
-        organizer,
-        dtstart,
-        dtend,
-        summary: summary ?? null,
-        descriptionPreview: typeof description === 'string' ? description.slice(0, 180) : null,
-        gameId: gameDetails?.gameId ?? null,
-        homeTeam: gameDetails?.homeTeam ?? null,
-        awayTeam: gameDetails?.awayTeam ?? null,
-      });
-      return null;
-    }
     
     // Convert times to home team's timezone
     const startTime = await convertIcalTimeToTeamTimezone(dtstart, gameDetails.homeTeam);
     const endTime = await convertIcalTimeToTeamTimezone(dtend, gameDetails.homeTeam);
-
-    // If we can't derive a usable time (bad/malformed event), skip it.
-    if (!startTime) {
-      console.warn('⚠️ ICAL: Skipping VEVENT due to missing/invalid startTime', {
-        reason: 'invalid_startTime',
-        uid,
-        organizer,
-        dtstart,
-        dtend,
-        summary: summary ?? null,
-        gameId: gameDetails.gameId,
-        homeTeam: gameDetails.homeTeam,
-        awayTeam: gameDetails.awayTeam,
-      });
-      return null;
-    }
     
     return {
       uid: uid,
@@ -350,11 +212,14 @@ async function parseEvent(eventText) {
       startTime: startTime,
       endTime: endTime,
       venue: cleanLocation(location),
-      summary: summary || null,
       gameCode: gameDetails.gameCode,
       referees: gameDetails.referees,
       linespeople: gameDetails.linespeople,
-      organizer: organizer || 'Unknown'
+      organizer: organizer || 'Unknown',
+      // Store raw iCal data for debugging
+      _rawDtstart: dtstart,
+      _rawDtend: dtend,
+      _rawDescription: description
     };
     
   } catch (error) {
@@ -389,20 +254,29 @@ function parseDescription(description) {
     .replace(/\s+/g, ' ') // Replace multiple spaces with single space
     .trim();
   
-  // Extract teams from lines like "San Jose @ Bakersfield" (handle line breaks)
+  // Extract teams from lines like "San Jose @ Bakersfield" or "Wilkes-Barre @ Lehigh Valley"
   // Look for the pattern after the synchronizer text
-  const teamMatch = cleanDesc.match(/Schedule Synchronizer\s+([A-Za-z\s.'&-]+?)\s@\s([A-Za-z\s.'&-]+?)\s+Game Code/i);
+  // Pattern: "Schedule Synchronizer" followed by teams "Away @ Home" followed by "Game Code"
+  // Team names can include hyphens, spaces, and apostrophes
+  // Make the regex more flexible - allow for "Game Code:" or just "Game Code"
+  const teamMatch = cleanDesc.match(/Schedule Synchronizer\s+([A-Za-z\s'-]+?)\s@\s([A-Za-z\s'-]+?)\s+Game Code:?/i);
   let awayTeam = null, homeTeam = null;
   
   if (teamMatch) {
     awayTeam = teamMatch[1].trim();
     homeTeam = teamMatch[2].trim();
+    console.log(`✅ Extracted teams: "${awayTeam}" @ "${homeTeam}"`);
   } else {
-    // Fallback: sometimes the iCal description doesn't include the "Schedule Synchronizer" prefix
-    const fallbackMatch = cleanDesc.match(/([A-Za-z\s.'&-]+?)\s@\s([A-Za-z\s.'&-]+?)\s+Game Code/i);
-    if (fallbackMatch) {
-      awayTeam = fallbackMatch[1].trim();
-      homeTeam = fallbackMatch[2].trim();
+    // Debug: log what we're trying to match
+    console.error('❌ Failed to extract teams from description. Pattern not found.');
+    console.error('Raw description:', description);
+    console.error('Cleaned description:', cleanDesc);
+    console.error('Looking for pattern: /Schedule Synchronizer\\s+([A-Za-z\\s\'-]+?)\\s@\\s([A-Za-z\\s\'-]+?)\\s+Game Code:?/i');
+    
+    // Try alternative patterns
+    const altMatch1 = cleanDesc.match(/([A-Za-z\s'-]+?)\s@\s([A-Za-z\s'-]+?)\s+Game Code:?/i);
+    if (altMatch1) {
+      console.error('Alternative match found (without "Schedule Synchronizer"):', altMatch1);
     }
   }
   
@@ -456,69 +330,110 @@ function parseDescription(description) {
   };
 }
 
-function parseTeamsFromSummary(summary) {
-  try {
-    if (!summary || typeof summary !== 'string') return null;
-    // Find the first "Away @ Home" pattern in SUMMARY
-    const match = summary.match(/([A-Za-z\s.'&-]+?)\s@\s([A-Za-z\s.'&-]+?)(?:\s|$)/i);
-    if (!match) return null;
-    return {
-      awayTeam: match[1].trim(),
-      homeTeam: match[2].trim(),
-    };
-  } catch {
-    return null;
-  }
-}
-
 async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
   // Input format: "20251004T200000Z" (UTC)
   // Convert to team's local timezone dynamically
   
-  if (!icalTime) return null;
+  if (!icalTime || !homeTeam) {
+    console.error('🚨 convertIcalTimeToTeamTimezone returning null:');
+    console.error(`  icalTime: ${icalTime === null ? 'null' : icalTime === undefined ? 'undefined' : `"${icalTime}"`}`);
+    console.error(`  homeTeam: ${homeTeam === null ? 'null' : homeTeam === undefined ? 'undefined' : `"${homeTeam}"`}`);
+    return null;
+  }
   
   try {
+    console.log(`🔍 Looking up timezone for team: "${homeTeam}"`);
+    
+    // Look up the home team's timezone from the teams table
+    // Try multiple lookup strategies since iCal might use different naming
+    let teamData = null;
+    
+    // Strategy 1: Try exact match with city
+    const { data: cityMatch } = await supabase
+      .from('teams')
+      .select('timezone, city')
+      .eq('city', homeTeam)
+      .single();
+    
+    if (cityMatch) {
+      teamData = cityMatch;
+      console.log(`✅ Found exact city match: "${cityMatch.city}"`);
+    } else {
+      // Strategy 2: Try partial match (e.g., "Bakersfield" might match "Bakersfield Condors")
+      const { data: partialMatch } = await supabase
+        .from('teams')
+        .select('timezone, city')
+        .ilike('city', `%${homeTeam}%`)
+        .single();
+      
+      if (partialMatch) {
+        teamData = partialMatch;
+        console.log(`✅ Found partial city match: "${partialMatch.city}"`);
+      } else {
+        console.log(`❌ No city match found for: "${homeTeam}"`);
+      }
+    }
+    
+    if (!teamData || !teamData.timezone) {
+      console.warn(`No timezone found for team: ${homeTeam}, using UTC as fallback`);
+      return icalTime; // Return original UTC time if no timezone found
+    }
+    
+    const teamTimezone = teamData.timezone;
+    
     // Parse the iCal time format - handle both UTC (Z) and timezone offset formats
     const timeMatch = icalTime.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z|[+-]\d{2})$/);
     if (!timeMatch) {
       console.warn(`Invalid iCal time format: ${icalTime}`);
-      return null;
+      return icalTime;
     }
     
     const [, year, month, day, hour, minute, second, offsetStr] = timeMatch;
-
+    
+    console.log(`🕐 Timezone Conversion for ${homeTeam}:`);
+    console.log(`   iCal Time: ${icalTime} (${offsetStr === 'Z' ? 'UTC' : `UTC${offsetStr}`})`);
+    console.log(`   Team Timezone: ${teamTimezone}`);
+    
+    // CORRECTION: iCal times appear to be ahead of actual game times
+    // The offset varies based on daylight saving time:
+    // - During DST (roughly March-November): 4 hours ahead
+    // - During standard time (roughly November-March): 5 hours ahead
+    // For example: 20:00:00Z should be 16:00:00Z (4pm UTC, not 8pm UTC) during DST
+    //             20:00:00Z should be 15:00:00Z (3pm UTC, not 8pm UTC) during standard time
+    
     // Determine if DST is in effect for this date
     const gameDate = new Date(`${year}-${month}-${day}T12:00:00Z`);
     const isDST = isDaylightSavingTime(gameDate);
     const timeCorrection = isDST ? 4 : 5;
-
-    // Apply the iCal time correction (feed appears ahead by 4/5 hours)
+    
+    console.log(`   DST Status: ${isDST ? 'DST active' : 'Standard time'} (correction: ${timeCorrection} hours)`);
+    
     let correctedHour = parseInt(hour, 10) - timeCorrection;
     let correctedDay = parseInt(day, 10);
     let correctedMonth = parseInt(month, 10);
     let correctedYear = parseInt(year, 10);
-
+    
     // Handle day rollover when hour goes negative
     if (correctedHour < 0) {
       correctedHour += 24;
       correctedDay -= 1; // Move to previous day
-
+      
       // Handle month rollover
       if (correctedDay < 1) {
         correctedMonth -= 1;
-
+        
         // Handle year rollover
         if (correctedMonth < 1) {
           correctedMonth = 12;
           correctedYear -= 1;
         }
-
+        
         // Get the last day of the previous month
         const lastDayOfMonth = new Date(correctedYear, correctedMonth, 0).getDate();
         correctedDay = lastDayOfMonth;
       }
     }
-
+    
     const correctedTime = {
       year: correctedYear.toString(),
       month: correctedMonth.toString().padStart(2, '0'),
@@ -527,56 +442,15 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
       minute,
       second
     };
-
-    // Default offset when we can't resolve a team timezone (keeps downstream formatting stable)
-    let offset = '-08:00';
-
-    if (homeTeam) {
-      console.log(`🔍 Looking up timezone for team: "${homeTeam}"`);
     
-      // Look up the home team's timezone from the teams table
-      // Try multiple lookup strategies since iCal might use different naming
-      let teamData = null;
+    console.log(`   Time Correction: ${year}-${month}-${day} ${hour}:${minute} -> ${correctedTime.year}-${correctedTime.month}-${correctedTime.day} ${correctedTime.hour}:${minute} (subtracted ${timeCorrection} hours)`);
     
-      // Strategy 1: Try exact match with city
-      const { data: cityMatch } = await supabase
-        .from('teams')
-        .select('timezone, city')
-        .eq('city', homeTeam)
-        .single();
+    // Get the timezone offset for the team's timezone
+    const date = new Date(`${correctedTime.year}-${correctedTime.month}-${correctedTime.day}T${correctedTime.hour}:${minute}:${second}`);
+    const offset = getTimezoneOffset(date, teamTimezone);
     
-      if (cityMatch) {
-        teamData = cityMatch;
-        console.log(`✅ Found exact city match: "${cityMatch.city}"`);
-      } else {
-        // Strategy 2: Try partial match (e.g., "Bakersfield" might match "Bakersfield Condors")
-        const { data: partialMatch } = await supabase
-          .from('teams')
-          .select('timezone, city')
-          .ilike('city', `%${homeTeam}%`)
-          .single();
-      
-        if (partialMatch) {
-          teamData = partialMatch;
-          console.log(`✅ Found partial city match: "${partialMatch.city}"`);
-        } else {
-          console.log(`❌ No city match found for: "${homeTeam}"`);
-        }
-      }
-    
-      if (!teamData || !teamData.timezone) {
-        console.warn(`No timezone found for team: ${homeTeam}, using default offset fallback`);
-      } else {
-        const teamTimezone = teamData.timezone;
-        const date = new Date(`${correctedTime.year}-${correctedTime.month}-${correctedTime.day}T${correctedTime.hour}:${minute}:${second}`);
-        offset = getTimezoneOffset(date, teamTimezone);
-      }
-    } else {
-      console.warn('No homeTeam found in event description; using default offset fallback');
-    }
-    
-    // For UTC times (Z), use the computed/fallback offset.
-    // For offset times, keep the same offset but with corrected time.
+    // For UTC times (Z), we need to convert to the team's timezone
+    // For offset times, we keep the same offset but with corrected time
     const finalOffset = offsetStr === 'Z' ? offset : offsetStr;
     
     const convertedTime = `${correctedTime.year}-${correctedTime.month}-${correctedTime.day}T${correctedTime.hour}:${correctedTime.minute}:${correctedTime.second}${finalOffset}`;
@@ -587,7 +461,7 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     
   } catch (error) {
     console.error(`Error converting time for team ${homeTeam}:`, error);
-    return null;
+    return icalTime; // Return original UTC time on error
   }
 }
 
@@ -695,6 +569,26 @@ function determineSeasonFromDate(gameDate) {
 }
 
 async function convertToDbFormat(game) {
+  // Validate that startTime exists before processing
+  if (!game.startTime) {
+    console.error('🚨 ========== MISSING STARTTIME IN convertToDbFormat ==========');
+    console.error(`Game ID: ${game.gameId || 'unknown'}`);
+    console.error(`Organizer: ${game.organizer || 'unknown'}`);
+    console.error(`Home Team: ${game.homeTeam || 'null'}`);
+    console.error(`Away Team: ${game.awayTeam || 'null'}`);
+    console.error(`Raw DTSTART: ${game._rawDtstart || 'null'}`);
+    console.error(`Raw DTEND: ${game._rawDtend || 'null'}`);
+    console.error(`Raw Description: ${game._rawDescription || 'null'}`);
+    console.error(`Game Code: ${game.gameCode || 'null'}`);
+    console.error(`Venue: ${game.venue || 'null'}`);
+    console.error(`UID: ${game.uid || 'null'}`);
+    console.error(`End Time: ${game.endTime || 'null'}`);
+    console.error(`Referees: ${JSON.stringify(game.referees || [])}`);
+    console.error(`Linespeople: ${JSON.stringify(game.linespeople || [])}`);
+    console.error('🚨 ========== END DIAGNOSTIC DATA ==========');
+    return null;
+  }
+  
   // Convert official names from "First Last" to "Last, First" format
   const referee1 = await convertOfficialName(game.referees[0]);
   const referee2 = await convertOfficialName(game.referees[1]);
@@ -725,73 +619,6 @@ async function convertOfficialName(firstLastName) {
   console.log(`🔍 Converting official name: "${firstLastName}"`);
   
   try {
-    const normalizeForCompare = (value) => {
-      if (!value) return '';
-      return String(value)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, ' ') // keep word boundaries
-        .trim()
-        .replace(/\s+/g, ''); // then remove spaces
-    };
-
-    const stripTrailingSuffixTokens = (value) => {
-      if (!value) return value;
-      const suffixToken = /^(jr|sr|ii|iii|iv|v|vi|vii|viii|ix|x|2nd|3rd|4th)$/i;
-      const tokens = String(value).trim().split(/\s+/);
-      while (tokens.length > 1 && suffixToken.test(tokens[tokens.length - 1])) {
-        tokens.pop();
-      }
-      return tokens.join(' ');
-    };
-
-    const stripSuffixFromFullName = (full) => {
-      if (!full) return full;
-      // Remove trailing suffix tokens from the END of the full name ("Steve Walsh III" -> "Steve Walsh")
-      const tokens = String(full).trim().split(/\s+/);
-      const suffixToken = /^(jr|sr|ii|iii|iv|v|vi|vii|viii|ix|x|2nd|3rd|4th)$/i;
-      while (tokens.length > 2 && suffixToken.test(tokens[tokens.length - 1])) {
-        tokens.pop();
-      }
-      return tokens.join(' ');
-    };
-
-    const normalizeNameToken = (value) => {
-      if (!value) return '';
-      return String(value)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '')
-        .trim();
-    };
-
-    // Lightweight nickname map for common first-name variants in officiating feeds.
-    // Keep this small and safe; we only use it as an extra candidate, not as a blind replacement.
-    const FIRST_NAME_NICKNAMES = {
-      steve: ['steven', 'stephen'],
-      mike: ['michael'],
-      bob: ['robert'],
-      rob: ['robert'],
-      bill: ['william'],
-      jim: ['james'],
-      tom: ['thomas'],
-      tommy: ['thomas'],
-      pat: ['patrick'],
-      rick: ['richard'],
-      rich: ['richard'],
-      dave: ['david'],
-      alex: ['alexander'],
-      ben: ['benjamin'],
-      chris: ['christopher'],
-      matt: ['matthew'],
-    };
-
-    const getFirstNameCandidates = (first) => {
-      const base = normalizeNameToken(first);
-      const candidates = new Set([base]);
-      const mapped = FIRST_NAME_NICKNAMES[base];
-      if (mapped) mapped.forEach(n => candidates.add(normalizeNameToken(n)));
-      return Array.from(candidates).filter(Boolean);
-    };
-
     // Strategy 1: Try exact match with firstlast column
     const { data: exactMatch } = await supabase
       .from('roster')
@@ -805,8 +632,7 @@ async function convertOfficialName(firstLastName) {
     }
     
     // Strategy 2: Normalized matching
-    const normalizedInput = normalizeForCompare(firstLastName);
-    const normalizedInputCore = normalizeForCompare(stripSuffixFromFullName(firstLastName));
+    const normalizedInput = firstLastName.replace(/\s+/g, '').toLowerCase();
     console.log(`🔍 Trying normalized match: "${normalizedInput}"`);
     
     const { data: allRoster } = await supabase
@@ -814,46 +640,11 @@ async function convertOfficialName(firstLastName) {
       .select('firstname, lastname, lastfirstfullname');
     
     if (allRoster) {
-      const [inputFirstRaw, ...inputLastParts] = stripSuffixFromFullName(firstLastName).split(' ');
-      const inputLastRaw = inputLastParts.join(' ').trim();
-      const inputFirstCandidates = getFirstNameCandidates(inputFirstRaw);
-      const inputLastCoreNorm = normalizeNameToken(stripTrailingSuffixTokens(inputLastRaw));
-
       for (const person of allRoster) {
-        const rosterFull = `${person.firstname || ''} ${person.lastname || ''}`.trim();
-        const normalizedRoster = normalizeForCompare(rosterFull);
-        const normalizedRosterCore = normalizeForCompare(
-          `${person.firstname || ''} ${stripTrailingSuffixTokens(person.lastname || '')}`.trim()
-        );
-
-        if (
-          normalizedRoster === normalizedInput ||
-          normalizedRosterCore === normalizedInput ||
-          normalizedRoster === normalizedInputCore ||
-          normalizedRosterCore === normalizedInputCore
-        ) {
-          const usedCore = normalizedRoster !== normalizedInput;
-          console.log(
-            `✅ ${usedCore ? 'Fuzzy' : 'Normalized'} match found: "${firstLastName}" -> "${person.lastfirstfullname}"` +
-              (usedCore ? ` (matched against "${rosterFull}")` : '')
-          );
+        const normalizedRoster = `${person.firstname}${person.lastname}`.replace(/\s+/g, '').toLowerCase();
+        if (normalizedRoster === normalizedInput) {
+          console.log(`✅ Normalized match found: "${firstLastName}" -> "${person.lastfirstfullname}"`);
           return person.lastfirstfullname;
-        }
-
-        // Extra fuzzy: match last name core + first name prefix/nickname variants
-        const rosterFirstNorm = normalizeNameToken(person.firstname);
-        const rosterLastCoreNorm = normalizeNameToken(stripTrailingSuffixTokens(person.lastname || ''));
-        if (rosterLastCoreNorm && rosterLastCoreNorm === inputLastCoreNorm) {
-          const firstMatches =
-            inputFirstCandidates.includes(rosterFirstNorm) ||
-            inputFirstCandidates.some(c => rosterFirstNorm.startsWith(c) || c.startsWith(rosterFirstNorm));
-
-          if (firstMatches) {
-            console.log(
-              `✅ Fuzzy match found (first-name variant): "${firstLastName}" -> "${person.lastfirstfullname}" (roster="${rosterFull}")`
-            );
-            return person.lastfirstfullname;
-          }
         }
       }
     }
@@ -874,36 +665,18 @@ async function convertOfficialName(firstLastName) {
       console.log(`✅ Split match found: "${firstLastName}" -> "${splitMatch.lastfirstfullname}"`);
       return splitMatch.lastfirstfullname;
     }
-
-    // Strategy 3b: First-name prefix match (e.g., "Steve" -> "Steven"), last-name core match (e.g., "Walsh" -> "Walsh II")
-    const firstNameNorm = normalizeNameToken(firstName);
-    const firstNameCandidates = getFirstNameCandidates(firstNameNorm);
-    for (const candidate of firstNameCandidates) {
-      const { data: prefixMatch } = await supabase
-        .from('roster')
-        .select('lastfirstfullname')
-        .ilike('firstname', `${candidate}%`)
-        .ilike('lastname', `%${stripTrailingSuffixTokens(lastName)}%`)
-        .single();
-
-      if (prefixMatch) {
-        console.log(`✅ Fuzzy match found (firstname prefix): "${firstLastName}" -> "${prefixMatch.lastfirstfullname}" (candidate="${candidate}")`);
-        return prefixMatch.lastfirstfullname;
-      }
-    }
     
     // Strategy 4: Try partial last name match (for hyphenated names)
     console.log(`🔍 Trying partial last name match for: "${lastName}"`);
-    const lastNameCore = stripTrailingSuffixTokens(lastName);
     const { data: partialMatch } = await supabase
       .from('roster')
       .select('lastfirstfullname')
       .ilike('firstname', firstName)
-      .ilike('lastname', `%${lastNameCore}%`)
+      .ilike('lastname', `%${lastName}%`)
       .single();
       
     if (partialMatch) {
-      console.log(`✅ Partial match found: "${firstLastName}" -> "${partialMatch.lastfirstfullname}" (lastNameCore="${lastNameCore}")`);
+      console.log(`✅ Partial match found: "${firstLastName}" -> "${partialMatch.lastfirstfullname}"`);
       return partialMatch.lastfirstfullname;
     }
     
@@ -920,11 +693,6 @@ async function upsertGamesToDatabase(games) {
   let newCount = 0;
   let updateCount = 0;
   let skippedCount = 0;
-  // IMPORTANT:
-  // Push notifications should be sent ONLY by the realtime listener in ScheduleProvider.
-  // If we also send pushes during this iCal sync/upsert, users will get duplicate notifications
-  // (one from upsert + one from realtime change).
-  const ENABLE_PUSH_NOTIFICATIONS_DURING_ICAL_SYNC = false;
   
   for (const game of games) {
     try {
@@ -962,10 +730,8 @@ async function upsertGamesToDatabase(games) {
           const changedFields = getChangedFields(game, existing);
           console.log(`🔄 Updated game ${game.gameid}: ${changedFields.join(', ')}`);
           
-          // Send notifications to affected users (disabled; handled by realtime listener)
-          if (ENABLE_PUSH_NOTIFICATIONS_DURING_ICAL_SYNC) {
-            await sendNotificationsForGameChange(game, existing, changedFields);
-          }
+          // Send notifications to affected users
+          await sendNotificationsForGameChange(game, existing, changedFields);
         } else {
           skippedCount++;
           console.log(`⏭️ Skipped game ${game.gameid}: no changes detected`);
@@ -1130,7 +896,6 @@ export const SYNC_STORAGE_KEYS = {
 
 export async function getLastSyncTime() {
   try {
-    await ensureHockeySyncCacheVersion();
     const lastSync = await AsyncStorage.getItem(SYNC_STORAGE_KEYS.LAST_SYNC);
     return lastSync ? new Date(lastSync) : null;
   } catch (error) {
@@ -1141,7 +906,6 @@ export async function getLastSyncTime() {
 
 export async function setLastSyncTime() {
   try {
-    await ensureHockeySyncCacheVersion();
     await AsyncStorage.setItem(SYNC_STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
   } catch (error) {
     console.error('Error setting last sync time:', error);
@@ -1150,7 +914,6 @@ export async function setLastSyncTime() {
 
 export async function shouldAutoSync() {
   try {
-    await ensureHockeySyncCacheVersion();
     const lastSync = await getLastSyncTime();
     if (!lastSync) return true;
     
@@ -1167,7 +930,6 @@ export async function shouldAutoSync() {
 
 export async function performAutoSync() {
   try {
-    await ensureHockeySyncCacheVersion();
     const shouldSync = await shouldAutoSync();
     if (!shouldSync) {
       console.log('Auto sync skipped - last sync was recent');

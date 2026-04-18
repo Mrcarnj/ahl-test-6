@@ -12,6 +12,7 @@ import {
 } from "../lib/playerStatsSync";
 import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
 import { sendGameChangeNotification } from "../lib/notificationService";
+import { fetchAllTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 import { APP_REFRESH_EVENT } from "../lib/events";
@@ -190,23 +191,16 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 
             console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
     
-            console.log('👥 SCHEDULE: Fetching team rosters data...');
+            console.log('👥 SCHEDULE: Fetching team rosters data (all pages)...');
             const rostersStart = Date.now();
             
-            const { data: rostersData, error: rostersError } = await withTimeout(
-                supabase
-                    .from('teamRosters')
-                    .select('*'),
-                20000,
+            const rostersData = await withTimeout(
+                fetchAllTeamRosterRows(),
+                60000,
                 'Team rosters fetch'
             );
                 
-            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms`);
-    
-            if (rostersError) {
-                console.error('❌ SCHEDULE: Team rosters fetch error:', rostersError);
-                throw rostersError;
-            }
+            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (${rostersData.length} rows)`);
             if (scheduleError) {
                 console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
                 throw scheduleError;
@@ -270,6 +264,21 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 await syncTeamStandings();
             } else {
                 console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
+            }
+
+            // Player syncs write to `teamRosters` in the DB; refresh in-memory rows so game tabs show everyone.
+            if (shouldStats || shouldRoster) {
+                try {
+                    const rostersAfterSync = await withTimeout(
+                        fetchAllTeamRosterRows(),
+                        60000,
+                        'Team rosters refetch after player sync'
+                    );
+                    setTeamRosters(rostersAfterSync as TeamRoster[]);
+                    console.log(`✅ SCHEDULE: Team rosters state refreshed (${rostersAfterSync.length} rows)`);
+                } catch (rostersRefetchError) {
+                    console.error('❌ SCHEDULE: Post-sync team rosters refetch error:', rostersRefetchError);
+                }
             }
         } catch (e) {
             console.error('❌ SYNC: Error performing background syncs:', e);

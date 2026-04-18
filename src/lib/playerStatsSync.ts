@@ -1,6 +1,7 @@
 // Player Stats Sync Service
 // Fetches player stats and roster data from HockeyTech API and updates Supabase
 
+import { fetchAllTeamRosterRows } from './fetchAllTeamRosterRows';
 import { supabase } from './supabase';
 
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
@@ -24,6 +25,25 @@ const TEAM_CODE_MAPPING: Record<string, string> = {
 
 function mapTeamCode(apiTeamCode: string): string {
   return TEAM_CODE_MAPPING[apiTeamCode] || apiTeamCode;
+}
+
+/** HockeyTech numeric team_id → DB `teams.abbreviation` (same codes as standings sync). */
+function buildTeamIdToAbbrevMap(apiData: any): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!apiData?.SiteKit?.Statviewtype) {
+    return map;
+  }
+  for (const team of apiData.SiteKit.Statviewtype) {
+    if (team.repeatheader || !team.team_code || team.team_id == null || team.team_id === '') {
+      continue;
+    }
+    const tid = toInt(team.team_id);
+    if (tid === null) {
+      continue;
+    }
+    map.set(tid, mapTeamCode(team.team_code));
+  }
+  return map;
 }
 
 function toInt(value: any, defaultValue: number | null = null): number | null {
@@ -210,16 +230,10 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
     
     console.log(`📊 PLAYER STATS: Processing ${players.length} players...`);
     
-    // Fetch existing players from database
-    const { data: existingPlayers, error: fetchError } = await supabase
-      .from('teamRosters')
-      .select('*');
+    // Fetch existing players from database (paginate — PostgREST max ~1000 rows per request)
+    const existingPlayers = await fetchAllTeamRosterRows();
     
-    if (fetchError) {
-      throw fetchError;
-    }
-    
-    const existingMap = new Map(
+    const existingMap = new Map<string, any>(
       (existingPlayers || []).map((p: any) => [String(p.id), p])
     );
     
@@ -356,9 +370,9 @@ async function fetchTeamRoster(teamId: number): Promise<any> {
 }
 
 /**
- * Transform roster data to database format
+ * Transform roster data to database format (includes team + name for inserts).
  */
-function transformRosterData(apiData: any): any[] {
+function transformRosterData(apiData: any, teamAbbrev: string): any[] {
   const players: any[] = [];
   
   if (!apiData?.SiteKit?.Roster) {
@@ -375,6 +389,17 @@ function transformRosterData(apiData: any): any[] {
     
     const playerId = item.player_id || item.id;
     if (!playerId) continue;
+
+    let playerName: string | null = null;
+    const rawName = item.name != null ? String(item.name).trim() : '';
+    if (rawName) {
+      playerName = rawName;
+    } else {
+      const fn = item.first_name != null ? String(item.first_name).trim() : '';
+      const ln = item.last_name != null ? String(item.last_name).trim() : '';
+      const combined = `${fn} ${ln}`.trim();
+      playerName = combined || null;
+    }
     
     // Transform rookie: 1 = TRUE, anything else = NULL
     let rookieValue: boolean | null = null;
@@ -399,9 +424,16 @@ function transformRosterData(apiData: any): any[] {
         jerseyNumber = jerseyStr;
       }
     }
+
+    const position = item.position != null && String(item.position).trim()
+      ? String(item.position).trim()
+      : null;
     
     players.push({
       id: parseInt(String(playerId), 10),
+      team: teamAbbrev,
+      player_name: playerName,
+      position,
       number: jerseyNumber,
       rookie: rookieValue,
       veteran: veteranValue,
@@ -412,21 +444,55 @@ function transformRosterData(apiData: any): any[] {
 }
 
 /**
- * Sync player roster data (jersey numbers, rookie status, veteran status)
+ * Sync player roster data (jersey numbers, rookie status, veteran status).
+ * Inserts rows for anyone on the API roster who is not yet in teamRosters (stats sync can fill in later).
  */
-export async function syncPlayerRoster(): Promise<{ success: boolean; error?: string; updated?: number }> {
+export async function syncPlayerRoster(): Promise<{ success: boolean; error?: string; updated?: number; inserted?: number }> {
   try {
     console.log('🔄 PLAYER ROSTER: Starting sync...');
     
     let totalUpdated = 0;
+    let totalInserted = 0;
     let totalProcessed = 0;
     let teamsProcessed = 0;
     let teamsFailed = 0;
     const allProcessedPlayerIds: number[] = [];
     const currentTime = new Date().toISOString();
+
+    const normalizeValue = (value: any): any => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        return value.trim() || null;
+      }
+      return value;
+    };
+
+    let teamIdToAbbrev: Map<number, string>;
+    try {
+      const standingsData = await fetchTeamStandings(true);
+      teamIdToAbbrev = buildTeamIdToAbbrevMap(standingsData);
+    } catch (e) {
+      console.error('❌ PLAYER ROSTER: Could not load team id → abbreviation map (standings feed):', e);
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : 'Unknown error',
+      };
+    }
     
     for (const teamId of TEAM_IDS) {
       console.log(`📋 PLAYER ROSTER: Processing team ${teamId}...`);
+
+      const teamAbbrev = teamIdToAbbrev.get(teamId);
+      if (!teamAbbrev) {
+        console.error(`  ❌ PLAYER ROSTER: No abbreviation mapping for HockeyTech team_id=${teamId}`);
+        teamsFailed++;
+        continue;
+      }
       
       const apiData = await fetchTeamRoster(teamId);
       if (!apiData) {
@@ -434,7 +500,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
         continue;
       }
       
-      const players = transformRosterData(apiData);
+      const players = transformRosterData(apiData, teamAbbrev);
       if (players.length === 0) {
         console.log(`  ⚠️ PLAYER ROSTER: No players found for team ${teamId}`);
         teamsFailed++;
@@ -443,7 +509,6 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       
       totalProcessed += players.length;
       
-      // Fetch existing players for comparison (include player_name for logging)
       const playerIds = players.map(p => p.id);
       const { data: existingPlayers, error: fetchError } = await supabase
         .from('teamRosters')
@@ -459,35 +524,24 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       const existingMap = new Map(
         (existingPlayers || []).map((p: any) => [p.id, p])
       );
+
+      const newPlayers: typeof players = [];
       
-      // Find players that need updating
       let teamUpdated = 0;
       let teamUnchanged = 0;
-      
-      // Helper function to normalize values for comparison
-      const normalizeValue = (value: any): any => {
-        if (value === null || value === undefined || value === '') {
-          return null;
-        }
-        if (typeof value === 'boolean') {
-          return value;
-        }
-        if (typeof value === 'string') {
-          return value.trim() || null;
-        }
-        return value;
-      };
+      let teamInserted = 0;
       
       for (const player of players) {
         const existing = existingMap.get(player.id);
-        if (!existing) continue; // Skip if player doesn't exist in database
-        
-        // Track this player as processed
+        if (!existing) {
+          newPlayers.push(player);
+          continue;
+        }
+
         if (!allProcessedPlayerIds.includes(player.id)) {
           allProcessedPlayerIds.push(player.id);
         }
-        
-        // Normalize values for comparison
+
         const playerNumber = normalizeValue(player.number);
         const playerRookie = normalizeValue(player.rookie);
         const playerVeteran = normalizeValue(player.veteran);
@@ -496,7 +550,6 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
         const existingRookie = normalizeValue(existing.rookie);
         const existingVeteran = normalizeValue(existing.veteran);
         
-        // Check which fields changed and log them
         const changedFields: string[] = [];
         if (playerNumber !== existingNumber) {
           changedFields.push(`number: "${existingNumber}" → "${playerNumber}"`);
@@ -511,7 +564,6 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
         const hasChanges = changedFields.length > 0;
         
         if (hasChanges) {
-          // Get player name for logging (fetch it if not available)
           const playerName = existing.player_name || `Player ${player.id}`;
           console.log(`  🔄 PLAYER ROSTER: ${playerName} (${player.id}) - Changes: ${changedFields.join(', ')}`);
           
@@ -535,18 +587,70 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
           teamUnchanged++;
         }
       }
-      
-      if (teamUpdated > 0) {
-        console.log(`  ✅ PLAYER ROSTER: Team ${teamId} - ${teamUpdated} players updated, ${teamUnchanged} unchanged`);
+
+      const validNewPlayers = newPlayers.filter((p) => {
+        if (!p.player_name) {
+          console.warn(`  ⚠️ PLAYER ROSTER: Cannot insert player id=${p.id} — no name in API row`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validNewPlayers.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < validNewPlayers.length; i += batchSize) {
+          const slice = validNewPlayers.slice(i, i + batchSize);
+          const batch = slice.map((p) => ({
+            id: p.id,
+            team: p.team,
+            player_name: p.player_name,
+            position: p.position,
+            number: normalizeValue(p.number),
+            rookie: normalizeValue(p.rookie),
+            veteran: normalizeValue(p.veteran),
+            games_played: null,
+            goals: null,
+            assists: null,
+            points: null,
+            plusMinus: null,
+            penalty_minutes: null,
+            power_play_goals: null,
+            lastSynced: currentTime,
+          }));
+
+          const { error: insertError } = await supabase
+            .from('teamRosters')
+            .upsert(batch, { onConflict: 'id' });
+
+          if (insertError) {
+            console.error(`  ❌ PLAYER ROSTER: Error inserting players for team ${teamId}:`, insertError);
+          } else {
+            for (const p of slice) {
+              console.log(`  ➕ PLAYER ROSTER: Inserted ${p.player_name} (${p.id}) team=${p.team}`);
+            }
+            teamInserted += slice.length;
+            totalInserted += slice.length;
+            for (const p of slice) {
+              if (!allProcessedPlayerIds.includes(p.id)) {
+                allProcessedPlayerIds.push(p.id);
+              }
+            }
+          }
+        }
+      }
+
+      if (teamInserted > 0 || teamUpdated > 0) {
+        console.log(
+          `  ✅ PLAYER ROSTER: Team ${teamId} (${teamAbbrev}) — inserted: ${teamInserted}, updated: ${teamUpdated}, unchanged: ${teamUnchanged}`
+        );
       } else {
-        console.log(`  ⊘ PLAYER ROSTER: Team ${teamId} - All ${teamUnchanged} players unchanged`);
+        console.log(`  ⊘ PLAYER ROSTER: Team ${teamId} (${teamAbbrev}) — All ${teamUnchanged} players unchanged`);
       }
       
       teamsProcessed++;
     }
     
-    // Update lastSynced timestamp for all players that were processed but unchanged
-    // (updated players already have lastSynced set in the update above)
+    // Refresh lastSynced for everyone seen on a roster this run (insert/update already set it; this aligns unchanged rows)
     if (allProcessedPlayerIds.length > 0) {
       const batchSize = 100;
       for (let i = 0; i < allProcessedPlayerIds.length; i += batchSize) {
@@ -558,9 +662,11 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       }
     }
     
-    console.log(`✅ PLAYER ROSTER: Sync complete - ${totalUpdated} players updated across ${teamsProcessed} teams`);
+    console.log(
+      `✅ PLAYER ROSTER: Sync complete — inserted: ${totalInserted}, updated: ${totalUpdated}, roster rows seen: ${totalProcessed}, teams: ${teamsProcessed}`
+    );
     
-    return { success: true, updated: totalUpdated };
+    return { success: true, updated: totalUpdated, inserted: totalInserted };
   } catch (error) {
     console.error('❌ PLAYER ROSTER: Sync error:', error);
     return {
@@ -605,9 +711,11 @@ export async function shouldSyncTeamStandings(): Promise<boolean> {
 /**
  * Fetch and parse team standings from HockeyTech API
  */
-async function fetchTeamStandings(): Promise<any> {
-  console.log('🌐 TEAM STANDINGS: Fetching from API...');
-  
+async function fetchTeamStandings(quiet = false): Promise<any> {
+  if (!quiet) {
+    console.log('🌐 TEAM STANDINGS: Fetching from API...');
+  }
+
   try {
     const response = await fetch(TEAM_STANDINGS_API_URL);
     const rawData = await response.text();

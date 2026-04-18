@@ -1,13 +1,45 @@
 // app/(protected)/game/[id].tsx
 import { useRoster } from '@/src/providers/RosterProvider';
-import { formatGameDate2, formatGameTime, getTeamCoach, getTeamLogo, Schedule, useSchedule } from '@/src/providers/ScheduleProvider';
+import { formatGameDate2, formatGameTime, getTeamCoach, getTeamLogo, Schedule, TeamRoster, useSchedule } from '@/src/providers/ScheduleProvider';
 import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Dimensions, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+/** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
+function rosterNum(value: number | null | undefined): number {
+  if (value == null || Number.isNaN(Number(value))) return 0;
+  return Number(value);
+}
 
+/** Full roster for one club: match `teams.abbreviation` + sort for display. */
+function rosterPlayersForTeam(teamRosters: TeamRoster[], teamAbbrev: string | undefined): TeamRoster[] {
+  if (!teamAbbrev) return [];
+  return teamRosters
+    .filter((player) => player.team === teamAbbrev)
+    .sort((a, b) => {
+      if (rosterNum(b.points) !== rosterNum(a.points)) {
+        return rosterNum(b.points) - rosterNum(a.points);
+      }
+      if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
+        return rosterNum(a.games_played) - rosterNum(b.games_played);
+      }
+      if (rosterNum(b.goals) !== rosterNum(a.goals)) {
+        return rosterNum(b.goals) - rosterNum(a.goals);
+      }
+      return rosterNum(b.assists) - rosterNum(a.assists);
+    });
+}
+
+function formatRosterStat(value: number | null | undefined): string {
+  if (value == null) return '–';
+  return String(value);
+}
+
+function formatRosterPlayerName(player: Pick<TeamRoster, 'player_name'>): string {
+  return (player.player_name ?? '').replace(/\s\+-\s*$/, '');
+}
 
 
 const GameDetails = () => {
@@ -289,53 +321,29 @@ const GameDetails = () => {
   const AwayTeamContent = ({ game }: { game: Schedule }) => {
     const { teamRosters } = useSchedule();
     const teamAbbrev = game.awayTeamData?.abbreviation;
-    const teamRoster = teamRosters
-      .filter(player => player.team === teamAbbrev)
-      .sort((a, b) => {
-        // First sort by points (descending)
-        if (b.points !== a.points) {
-          return b.points - a.points;
-        }
-        // If points are equal, sort by games played (ascending)
-        if (a.games_played !== b.games_played) {
-          return a.games_played - b.games_played;
-        }
-        // If games played are equal, sort by goals (descending)
-        if (b.goals !== a.goals) {
-          return b.goals - a.goals;
-        }
-        // If goals are equal, sort by assists (descending)
-        return b.assists - a.assists;
-      });
+    const teamRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
 
     const pointsLeaders = [...teamRoster]
       .sort((a, b) => {
-        // First sort by points (descending)
-        if (b.points !== a.points) {
-          return b.points - a.points;
+        if (rosterNum(b.points) !== rosterNum(a.points)) {
+          return rosterNum(b.points) - rosterNum(a.points);
         }
-        // If points are equal, sort by games played (ascending)
-        if (a.games_played !== b.games_played) {
-          return a.games_played - b.games_played;
+        if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
+          return rosterNum(a.games_played) - rosterNum(b.games_played);
         }
-        // If games played are equal, sort by goals (descending)
-        if (b.goals !== a.goals) {
-          return b.goals - a.goals;
+        if (rosterNum(b.goals) !== rosterNum(a.goals)) {
+          return rosterNum(b.goals) - rosterNum(a.goals);
         }
-        // If goals are equal, sort by assists (descending)
-        return b.assists - a.assists;
+        return rosterNum(b.assists) - rosterNum(a.assists);
       })
       .slice(0, 5); // Get only top 5
 
     const pimLeaders = [...teamRoster]
       .sort((a, b) => {
-        // First sort by penalty minutes (descending)
-        if (b.penalty_minutes !== a.penalty_minutes) {
-          return b.penalty_minutes - a.penalty_minutes;
+        if (rosterNum(b.penalty_minutes) !== rosterNum(a.penalty_minutes)) {
+          return rosterNum(b.penalty_minutes) - rosterNum(a.penalty_minutes);
         }
-        // If pims are equal, sort by games played (ascending)
-        return a.games_played - b.games_played;
-
+        return rosterNum(a.games_played) - rosterNum(b.games_played);
       })
       .slice(0, 3); // Get only top 5
 
@@ -413,14 +421,14 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
+                {formatRosterPlayerName(player)}
               </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.goals}</Text>
-              <Text style={styles.playerText}>{player.assists}</Text>
-              <Text style={styles.playerText}>{player.points}</Text>
-              <Text style={styles.playerText}>{player.power_play_goals}</Text>
+              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
             </View>
           ))}
         </View>
@@ -440,11 +448,11 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
+                {formatRosterPlayerName(player)}
               </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
             </View>
           ))}
         </View>
@@ -466,7 +474,7 @@ const GameDetails = () => {
           </View>
 
           {teamRoster.map((player) => {
-            const playerName = player.player_name.replace(/\s\+-\s*$/, '');
+            const playerName = formatRosterPlayerName(player);
             const statusIndicators = [];
             if (player.veteran === true) {
               statusIndicators.push('(V)');
@@ -484,14 +492,14 @@ const GameDetails = () => {
                 <Text style={[styles.playerText, { flex: 4 }]}>
                   {displayName}
                 </Text>
-                <Text style={styles.playerText}>{player.position}</Text>
-                <Text style={styles.playerText}>{player.games_played}</Text>
-                <Text style={styles.playerText}>{player.goals}</Text>
-                <Text style={styles.playerText}>{player.assists}</Text>
-                <Text style={styles.playerText}>{player.points}</Text>
-                <Text style={styles.playerText}>{player.plusMinus}</Text>
-                <Text style={styles.playerText}>{player.penalty_minutes}</Text>
-                <Text style={styles.playerText}>{player.power_play_goals}</Text>
+                <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.plusMinus)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
               </View>
             );
           })}
@@ -503,53 +511,29 @@ const GameDetails = () => {
   const HomeTeamContent = ({ game }: { game: Schedule }) => {
     const { teamRosters } = useSchedule();
     const teamAbbrev = game.homeTeamData?.abbreviation;
-    const teamRoster = teamRosters
-      .filter(player => player.team === teamAbbrev)
-      .sort((a, b) => {
-        // First sort by points (descending)
-        if (b.points !== a.points) {
-          return b.points - a.points;
-        }
-        // If points are equal, sort by games played (ascending)
-        if (a.games_played !== b.games_played) {
-          return a.games_played - b.games_played;
-        }
-        // If games played are equal, sort by goals (descending)
-        if (b.goals !== a.goals) {
-          return b.goals - a.goals;
-        }
-        // If goals are equal, sort by assists (descending)
-        return b.assists - a.assists;
-      });
+    const teamRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
 
     const pointsLeaders = [...teamRoster]
       .sort((a, b) => {
-        // First sort by points (descending)
-        if (b.points !== a.points) {
-          return b.points - a.points;
+        if (rosterNum(b.points) !== rosterNum(a.points)) {
+          return rosterNum(b.points) - rosterNum(a.points);
         }
-        // If points are equal, sort by games played (ascending)
-        if (a.games_played !== b.games_played) {
-          return a.games_played - b.games_played;
+        if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
+          return rosterNum(a.games_played) - rosterNum(b.games_played);
         }
-        // If games played are equal, sort by goals (descending)
-        if (b.goals !== a.goals) {
-          return b.goals - a.goals;
+        if (rosterNum(b.goals) !== rosterNum(a.goals)) {
+          return rosterNum(b.goals) - rosterNum(a.goals);
         }
-        // If goals are equal, sort by assists (descending)
-        return b.assists - a.assists;
+        return rosterNum(b.assists) - rosterNum(a.assists);
       })
       .slice(0, 5); // Get only top 5
 
     const pimLeaders = [...teamRoster]
       .sort((a, b) => {
-        // First sort by penalty minutes (descending)
-        if (b.penalty_minutes !== a.penalty_minutes) {
-          return b.penalty_minutes - a.penalty_minutes;
+        if (rosterNum(b.penalty_minutes) !== rosterNum(a.penalty_minutes)) {
+          return rosterNum(b.penalty_minutes) - rosterNum(a.penalty_minutes);
         }
-        // If pims are equal, sort by games played (ascending)
-        return a.games_played - b.games_played;
-
+        return rosterNum(a.games_played) - rosterNum(b.games_played);
       })
       .slice(0, 3); // Get only top 5
 
@@ -627,14 +611,14 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 4 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
+                {formatRosterPlayerName(player)}
               </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.goals}</Text>
-              <Text style={styles.playerText}>{player.assists}</Text>
-              <Text style={styles.playerText}>{player.points}</Text>
-              <Text style={styles.playerText}>{player.power_play_goals}</Text>
+              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
             </View>
           ))}
         </View>
@@ -654,11 +638,11 @@ const GameDetails = () => {
             <View key={player.id} style={styles.playerRow}>
               <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
               <Text style={[styles.playerText, { flex: 2 }]}>
-                {player.player_name.replace(/\s\+-\s*$/, '')}
+                {formatRosterPlayerName(player)}
               </Text>
-              <Text style={styles.playerText}>{player.position}</Text>
-              <Text style={styles.playerText}>{player.games_played}</Text>
-              <Text style={styles.playerText}>{player.penalty_minutes}</Text>
+              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+              <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
             </View>
           ))}
         </View>
@@ -680,7 +664,7 @@ const GameDetails = () => {
           </View>
 
           {teamRoster.map((player) => {
-            const playerName = player.player_name.replace(/\s\+-\s*$/, '');
+            const playerName = formatRosterPlayerName(player);
             const statusIndicators = [];
             if (player.veteran === true) {
               statusIndicators.push('(V)');
@@ -698,14 +682,14 @@ const GameDetails = () => {
                 <Text style={[styles.playerText, { flex: 4 }]}>
                   {displayName}
                 </Text>
-                <Text style={styles.playerText}>{player.position}</Text>
-                <Text style={styles.playerText}>{player.games_played}</Text>
-                <Text style={styles.playerText}>{player.goals}</Text>
-                <Text style={styles.playerText}>{player.assists}</Text>
-                <Text style={styles.playerText}>{player.points}</Text>
-                <Text style={styles.playerText}>{player.plusMinus}</Text>
-                <Text style={styles.playerText}>{player.penalty_minutes}</Text>
-                <Text style={styles.playerText}>{player.power_play_goals}</Text>
+                <Text style={styles.playerText}>{player.position ?? '–'}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.plusMinus)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
+                <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
               </View>
             );
           })}

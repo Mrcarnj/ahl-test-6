@@ -1,6 +1,7 @@
 //src/providers/ScheduleProvider.tsx
 import { format, parse } from "date-fns";
-import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from "react";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 import {
     shouldSyncPlayerRoster,
@@ -12,11 +13,20 @@ import {
 } from "../lib/playerStatsSync";
 import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
 import { sendGameChangeNotification } from "../lib/notificationService";
-import { fetchAllTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
+import {
+    fetchAllRegularSeasonTeamRosterRows,
+    fetchAllTeamRosterRows,
+} from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 import { APP_REFRESH_EVENT } from "../lib/events";
 import { withTimeout } from "../lib/withTimeout";
+import {
+    fetchPlayoffBracketFromDb,
+    shouldSyncPlayoffBracket,
+    syncPlayoffBracketToDb,
+    type PlayoffBracketData,
+} from "../lib/playoffBracket";
 
 // Import or define interfaces
 export interface Roster {
@@ -103,12 +113,19 @@ export interface TeamRoster {
 type ScheduleContext = {
     allGames: Schedule[];
     myGames: Schedule[];
+    /** Playoff skater stats / roster rows (`playoffStats`, season 92). */
     teamRosters: TeamRoster[];
+    /** Regular season snapshot (`teamRosters`, `season_id` 90). */
+    teamRostersRegularSeason: TeamRoster[];
     loading: boolean;
     syncingPlayerStats: boolean; // kept for compatibility (stats OR standings)
     syncingSchedule: boolean;
     syncingStats: boolean;
     syncingStandings: boolean;
+    playoffBracket: PlayoffBracketData | null;
+    playoffBracketError: string | null;
+    syncingPlayoffBracket: boolean;
+    refreshPlayoffBracket: () => Promise<void>;
     scheduleSyncStatus: {
         status: 'idle' | 'running' | 'success' | 'error';
         source?: 'startup' | 'foreground' | 'manual' | 'other';
@@ -130,11 +147,16 @@ const ScheduleContext = createContext<ScheduleContext>({
     allGames: [],
     myGames: [],
     teamRosters: [],
+    teamRostersRegularSeason: [],
     loading: false,
     syncingPlayerStats: false,
     syncingSchedule: false,
     syncingStats: false,
     syncingStandings: false,
+    playoffBracket: null,
+    playoffBracketError: null,
+    syncingPlayoffBracket: false,
+    refreshPlayoffBracket: async () => {},
     scheduleSyncStatus: { status: 'idle', source: 'other', showInBanner: false },
     blockingOverlayVisible: false,
     error: null,
@@ -150,11 +172,15 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [loading, setLoading] = useState(false);
     const [syncingStats, setSyncingStats] = useState(false);
     const [syncingStandings, setSyncingStandings] = useState(false);
+    const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracketData | null>(null);
+    const [playoffBracketError, setPlayoffBracketError] = useState<string | null>(null);
+    const [syncingPlayoffBracket, setSyncingPlayoffBracket] = useState(false);
     const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContext['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
     const [blockingOverlayVisible, setBlockingOverlayVisible] = useState(false);
     const blockingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
+    const [teamRostersRegularSeason, setTeamRostersRegularSeason] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [realtimeEnabled, setRealtimeEnabled] = useState(false);
     const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
@@ -191,16 +217,15 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 
             console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
     
-            console.log('👥 SCHEDULE: Fetching team rosters data (all pages)...');
+            console.log('👥 SCHEDULE: Fetching team rosters (playoffs + regular season)...');
             const rostersStart = Date.now();
             
-            const rostersData = await withTimeout(
-                fetchAllTeamRosterRows(),
-                60000,
-                'Team rosters fetch'
-            );
+            const [rostersData, regularSeasonRosters] = await Promise.all([
+                withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff team rosters fetch'),
+                withTimeout(fetchAllRegularSeasonTeamRosterRows(), 60000, 'Regular season team rosters fetch'),
+            ]);
                 
-            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (${rostersData.length} rows)`);
+            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (playoffs ${rostersData.length} rows, RS ${regularSeasonRosters.length} rows)`);
             if (scheduleError) {
                 console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
                 throw scheduleError;
@@ -213,6 +238,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
             setTeamRosters(rostersData);
+            setTeamRostersRegularSeason(regularSeasonRosters);
     
             console.log('🔍 SCHEDULE: Filtering games for official:', roster.lastfirstfullname);
             // Since we're already filtering at the database level, we can just use the processed games directly
@@ -231,6 +257,29 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('🔄 SCHEDULE: Loading state reset');
         }
     };
+
+    const refreshPlayoffBracket = useCallback(async () => {
+        setSyncingPlayoffBracket(true);
+        setPlayoffBracketError(null);
+        try {
+            let data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
+            const shouldSync = await withTimeout(shouldSyncPlayoffBracket(), 8000, 'Playoff bracket should-sync check');
+            if (!data.rounds.length || shouldSync) {
+                const syncResult = await withTimeout(syncPlayoffBracketToDb(), 20000, 'Playoff bracket sync');
+                if (!syncResult.success) {
+                    throw new Error(syncResult.error || 'Playoff bracket sync failed');
+                }
+                data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
+            }
+            setPlayoffBracket(data);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Bracket fetch failed';
+            setPlayoffBracketError(msg);
+            console.error('❌ PLAYOFF BRACKET:', e);
+        } finally {
+            setSyncingPlayoffBracket(false);
+        }
+    }, []);
 
     const runBackgroundSyncs = async () => {
         try {
@@ -262,20 +311,40 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             if (shouldStandings) {
                 console.log('🔄 TEAM SYNC: Running team standings sync...');
                 await syncTeamStandings();
+                console.log('🔄 PLAYOFF BRACKET: Refreshing after standings sync...');
+                try {
+                    const syncResult = await withTimeout(syncPlayoffBracketToDb(), 20000, 'Playoff bracket sync');
+                    if (!syncResult.success) {
+                        throw new Error(syncResult.error || 'Playoff bracket sync failed');
+                    }
+                    const data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
+                    setPlayoffBracket(data);
+                    setPlayoffBracketError(null);
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : 'Bracket fetch failed';
+                    setPlayoffBracketError(msg);
+                    console.error('❌ PLAYOFF BRACKET (post-standings):', e);
+                }
             } else {
                 console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
             }
 
-            // Player syncs write to `teamRosters` in the DB; refresh in-memory rows so game tabs show everyone.
+            // Player syncs write to `playoffStats` in the DB; refresh in-memory rows so game tabs show everyone.
             if (shouldStats || shouldRoster) {
                 try {
-                    const rostersAfterSync = await withTimeout(
-                        fetchAllTeamRosterRows(),
-                        60000,
-                        'Team rosters refetch after player sync'
-                    );
+                    const [rostersAfterSync, rsAfterSync] = await Promise.all([
+                        withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff rosters refetch after player sync'),
+                        withTimeout(
+                            fetchAllRegularSeasonTeamRosterRows(),
+                            60000,
+                            'Regular season rosters refetch after player sync'
+                        ),
+                    ]);
                     setTeamRosters(rostersAfterSync as TeamRoster[]);
-                    console.log(`✅ SCHEDULE: Team rosters state refreshed (${rostersAfterSync.length} rows)`);
+                    setTeamRostersRegularSeason(rsAfterSync as TeamRoster[]);
+                    console.log(
+                        `✅ SCHEDULE: Team rosters refreshed (playoffs ${rostersAfterSync.length}, RS ${rsAfterSync.length} rows)`
+                    );
                 } catch (rostersRefetchError) {
                     console.error('❌ SCHEDULE: Post-sync team rosters refetch error:', rostersRefetchError);
                 }
@@ -600,11 +669,16 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             allGames,
             myGames,
             teamRosters,
+            teamRostersRegularSeason,
             loading: loading || isRefreshing,
             syncingPlayerStats: syncingStats || syncingStandings,
             syncingSchedule: loading || isRefreshing || scheduleSyncStatus.status === 'running',
             syncingStats,
             syncingStandings,
+            playoffBracket,
+            playoffBracketError,
+            syncingPlayoffBracket,
+            refreshPlayoffBracket,
             scheduleSyncStatus,
             blockingOverlayVisible,
             error,
@@ -694,6 +768,70 @@ export const formatGameTime = (timetz: string, gameDate: string) => {
 
     return `${hour12}:${minutes} ${ampm} ${getTimezoneAbbr(offset)}`;
 };
+
+/**
+ * HockeyTech bracket `date_time` often ends with Z or ±00(:00) even though the clock is
+ * arena-local (same numerals everywhere). Strip that so we do not treat it as a real offset.
+ */
+export function stripBracketFeedUtcNoise(timePart: string): string {
+    let s = timePart.trim();
+    s = s.replace(/[+-]0{2}(:0{2})?$/i, '').trim();
+    s = s.replace(/Z$/i, '').trim();
+    s = s.replace(/\.\d+$/, '').trim();
+    return s;
+}
+
+/** Bracket / feed times often omit ±HH; treat as wall clock in the home team's IANA `teams.timezone`. */
+export function formatGameTimeFromHomeWallClock(
+    gameDate: string,
+    wallTimeOrTimetz: string | null | undefined,
+    homeIanaTimezone: string | null | undefined
+): string {
+    const raw = stripBracketFeedUtcNoise((wallTimeOrTimetz ?? '').trim());
+    if (!raw) return '';
+    if (!gameDate || gameDate === 'TBD') return raw;
+
+    if (/\d{1,2}:\d{2}(:\d{2})?[+-]\d/.test(raw)) {
+        const withSeconds = (() => {
+            const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?([+-].+)$/);
+            if (!m) return raw;
+            const sec = m[3] ?? '00';
+            return `${m[1]}:${m[2]}:${sec}${m[4]}`;
+        })();
+        return formatGameTime(withSeconds, gameDate);
+    }
+
+    if (!homeIanaTimezone) return raw;
+
+    const hms = (() => {
+        const clockOnly = (raw.split(/\s+/).pop() ?? raw).split(/[+-]/)[0].trim();
+        const noFrac = clockOnly.replace(/\.\d+$/, '');
+        const parts = noFrac.split(':').map((p) => p.replace(/\D/g, ''));
+        if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+        const h = parts[0].padStart(2, '0');
+        const m = parts[1].padStart(2, '0');
+        const s = (parts[2] ?? '00').padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    })();
+    if (!hms) return raw;
+
+    try {
+        const [Y, M, D] = gameDate.split('-').map((x) => parseInt(x, 10));
+        if (!Y || !M || !D) return raw;
+        const [hs, ms, ss] = hms.split(':');
+        const wall = new Date(Y, M - 1, D, parseInt(hs, 10), parseInt(ms, 10), parseInt(ss, 10));
+        const utcInstant = fromZonedTime(wall, homeIanaTimezone);
+        const xxx = formatInTimeZone(utcInstant, homeIanaTimezone, 'XXX');
+        const m = xxx.match(/^([+-])(\d{2}):(\d{2})$/);
+        if (!m || m[3] !== '00') {
+            return formatInTimeZone(utcInstant, homeIanaTimezone, 'h:mm a zzz');
+        }
+        const timetz = `${hms}${m[1]}${m[2]}`;
+        return formatGameTime(timetz, gameDate);
+    } catch {
+        return raw;
+    }
+}
 
 // Helper function to format game date and time
 export const formatGameDateTime = (gamedate: string, gametime: string) => {

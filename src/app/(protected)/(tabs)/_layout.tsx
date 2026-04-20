@@ -45,6 +45,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="playoffs"
+        options={{
+          tabBarLabel: 'Playoffs',
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="trophy" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           tabBarLabel: "Profile",

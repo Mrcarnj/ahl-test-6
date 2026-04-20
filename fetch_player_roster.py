@@ -14,7 +14,9 @@ SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"
 
 # API base URL (team_id will be inserted)
-API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=90&key=ccb91f29d6744675&client_code=ahl&fmt=json"
+API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=92&key=ccb91f29d6744675&client_code=ahl&fmt=json"
+
+ROSTER_STATS_TABLE = "playoffStats"
 
 # All AHL team IDs
 TEAM_IDS = [
@@ -113,7 +115,7 @@ def update_players(players: List[Dict]) -> tuple:
         player_ids = [str(p['id']) for p in players]
         
         # Fetch existing data for these players
-        response = supabase.table('teamRosters').select('id, number, rookie, veteran').in_('id', player_ids).execute()
+        response = supabase.table(ROSTER_STATS_TABLE).select('id, number, rookie, veteran').in_('id', player_ids).execute()
         existing_players = {str(p['id']): p for p in response.data} if response.data else {}
     except Exception as e:
         print(f"  ⚠️  Could not fetch existing players: {str(e)}")
@@ -163,7 +165,7 @@ def update_players(players: List[Dict]) -> tuple:
                 'veteran': player.get('veteran'),
             }
             
-            supabase.table('teamRosters').update(update_data).eq('id', player['id']).execute()
+            supabase.table(ROSTER_STATS_TABLE).update(update_data).eq('id', player['id']).execute()
             successful_updates += 1
         except Exception as e:
             print(f"    ❌ Error updating player {player['id']}: {str(e)}")

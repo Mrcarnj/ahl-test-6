@@ -13,7 +13,10 @@ SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"
 
 # API endpoint with high limit to get all players (set to 2000 to cover all possible skaters)
-API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=90&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback"
+API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=92&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback"
+
+ROSTER_STATS_TABLE = "playoffStats"
+PLAYOFF_SEASON_ID = 92
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -153,7 +156,7 @@ def insert_players(players: List[Dict]) -> None:
     # Fetch existing players from database to compare
     print("🔍 Fetching existing players from database for comparison...")
     try:
-        response = supabase.table('teamRosters').select('*').execute()
+        response = supabase.table(ROSTER_STATS_TABLE).select('*').execute()
         existing_players = {str(p['id']): p for p in response.data} if response.data else {}
         print(f"   Found {len(existing_players)} existing players in database")
     except Exception as e:
@@ -219,8 +222,9 @@ def insert_players(players: List[Dict]) -> None:
         
         try:
             # Upsert: insert if new, update if exists (based on id primary key)
-            response = supabase.table('teamRosters').upsert(
-                batch,
+            batch_rows = [{**player, "season_id": PLAYOFF_SEASON_ID} for player in batch]
+            response = supabase.table(ROSTER_STATS_TABLE).upsert(
+                batch_rows,
                 on_conflict='id'
             ).execute()
             

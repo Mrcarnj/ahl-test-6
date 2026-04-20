@@ -1,11 +1,34 @@
 // app/(protected)/game/[id].tsx
-import { useRoster } from '@/src/providers/RosterProvider';
-import { formatGameDate2, formatGameTime, getTeamCoach, getTeamLogo, Schedule, TeamRoster, useSchedule } from '@/src/providers/ScheduleProvider';
-import { AntDesign, FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Dimensions, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRoster } from "@/src/providers/RosterProvider";
+import {
+    formatGameDate2,
+    formatGameTime,
+    getTeamCoach,
+    getTeamLogo,
+    Schedule,
+    TeamRoster,
+    useSchedule,
+} from "@/src/providers/ScheduleProvider";
+import {
+    AntDesign,
+    FontAwesome,
+    FontAwesome5,
+    Ionicons,
+} from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
+import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
+import {
+    Alert,
+    Image,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
 function rosterNum(value: number | null | undefined): number {
@@ -14,7 +37,10 @@ function rosterNum(value: number | null | undefined): number {
 }
 
 /** Full roster for one club: match `teams.abbreviation` + sort for display. */
-function rosterPlayersForTeam(teamRosters: TeamRoster[], teamAbbrev: string | undefined): TeamRoster[] {
+function rosterPlayersForTeam(
+  teamRosters: TeamRoster[],
+  teamAbbrev: string | undefined,
+): TeamRoster[] {
   if (!teamAbbrev) return [];
   return teamRosters
     .filter((player) => player.team === teamAbbrev)
@@ -33,29 +59,254 @@ function rosterPlayersForTeam(teamRosters: TeamRoster[], teamAbbrev: string | un
 }
 
 function formatRosterStat(value: number | null | undefined): string {
-  if (value == null) return '–';
+  if (value == null) return "–";
   return String(value);
 }
 
-function formatRosterPlayerName(player: Pick<TeamRoster, 'player_name'>): string {
-  return (player.player_name ?? '').replace(/\s\+-\s*$/, '');
+function formatRosterPlayerName(
+  player: Pick<TeamRoster, "player_name">,
+): string {
+  return (player.player_name ?? "").replace(/\s\+-\s*$/, "");
 }
 
+/** Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`. */
+function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
+  const pointsLeaders = [...teamRoster]
+    .sort((a, b) => {
+      if (rosterNum(b.points) !== rosterNum(a.points)) {
+        return rosterNum(b.points) - rosterNum(a.points);
+      }
+      if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
+        return rosterNum(a.games_played) - rosterNum(b.games_played);
+      }
+      if (rosterNum(b.goals) !== rosterNum(a.goals)) {
+        return rosterNum(b.goals) - rosterNum(a.goals);
+      }
+      return rosterNum(b.assists) - rosterNum(a.assists);
+    })
+    .slice(0, 5);
+
+  const pimLeaders = [...teamRoster]
+    .sort((a, b) => {
+      if (rosterNum(b.penalty_minutes) !== rosterNum(a.penalty_minutes)) {
+        return rosterNum(b.penalty_minutes) - rosterNum(a.penalty_minutes);
+      }
+      return rosterNum(a.games_played) - rosterNum(b.games_played);
+    })
+    .slice(0, 3);
+
+  return (
+    <>
+      <View style={styles.rosterContainer}>
+        <Text style={styles.sectionTitle}>Points Leaders</Text>
+
+        <View style={styles.rosterHeader}>
+          <Text style={styles.headerText}>#</Text>
+          <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
+          <Text style={styles.headerText}>POS</Text>
+          <Text style={styles.headerText}>GP</Text>
+          <Text style={styles.headerText}>G</Text>
+          <Text style={styles.headerText}>A</Text>
+          <Text style={styles.headerText}>PTS</Text>
+          <Text style={styles.headerText}>PPG</Text>
+        </View>
+
+        {pointsLeaders.map((player) => (
+          <View key={player.id} style={styles.playerRow}>
+            <Text style={styles.playerText}>
+              {player.number !== null ? player.number : "X"}
+            </Text>
+            <Text style={[styles.playerText, { flex: 4 }]}>
+              {formatRosterPlayerName(player)}
+            </Text>
+            <Text style={styles.playerText}>{player.position ?? "–"}</Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.games_played)}
+            </Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.goals)}
+            </Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.assists)}
+            </Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.points)}
+            </Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.power_play_goals)}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.rosterContainer}>
+        <Text style={styles.sectionTitle}>Penalty Leaders</Text>
+
+        <View style={styles.rosterHeader}>
+          <Text style={styles.headerText}>#</Text>
+          <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
+          <Text style={styles.headerText}>POS</Text>
+          <Text style={styles.headerText}>GP</Text>
+          <Text style={styles.headerText}>PIM</Text>
+        </View>
+
+        {pimLeaders.map((player) => (
+          <View key={player.id} style={styles.playerRow}>
+            <Text style={styles.playerText}>
+              {player.number !== null ? player.number : "X"}
+            </Text>
+            <Text style={[styles.playerText, { flex: 2 }]}>
+              {formatRosterPlayerName(player)}
+            </Text>
+            <Text style={styles.playerText}>{player.position ?? "–"}</Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.games_played)}
+            </Text>
+            <Text style={styles.playerText}>
+              {formatRosterStat(player.penalty_minutes)}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.rosterContainer}>
+        <Text style={styles.sectionTitle}>Team Roster</Text>
+
+        <View style={styles.rosterHeader}>
+          <Text style={styles.headerText}>#</Text>
+          <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
+          <Text style={styles.headerText}>POS</Text>
+          <Text style={styles.headerText}>GP</Text>
+          <Text style={styles.headerText}>G</Text>
+          <Text style={styles.headerText}>A</Text>
+          <Text style={styles.headerText}>PTS</Text>
+          <Text style={styles.headerText}>+/-</Text>
+          <Text style={styles.headerText}>PIM</Text>
+          <Text style={styles.headerText}>PPG</Text>
+        </View>
+
+        {teamRoster.map((player) => {
+          const playerName = formatRosterPlayerName(player);
+          const statusIndicators = [];
+          if (player.veteran === true) {
+            statusIndicators.push("(V)");
+          }
+          if (player.rookie === true) {
+            statusIndicators.push("(R)");
+          }
+          const displayName =
+            statusIndicators.length > 0
+              ? `${playerName} ${statusIndicators.join(" ")}`
+              : playerName;
+
+          return (
+            <View key={player.id} style={styles.playerRow}>
+              <Text style={styles.playerText}>
+                {player.number !== null ? player.number : "X"}
+              </Text>
+              <Text style={[styles.playerText, { flex: 4 }]}>
+                {displayName}
+              </Text>
+              <Text style={styles.playerText}>{player.position ?? "–"}</Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.games_played)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.goals)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.assists)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.points)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.plusMinus)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.penalty_minutes)}
+              </Text>
+              <Text style={styles.playerText}>
+                {formatRosterStat(player.power_play_goals)}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
+function TeamSeasonRosterPager({
+  playoffRoster,
+  regularSeasonRoster,
+}: {
+  playoffRoster: TeamRoster[];
+  regularSeasonRoster: TeamRoster[];
+}) {
+  const [seasonPage, setSeasonPage] = useState(0);
+
+  return (
+    <View>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "center",
+          marginBottom: 10,
+        }}
+      >
+        <TouchableOpacity
+          style={[styles.tab, seasonPage === 0 && styles.activeTab]}
+          onPress={() => setSeasonPage(0)}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              seasonPage === 0 && styles.activeTabText,
+            ]}
+          >
+            Playoffs
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, seasonPage === 1 && styles.activeTab]}
+          onPress={() => setSeasonPage(1)}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              seasonPage === 1 && styles.activeTabText,
+            ]}
+          >
+            Regular Season
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <TeamRosterStatsTables
+        teamRoster={seasonPage === 0 ? playoffRoster : regularSeasonRoster}
+      />
+    </View>
+  );
+}
 
 const GameDetails = () => {
   const { id, source } = useLocalSearchParams<{ id: string; source: string }>();
   const { allGames, myGames } = useSchedule();
   const { allRosters } = useRoster();
-  const [activeTab, setActiveTab] = useState('crew');
+  const [activeTab, setActiveTab] = useState("crew");
   const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
-  const screenWidth = Dimensions.get('window').width;
   const [refreshing, setRefreshing] = useState(false);
   const { refreshSchedule } = useSchedule();
 
   // Current season constant
-  const CURRENT_SEASON = '2025-26';
+  const CURRENT_SEASON = "2025-26";
 
-  const game = myGames.find(g => g.gameid === id && g.season === CURRENT_SEASON);
+  const game = myGames.find(
+    (g) => g.gameid === id && g.season === CURRENT_SEASON,
+  );
 
   if (!game) {
     return <Text>Game not found</Text>;
@@ -73,21 +324,21 @@ const GameDetails = () => {
   };
 
   const getOfficialName = (lastfirstfullname: string) => {
-    const ref = allRosters.find(r => r.lastfirstfullname === lastfirstfullname);
+    const ref = allRosters.find(
+      (r) => r.lastfirstfullname === lastfirstfullname,
+    );
     return ref ? `${ref.firstname} ${ref.lastname}` : lastfirstfullname;
   };
-
 
   const handleOfficialPress = (rosterId: number) => {
     router.push({
       pathname: "/(protected)/official/[rosterId]",
       params: {
         rosterId: rosterId,
-        source: 'game'
-      }
+        source: "game",
+      },
     });
   };
-
 
   const handleGroupChat = async () => {
     console.log("HandleGroupChat started");
@@ -95,27 +346,31 @@ const GameDetails = () => {
     const cleanPhoneNumber = (phone: string) => {
       if (!phone) return null;
       console.log("Cleaning phone number:", phone);
-      return phone.replace(/\D/g, '');
+      return phone.replace(/\D/g, "");
     };
 
     // Get and clean all valid phone numbers
-    const ref1 = allRosters.find(r => r.lastfirstfullname === game.referee1);
-    const ref2 = allRosters.find(r => r.lastfirstfullname === game.referee2);
-    const lines1 = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
-    const lines2 = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
+    const ref1 = allRosters.find((r) => r.lastfirstfullname === game.referee1);
+    const ref2 = allRosters.find((r) => r.lastfirstfullname === game.referee2);
+    const lines1 = allRosters.find(
+      (r) => r.lastfirstfullname === game.linesperson1,
+    );
+    const lines2 = allRosters.find(
+      (r) => r.lastfirstfullname === game.linesperson2,
+    );
 
     console.log("Found officials:", {
       ref1: ref1?.phonenumber,
       ref2: ref2?.phonenumber,
       lines1: lines1?.phonenumber,
-      lines2: lines2?.phonenumber
+      lines2: lines2?.phonenumber,
     });
 
     const phoneNumbers = [
       ref1?.phonenumber ? cleanPhoneNumber(ref1.phonenumber) : null,
       ref2?.phonenumber ? cleanPhoneNumber(ref2.phonenumber) : null,
       lines1?.phonenumber ? cleanPhoneNumber(lines1.phonenumber) : null,
-      lines2?.phonenumber ? cleanPhoneNumber(lines2.phonenumber) : null
+      lines2?.phonenumber ? cleanPhoneNumber(lines2.phonenumber) : null,
     ].filter(Boolean);
 
     console.log("Cleaned phone numbers:", phoneNumbers);
@@ -128,7 +383,7 @@ const GameDetails = () => {
 
     try {
       console.log("Attempting to copy to clipboard");
-      await Clipboard.setStringAsync(phoneNumbers.join(', '));
+      await Clipboard.setStringAsync(phoneNumbers.join(", "));
       console.log("Successfully copied to clipboard");
 
       Alert.alert(
@@ -137,13 +392,13 @@ const GameDetails = () => {
         [
           {
             text: "Open Messages",
-            onPress: () => Linking.openURL('sms:')
+            onPress: () => Linking.openURL("sms:"),
           },
           {
             text: "Cancel",
-            style: "cancel"
-          }
-        ]
+            style: "cancel",
+          },
+        ],
       );
     } catch (error) {
       console.error("Clipboard error:", error);
@@ -157,7 +412,7 @@ const GameDetails = () => {
 
     if (!arenaAddress) {
       // Handle case where arena address isn't available
-      Alert.alert('Error', 'Arena address not available');
+      Alert.alert("Error", "Arena address not available");
       return;
     }
 
@@ -168,18 +423,21 @@ const GameDetails = () => {
     });
 
     // Check if the URL can be opened
-    Linking.canOpenURL(url!).then(supported => {
+    Linking.canOpenURL(url!).then((supported) => {
       if (supported) {
         Linking.openURL(url!);
       } else {
-        Alert.alert('Error', 'Unable to open maps application');
+        Alert.alert("Error", "Unable to open maps application");
       }
     });
   };
 
   const handleParkingPress = (game: Schedule) => {
-    if (!game.homeTeamData?.parking_latitude || !game.homeTeamData?.parking_longitude) {
-      Alert.alert('Error', 'Parking location not available');
+    if (
+      !game.homeTeamData?.parking_latitude ||
+      !game.homeTeamData?.parking_longitude
+    ) {
+      Alert.alert("Error", "Parking location not available");
       return;
     }
 
@@ -188,22 +446,34 @@ const GameDetails = () => {
       android: `google.navigation:q=${game.homeTeamData.parking_latitude},${game.homeTeamData.parking_longitude}`,
     });
 
-    Linking.canOpenURL(url!).then(supported => {
+    Linking.canOpenURL(url!).then((supported) => {
       if (supported) {
         Linking.openURL(url!);
       } else {
-        Alert.alert('Error', 'Unable to open maps application');
+        Alert.alert("Error", "Unable to open maps application");
       }
     });
   };
 
-  const CrewContent = ({ game, allRosters, handleOfficialPress, handleGroupChat }: { game: Schedule, allRosters: any[], handleOfficialPress: (id: number) => void, handleGroupChat: () => void }) => (
+  const CrewContent = ({
+    game,
+    allRosters,
+    handleOfficialPress,
+    handleGroupChat,
+  }: {
+    game: Schedule;
+    allRosters: any[];
+    handleOfficialPress: (id: number) => void;
+    handleGroupChat: () => void;
+  }) => (
     <>
       <View style={styles.refereesRow}>
         <View style={styles.refereeContainer}>
           <TouchableOpacity
             onPress={() => {
-              const ref = allRosters.find(r => r.lastfirstfullname === game.referee1);
+              const ref = allRosters.find(
+                (r) => r.lastfirstfullname === game.referee1,
+              );
               if (ref) {
                 handleOfficialPress(ref.id);
               }
@@ -211,19 +481,28 @@ const GameDetails = () => {
           >
             <Image
               source={
-                allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo
-                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee1)?.photo }
-                  : require('../../../../assets/images/noPhoto.png')
+                allRosters.find((r) => r.lastfirstfullname === game.referee1)
+                  ?.photo
+                  ? {
+                      uri: allRosters.find(
+                        (r) => r.lastfirstfullname === game.referee1,
+                      )?.photo,
+                    }
+                  : require("../../../../assets/images/noPhoto.png")
               }
               style={styles.profileImageRef}
             />
-            <Text style={styles.refereeText}>{getOfficialName(game.referee1)} </Text>
+            <Text style={styles.refereeText}>
+              {getOfficialName(game.referee1)}{" "}
+            </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.refereeContainer}>
           <TouchableOpacity
             onPress={() => {
-              const ref = allRosters.find(r => r.lastfirstfullname === game.referee2);
+              const ref = allRosters.find(
+                (r) => r.lastfirstfullname === game.referee2,
+              );
               if (ref) {
                 handleOfficialPress(ref.id);
               }
@@ -231,13 +510,20 @@ const GameDetails = () => {
           >
             <Image
               source={
-                allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo
-                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.referee2)?.photo }
-                  : require('../../../../assets/images/noPhoto.png')
+                allRosters.find((r) => r.lastfirstfullname === game.referee2)
+                  ?.photo
+                  ? {
+                      uri: allRosters.find(
+                        (r) => r.lastfirstfullname === game.referee2,
+                      )?.photo,
+                    }
+                  : require("../../../../assets/images/noPhoto.png")
               }
               style={styles.profileImageRef}
             />
-            <Text style={styles.refereeText}>{getOfficialName(game.referee2)} </Text>
+            <Text style={styles.refereeText}>
+              {getOfficialName(game.referee2)}{" "}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -246,7 +532,9 @@ const GameDetails = () => {
         <View style={styles.refereeContainer}>
           <TouchableOpacity
             onPress={() => {
-              const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson1);
+              const ref = allRosters.find(
+                (r) => r.lastfirstfullname === game.linesperson1,
+              );
               if (ref) {
                 handleOfficialPress(ref.id);
               }
@@ -254,19 +542,29 @@ const GameDetails = () => {
           >
             <Image
               source={
-                allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo
-                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson1)?.photo }
-                  : require('../../../../assets/images/noPhoto.png')
+                allRosters.find(
+                  (r) => r.lastfirstfullname === game.linesperson1,
+                )?.photo
+                  ? {
+                      uri: allRosters.find(
+                        (r) => r.lastfirstfullname === game.linesperson1,
+                      )?.photo,
+                    }
+                  : require("../../../../assets/images/noPhoto.png")
               }
               style={styles.profileImageLines}
             />
-            <Text style={styles.refereeText}>{getOfficialName(game.linesperson1)} </Text>
+            <Text style={styles.refereeText}>
+              {getOfficialName(game.linesperson1)}{" "}
+            </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.refereeContainer}>
           <TouchableOpacity
             onPress={() => {
-              const ref = allRosters.find(r => r.lastfirstfullname === game.linesperson2);
+              const ref = allRosters.find(
+                (r) => r.lastfirstfullname === game.linesperson2,
+              );
               if (ref) {
                 handleOfficialPress(ref.id);
               }
@@ -274,13 +572,21 @@ const GameDetails = () => {
           >
             <Image
               source={
-                allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo
-                  ? { uri: allRosters.find(r => r.lastfirstfullname === game.linesperson2)?.photo }
-                  : require('../../../../assets/images/noPhoto.png')
+                allRosters.find(
+                  (r) => r.lastfirstfullname === game.linesperson2,
+                )?.photo
+                  ? {
+                      uri: allRosters.find(
+                        (r) => r.lastfirstfullname === game.linesperson2,
+                      )?.photo,
+                    }
+                  : require("../../../../assets/images/noPhoto.png")
               }
               style={styles.profileImageLines}
             />
-            <Text style={styles.refereeText}>{getOfficialName(game.linesperson2)} </Text>
+            <Text style={styles.refereeText}>
+              {getOfficialName(game.linesperson2)}{" "}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -294,7 +600,11 @@ const GameDetails = () => {
       <View style={styles.separator} />
 
       <View style={styles.notesSection}>
-        <Text style={styles.titles}> <FontAwesome5 name="parking" size={20} color="#ff6600" /> Parking Notes</Text>
+        <Text style={styles.titles}>
+          {" "}
+          <FontAwesome5 name="parking" size={20} color="#ff6600" /> Parking
+          Notes
+        </Text>
         <View style={styles.notesContainer}>
           <View style={styles.noteItem}>
             <Text style={styles.bullet}>•</Text>
@@ -304,7 +614,8 @@ const GameDetails = () => {
           </View>
           <View style={styles.notesSection}>
             <Text style={styles.titles}>
-              <FontAwesome5 name="door-open" size={20} color="#ff6600" /> Locker Room Access
+              <FontAwesome5 name="door-open" size={20} color="#ff6600" /> Locker
+              Room Access
             </Text>
           </View>
           <View style={styles.noteItem}>
@@ -319,33 +630,13 @@ const GameDetails = () => {
   );
 
   const AwayTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters } = useSchedule();
+    const { teamRosters, teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.awayTeamData?.abbreviation;
-    const teamRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
-
-    const pointsLeaders = [...teamRoster]
-      .sort((a, b) => {
-        if (rosterNum(b.points) !== rosterNum(a.points)) {
-          return rosterNum(b.points) - rosterNum(a.points);
-        }
-        if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
-          return rosterNum(a.games_played) - rosterNum(b.games_played);
-        }
-        if (rosterNum(b.goals) !== rosterNum(a.goals)) {
-          return rosterNum(b.goals) - rosterNum(a.goals);
-        }
-        return rosterNum(b.assists) - rosterNum(a.assists);
-      })
-      .slice(0, 5); // Get only top 5
-
-    const pimLeaders = [...teamRoster]
-      .sort((a, b) => {
-        if (rosterNum(b.penalty_minutes) !== rosterNum(a.penalty_minutes)) {
-          return rosterNum(b.penalty_minutes) - rosterNum(a.penalty_minutes);
-        }
-        return rosterNum(a.games_played) - rosterNum(b.games_played);
-      })
-      .slice(0, 3); // Get only top 5
+    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
+    const regularSeasonRoster = rosterPlayersForTeam(
+      teamRostersRegularSeason,
+      teamAbbrev,
+    );
 
     return (
       <ScrollView style={styles.teamContentScrollView}>
@@ -354,11 +645,15 @@ const GameDetails = () => {
             <Text style={styles.titles}>Head Coach</Text>
             <View style={styles.headCoachContainer}>
               <Image
-                source={{ uri: getTeamCoach(game.awayTeamData) || 'https://via.placeholder.com/150' }}
+                source={{
+                  uri:
+                    getTeamCoach(game.awayTeamData) ||
+                    "https://via.placeholder.com/150",
+                }}
                 style={styles.headCoachPic}
               />
               <Text style={styles.headCoachText}>
-                {game.awayTeamData?.headcoachname || 'N/A'}
+                {game.awayTeamData?.headcoachname || "N/A"}
               </Text>
             </View>
           </View>
@@ -367,31 +662,37 @@ const GameDetails = () => {
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Assistant Coach</Text>
               <Text style={styles.staffText}>
-                {game.awayTeamData?.assistantcoach1 || 'N/A'}
+                {game.awayTeamData?.assistantcoach1 || "N/A"}
               </Text>
             </View>
 
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Assistant Coach</Text>
               <Text style={styles.staffText}>
-                {game.awayTeamData?.assistantcoach2 || 'N/A'}
+                {game.awayTeamData?.assistantcoach2 || "N/A"}
               </Text>
             </View>
 
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Equipment Manager</Text>
               <Text style={styles.staffText}>
-                {game.awayTeamData?.eqname || 'N/A'}
+                {game.awayTeamData?.eqname || "N/A"}
               </Text>
               <View style={styles.iconsContainer}>
                 <TouchableOpacity
-                  onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`tel:${game.awayTeamData?.eqphone}`)}
+                  onPress={() =>
+                    game.awayTeamData?.eqphone &&
+                    Linking.openURL(`tel:${game.awayTeamData?.eqphone}`)
+                  }
                   style={styles.iconButton}
                 >
                   <FontAwesome name="phone" size={24} color="#ff6600" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => game.awayTeamData?.eqphone && Linking.openURL(`sms:${game.awayTeamData?.eqphone}?body=`)}
+                  onPress={() =>
+                    game.awayTeamData?.eqphone &&
+                    Linking.openURL(`sms:${game.awayTeamData?.eqphone}?body=`)
+                  }
                   style={styles.iconButton}
                 >
                   <AntDesign name="message" size={24} color="#ff6600" />
@@ -403,139 +704,22 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Points Leaders</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>G</Text>
-            <Text style={styles.headerText}>A</Text>
-            <Text style={styles.headerText}>PTS</Text>
-            <Text style={styles.headerText}>PPG</Text>
-          </View>
-
-          {pointsLeaders.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 4 }]}>
-                {formatRosterPlayerName(player)}
-              </Text>
-              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Penalty Leaders</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>PIM</Text>
-          </View>
-
-          {pimLeaders.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 2 }]}>
-                {formatRosterPlayerName(player)}
-              </Text>
-              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Team Roster</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>G</Text>
-            <Text style={styles.headerText}>A</Text>
-            <Text style={styles.headerText}>PTS</Text>
-            <Text style={styles.headerText}>+/-</Text>
-            <Text style={styles.headerText}>PIM</Text>
-            <Text style={styles.headerText}>PPG</Text>
-          </View>
-
-          {teamRoster.map((player) => {
-            const playerName = formatRosterPlayerName(player);
-            const statusIndicators = [];
-            if (player.veteran === true) {
-              statusIndicators.push('(V)');
-            }
-            if (player.rookie === true) {
-              statusIndicators.push('(R)');
-            }
-            const displayName = statusIndicators.length > 0 
-              ? `${playerName} ${statusIndicators.join(' ')}`
-              : playerName;
-
-            return (
-              <View key={player.id} style={styles.playerRow}>
-                <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-                <Text style={[styles.playerText, { flex: 4 }]}>
-                  {displayName}
-                </Text>
-                <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.plusMinus)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
-              </View>
-            );
-          })}
-        </View>
+        <TeamSeasonRosterPager
+          playoffRoster={playoffRoster}
+          regularSeasonRoster={regularSeasonRoster}
+        />
       </ScrollView>
     );
   };
 
   const HomeTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters } = useSchedule();
+    const { teamRosters, teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.homeTeamData?.abbreviation;
-    const teamRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
-
-    const pointsLeaders = [...teamRoster]
-      .sort((a, b) => {
-        if (rosterNum(b.points) !== rosterNum(a.points)) {
-          return rosterNum(b.points) - rosterNum(a.points);
-        }
-        if (rosterNum(a.games_played) !== rosterNum(b.games_played)) {
-          return rosterNum(a.games_played) - rosterNum(b.games_played);
-        }
-        if (rosterNum(b.goals) !== rosterNum(a.goals)) {
-          return rosterNum(b.goals) - rosterNum(a.goals);
-        }
-        return rosterNum(b.assists) - rosterNum(a.assists);
-      })
-      .slice(0, 5); // Get only top 5
-
-    const pimLeaders = [...teamRoster]
-      .sort((a, b) => {
-        if (rosterNum(b.penalty_minutes) !== rosterNum(a.penalty_minutes)) {
-          return rosterNum(b.penalty_minutes) - rosterNum(a.penalty_minutes);
-        }
-        return rosterNum(a.games_played) - rosterNum(b.games_played);
-      })
-      .slice(0, 3); // Get only top 5
+    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
+    const regularSeasonRoster = rosterPlayersForTeam(
+      teamRostersRegularSeason,
+      teamAbbrev,
+    );
 
     return (
       <ScrollView style={styles.teamContentScrollView}>
@@ -544,11 +728,15 @@ const GameDetails = () => {
             <Text style={styles.titles}>Head Coach</Text>
             <View style={styles.headCoachContainer}>
               <Image
-                source={{ uri: getTeamCoach(game.homeTeamData) || 'https://via.placeholder.com/150' }}
+                source={{
+                  uri:
+                    getTeamCoach(game.homeTeamData) ||
+                    "https://via.placeholder.com/150",
+                }}
                 style={styles.headCoachPic}
               />
               <Text style={styles.headCoachText}>
-                {game.homeTeamData?.headcoachname || 'N/A'}
+                {game.homeTeamData?.headcoachname || "N/A"}
               </Text>
             </View>
           </View>
@@ -557,31 +745,37 @@ const GameDetails = () => {
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Assistant Coach</Text>
               <Text style={styles.staffText}>
-                {game.homeTeamData?.assistantcoach1 || 'N/A'}
+                {game.homeTeamData?.assistantcoach1 || "N/A"}
               </Text>
             </View>
 
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Assistant Coach</Text>
               <Text style={styles.staffText}>
-                {game.homeTeamData?.assistantcoach2 || 'N/A'}
+                {game.homeTeamData?.assistantcoach2 || "N/A"}
               </Text>
             </View>
 
             <View style={styles.rightContentSection}>
               <Text style={styles.subtitles}>Equipment Manager</Text>
               <Text style={styles.staffText}>
-                {game.homeTeamData?.eqname || 'N/A'}
+                {game.homeTeamData?.eqname || "N/A"}
               </Text>
               <View style={styles.iconsContainer}>
                 <TouchableOpacity
-                  onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)}
+                  onPress={() =>
+                    game.homeTeamData?.eqphone &&
+                    Linking.openURL(`tel:${game.homeTeamData?.eqphone}`)
+                  }
                   style={styles.iconButton}
                 >
                   <FontAwesome name="phone" size={24} color="#ff6600" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => game.homeTeamData?.eqphone && Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)}
+                  onPress={() =>
+                    game.homeTeamData?.eqphone &&
+                    Linking.openURL(`sms:${game.homeTeamData?.eqphone}?body=`)
+                  }
                   style={styles.iconButton}
                 >
                   <AntDesign name="message" size={24} color="#ff6600" />
@@ -593,135 +787,38 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Points Leaders</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>G</Text>
-            <Text style={styles.headerText}>A</Text>
-            <Text style={styles.headerText}>PTS</Text>
-            <Text style={styles.headerText}>PPG</Text>
-          </View>
-
-          {pointsLeaders.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 4 }]}>
-                {formatRosterPlayerName(player)}
-              </Text>
-              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Penalty Leaders</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 2 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>PIM</Text>
-          </View>
-
-          {pimLeaders.map((player) => (
-            <View key={player.id} style={styles.playerRow}>
-              <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-              <Text style={[styles.playerText, { flex: 2 }]}>
-                {formatRosterPlayerName(player)}
-              </Text>
-              <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-              <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.rosterContainer}>
-          <Text style={styles.sectionTitle}>Team Roster</Text>
-
-          <View style={styles.rosterHeader}>
-            <Text style={styles.headerText}>#</Text>
-            <Text style={[styles.headerText, { flex: 4 }]}>Player</Text>
-            <Text style={styles.headerText}>POS</Text>
-            <Text style={styles.headerText}>GP</Text>
-            <Text style={styles.headerText}>G</Text>
-            <Text style={styles.headerText}>A</Text>
-            <Text style={styles.headerText}>PTS</Text>
-            <Text style={styles.headerText}>+/-</Text>
-            <Text style={styles.headerText}>PIM</Text>
-            <Text style={styles.headerText}>PPG</Text>
-          </View>
-
-          {teamRoster.map((player) => {
-            const playerName = formatRosterPlayerName(player);
-            const statusIndicators = [];
-            if (player.veteran === true) {
-              statusIndicators.push('(V)');
-            }
-            if (player.rookie === true) {
-              statusIndicators.push('(R)');
-            }
-            const displayName = statusIndicators.length > 0 
-              ? `${playerName} ${statusIndicators.join(' ')}`
-              : playerName;
-
-            return (
-              <View key={player.id} style={styles.playerRow}>
-                <Text style={styles.playerText}>{player.number !== null ? player.number : "X"}</Text>
-                <Text style={[styles.playerText, { flex: 4 }]}>
-                  {displayName}
-                </Text>
-                <Text style={styles.playerText}>{player.position ?? '–'}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.games_played)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.goals)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.assists)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.points)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.plusMinus)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.penalty_minutes)}</Text>
-                <Text style={styles.playerText}>{formatRosterStat(player.power_play_goals)}</Text>
-              </View>
-            );
-          })}
-        </View>
+        <TeamSeasonRosterPager
+          playoffRoster={playoffRoster}
+          regularSeasonRoster={regularSeasonRoster}
+        />
       </ScrollView>
     );
   };
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'crew':
-        return <CrewContent
-          game={game}
-          allRosters={allRosters}
-          handleOfficialPress={handleOfficialPress}
-          handleGroupChat={handleGroupChat}
-        />;
+      case "crew":
+        return (
+          <CrewContent
+            game={game}
+            allRosters={allRosters}
+            handleOfficialPress={handleOfficialPress}
+            handleGroupChat={handleGroupChat}
+          />
+        );
       case game.awayTeamData?.abbreviation?.toLowerCase():
-        return <AwayTeamContent
-          game={game}
-        />;
+        return <AwayTeamContent game={game} />;
       case game.homeTeamData?.abbreviation?.toLowerCase():
-        return <HomeTeamContent
-          game={game}
-        />;
+        return <HomeTeamContent game={game} />;
       default:
         return null;
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
     >
       <View style={styles.card}>
         <Text style={styles.gameDate}>{formatGameDate2(game.gamedate)}</Text>
@@ -729,16 +826,26 @@ const GameDetails = () => {
         <View style={styles.teamsContainer}>
           <View style={styles.teamWithStats}>
             <Image
-              source={{ uri: getTeamLogo(game.awayTeamData) || 'https://via.placeholder.com/150' }}
+              source={{
+                uri:
+                  getTeamLogo(game.awayTeamData) ||
+                  "https://via.placeholder.com/150",
+              }}
               style={styles.teamLogo}
             />
             {game.awayTeamData && (
               <>
                 <Text style={styles.teamStats}>
-                  GP: {game.awayTeamData.games_played || '0'}, {game.awayTeamData.wins || '0'}-{game.awayTeamData.losses || '0'}-{game.awayTeamData.otl || '0'}-{game.awayTeamData.sol || '0'} // Pts: {game.awayTeamData.points || '0'}
+                  GP: {game.awayTeamData.games_played || "0"},{" "}
+                  {game.awayTeamData.wins || "0"}-
+                  {game.awayTeamData.losses || "0"}-
+                  {game.awayTeamData.otl || "0"}-{game.awayTeamData.sol || "0"}{" "}
+                  // Pts: {game.awayTeamData.points || "0"}
                 </Text>
                 <Text style={styles.teamRank}>
-                  {game.awayTeamData.division || 'N/A'} #{game.awayTeamData.division_rank || ''} // Overall #{game.awayTeamData.overall_rank || 'N/A'}
+                  {game.awayTeamData.division || "N/A"} #
+                  {game.awayTeamData.division_rank || ""} // Overall #
+                  {game.awayTeamData.overall_rank || "N/A"}
                 </Text>
               </>
             )}
@@ -746,16 +853,26 @@ const GameDetails = () => {
           <Text style={styles.atSymbol}>@</Text>
           <View style={styles.teamWithStats}>
             <Image
-              source={{ uri: getTeamLogo(game.homeTeamData) || 'https://via.placeholder.com/150' }}
+              source={{
+                uri:
+                  getTeamLogo(game.homeTeamData) ||
+                  "https://via.placeholder.com/150",
+              }}
               style={styles.teamLogo}
             />
             {game.homeTeamData && (
               <>
                 <Text style={styles.teamStats}>
-                  GP: {game.homeTeamData.games_played || '0'}, {game.homeTeamData.wins || '0'}-{game.homeTeamData.losses || '0'}-{game.homeTeamData.otl || '0'}-{game.homeTeamData.sol || '0'} // Pts: {game.homeTeamData.points || '0'}
+                  GP: {game.homeTeamData.games_played || "0"},{" "}
+                  {game.homeTeamData.wins || "0"}-
+                  {game.homeTeamData.losses || "0"}-
+                  {game.homeTeamData.otl || "0"}-{game.homeTeamData.sol || "0"}{" "}
+                  // Pts: {game.homeTeamData.points || "0"}
                 </Text>
                 <Text style={styles.teamRank}>
-                  {game.homeTeamData.division || 'N/A'} #{game.homeTeamData.division_rank || ''} // Overall #{game.homeTeamData.overall_rank || 'N/A'}
+                  {game.homeTeamData.division || "N/A"} #
+                  {game.homeTeamData.division_rank || ""} // Overall #
+                  {game.homeTeamData.overall_rank || "N/A"}
                 </Text>
               </>
             )}
@@ -768,7 +885,7 @@ const GameDetails = () => {
           <View style={styles.arenaContainer}>
             <TouchableOpacity onPress={() => handleArenaPress(game)}>
               <Text style={styles.arena}>
-                {game.homeTeamData?.arenaname || 'Arena not specified'}
+                {game.homeTeamData?.arenaname || "Arena not specified"}
               </Text>
             </TouchableOpacity>
             <Text style={styles.divider}> // </Text>
@@ -802,46 +919,50 @@ const GameDetails = () => {
           </TouchableOpacity>
         </View>
       </View>
-      <Text style={styles.disclaimer}>Note: Gamesheet not available until after completion of the game.</Text>
+      <Text style={styles.disclaimer}>
+        Note: Gamesheet not available until after completion of the game.
+      </Text>
 
       <View style={styles.tabContainer}>
         {[
-          'Crew',
-          game.awayTeamData?.abbreviation || 'Away',
-          game.homeTeamData?.abbreviation || 'Home'
+          "Crew",
+          game.awayTeamData?.abbreviation || "Away",
+          game.homeTeamData?.abbreviation || "Home",
         ].map((tab) => (
           <TouchableOpacity
             key={tab}
-            onPress={() => setActiveTab(tab.toLowerCase().replace(' ', ''))}
+            onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
             style={[
               styles.tab,
-              activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTab
+              activeTab === tab.toLowerCase().replace(" ", "") &&
+                styles.activeTab,
             ]}
           >
-            <Text style={[
-              styles.tabText,
-              activeTab === tab.toLowerCase().replace(' ', '') && styles.activeTabText
-            ]}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab.toLowerCase().replace(" ", "") &&
+                  styles.activeTabText,
+              ]}
+            >
               {tab}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <View style={styles.contentContainer}>
-        {renderContent()}
-      </View>
+      <View style={styles.contentContainer}>{renderContent()}</View>
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: "#000000",
   },
   container2: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   contentContainer: {
     padding: 10,
@@ -849,17 +970,17 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000000',
-    position: 'absolute',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000000",
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
   },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 20,
     marginBottom: 10,
@@ -875,121 +996,121 @@ const styles = StyleSheet.create({
   separator: {
     marginVertical: 5,
     height: 1,
-    width: '100%',
-    backgroundColor: '#333',
+    width: "100%",
+    backgroundColor: "#333",
   },
   teamsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
   teamWithStats: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   teamLogo: {
     width: 80,
     height: 80,
-    resizeMode: 'contain',
+    resizeMode: "contain",
     marginHorizontal: 20,
     marginBottom: 8,
   },
   teamStats: {
     fontSize: 12,
-    color: '#666666',
-    textAlign: 'center',
+    color: "#666666",
+    textAlign: "center",
     marginBottom: 4,
   },
   teamRank: {
     fontSize: 12,
-    color: '#666666',
-    textAlign: 'center',
+    color: "#666666",
+    textAlign: "center",
   },
   atSymbol: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: "bold",
+    color: "#000000",
     marginHorizontal: 10,
   },
   gameTime: {
     fontSize: 18,
-    color: '#000000',
+    color: "#000000",
     marginTop: -10,
     marginBottom: 5,
-    textAlign: 'center'
+    textAlign: "center",
   },
   gameDate: {
     fontSize: 16,
-    color: '#000000',
-    fontWeight: 'bold',
+    color: "#000000",
+    fontWeight: "bold",
     marginBottom: 5,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 10,
   },
   arena: {
     fontSize: 13,
-    color: '#666666',
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-    fontStyle: 'italic',
+    color: "#666666",
+    textAlign: "center",
+    textDecorationLine: "underline",
+    fontStyle: "italic",
   },
   gameID: {
     fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
+    color: "#666666",
+    textAlign: "center",
     marginBottom: 10,
   },
   refereesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
+    flexDirection: "row",
+    justifyContent: "space-evenly",
     marginBottom: 20,
   },
   headCoachesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginBottom: 20,
   },
   headCoachContainer: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   headCoachPic: {
     width: 100,
     height: 150,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ffffff',
+    borderColor: "#ffffff",
     marginBottom: 10,
     marginTop: 10,
   },
   headCoachText: {
     fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
+    color: "#ffffff",
+    textAlign: "center",
   },
   equipmentManagersRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginBottom: 20,
   },
   equipmentManagerContainer: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   equipmentManagerName: {
     fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: 'bold',
+    color: "#ffffff",
+    textAlign: "center",
+    fontWeight: "bold",
   },
   equipmentManagerPhone: {
     fontSize: 14,
-    color: '#4287f5',
-    textAlign: 'left',
+    color: "#4287f5",
+    textAlign: "left",
     paddingTop: 2,
-    textDecorationLine: 'underline',
+    textDecorationLine: "underline",
   },
   refereeContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   profileImageRef: {
@@ -997,7 +1118,7 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 75,
     borderWidth: 3,
-    borderColor: '#ff6600',
+    borderColor: "#ff6600",
     marginBottom: 10,
   },
   profileImageLines: {
@@ -1005,153 +1126,153 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 75,
     borderWidth: 3,
-    borderColor: '#ffffff',
+    borderColor: "#ffffff",
     marginBottom: 10,
   },
   refereeText: {
     fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
+    color: "#ffffff",
+    textAlign: "center",
   },
   refereeId: {
     fontSize: 12,
-    color: '#cccccc',
-    textAlign: 'center',
+    color: "#cccccc",
+    textAlign: "center",
   },
   text: {
     fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
+    color: "#ffffff",
+    textAlign: "center",
   },
   titles: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#ffffff",
+    textAlign: "center",
     marginBottom: 5,
   },
   gameInfoContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 5,
   },
   floatingButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    position: 'absolute',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    position: "absolute",
     top: 5,
     left: 10,
     right: 10,
   },
   floatingButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
     borderRadius: 10,
     padding: 10,
   },
   iconContainer: {
-    backgroundColor: '#ff6600',
+    backgroundColor: "#ff6600",
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 5,
   },
   buttonText: {
-    color: '#000000',
+    color: "#000000",
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   disclaimer: {
     fontSize: 11,
-    color: '#fff',
-    textAlign: 'center',
+    color: "#fff",
+    textAlign: "center",
     marginBottom: 10,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   teamAbbrev: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: "bold",
+    color: "#000000",
   },
   groupChat: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ff6600',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#ff6600",
+    textAlign: "center",
     marginBottom: 10,
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#ff6600',
+    borderBottomColor: "#ff6600",
   },
   tabContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
-    backgroundColor: '#000',
+    borderBottomColor: "#333",
+    backgroundColor: "#000",
     marginBottom: 10,
   },
   tab: {
     paddingVertical: 12,
     paddingHorizontal: 20,
-    position: 'relative',
+    position: "relative",
   },
   tabText: {
-    color: '#888',
+    color: "#888",
     fontSize: 16,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   activeTabText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
   tabContent: {
     padding: 20,
   },
   contentText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   teamContentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: 10,
   },
   leftColumn: {
     flex: 0.8,
-    alignItems: 'center',
+    alignItems: "center",
     borderRightWidth: 1,
-    borderRightColor: '#333',
+    borderRightColor: "#333",
     paddingRight: 15,
   },
   rightColumn: {
     flex: 1,
     paddingLeft: 15,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   subtitles: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#ff6600',
+    fontWeight: "bold",
+    color: "#ff6600",
     marginBottom: 5,
   },
   subtitles2: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ff6600',
+    fontWeight: "bold",
+    color: "#ff6600",
     marginBottom: 5,
   },
   equipmentManagerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   iconsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 15,
     marginTop: 5, // Add space between name and icons
   },
@@ -1160,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   staffText: {
     fontSize: 14,
-    color: '#ffffff',
+    color: "#ffffff",
     marginBottom: 2,
   },
   rightContentSection: {
@@ -1168,68 +1289,68 @@ const styles = StyleSheet.create({
   },
   teamContentScrollView: {
     flex: 1,
-    width: '100%',
+    width: "100%",
   },
   rosterContainer: {
     marginTop: 20,
   },
   rosterTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontWeight: "bold",
+    color: "#ffffff",
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   rosterHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: "#333",
   },
   headerText: {
-    color: '#ff6600',
+    color: "#ff6600",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   playerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: "#222",
   },
   playerName: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
     flex: 2,
   },
   playerStat: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ff6600',
+    fontWeight: "bold",
+    color: "#ff6600",
     marginBottom: 15,
-    textAlign: 'center',
+    textAlign: "center",
   },
   playerText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   officialsText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
     flex: 1,
-    textAlign: 'left',
+    textAlign: "left",
   },
   notesSection: {
     marginTop: 15,
@@ -1239,44 +1360,44 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   noteItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 10,
   },
   noteItem2: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   bullet: {
-    color: '#ff6600',  // Your app's accent color
+    color: "#ff6600", // Your app's accent color
     fontSize: 16,
     width: 20,
     lineHeight: 20,
   },
   noteText: {
     flex: 1,
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 14,
     lineHeight: 20,
     paddingRight: 10,
   },
   arenaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   divider: {
-    color: '#666666',
+    color: "#666666",
     marginHorizontal: 8,
     fontSize: 13,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   parkingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  }
+    flexDirection: "row",
+    alignItems: "center",
+  },
 });
 
 export default GameDetails;

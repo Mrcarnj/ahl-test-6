@@ -2,13 +2,14 @@
 // Fetches player stats and roster data from HockeyTech API and updates Supabase
 
 import { fetchAllTeamRosterRows } from './fetchAllTeamRosterRows';
+import { PLAYER_ROSTER_STATS_TABLE, PLAYER_ROSTER_SYNC_SEASON_ID } from './rosterStatsTable';
 import { supabase } from './supabase';
 
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
 
-// API endpoints
-const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=90&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
-const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=90&key=ccb91f29d6744675&client_code=ahl&fmt=json";
+// API endpoints (playoffs season 92)
+const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=92&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=92&key=ccb91f29d6744675&client_code=ahl&fmt=json";
 const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=90&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
 
 // All AHL team IDs
@@ -59,14 +60,14 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 
 /**
  * Check if player stats sync is needed (24 hours since last sync)
- * Checks the lastSynced column in teamRosters table
+ * Checks the lastSynced column in playoffStats table
  */
 export async function shouldSyncPlayerStats(): Promise<boolean> {
   try {
     // Get the most recent lastSynced timestamp from any player
     // If all lastSynced are NULL, this will return no rows and we'll sync
     const { data, error } = await supabase
-      .from('teamRosters')
+      .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
@@ -91,14 +92,14 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
 
 /**
  * Check if player roster sync is needed (24 hours since last sync)
- * Checks the lastSynced column in teamRosters table
+ * Checks the lastSynced column in playoffStats table
  */
 export async function shouldSyncPlayerRoster(): Promise<boolean> {
   try {
     // Get the most recent lastSynced timestamp from any player
     // If all lastSynced are NULL, this will return no rows and we'll sync
     const { data, error } = await supabase
-      .from('teamRosters')
+      .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
@@ -281,7 +282,7 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
       console.log('✅ PLAYER STATS: No changes detected');
       // Still update lastSynced timestamp even if no changes
       const { error: updateError } = await supabase
-        .from('teamRosters')
+        .from(PLAYER_ROSTER_STATS_TABLE)
         .update({ lastSynced: currentTime })
         .not('id', 'is', null)
         .limit(1);
@@ -302,11 +303,12 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
       // Add lastSynced timestamp to each player
       const batchWithTimestamp = batch.map(player => ({
         ...player,
-        lastSynced: currentTime
+        lastSynced: currentTime,
+        season_id: PLAYER_ROSTER_SYNC_SEASON_ID,
       }));
       
       const { error: upsertError } = await supabase
-        .from('teamRosters')
+        .from(PLAYER_ROSTER_STATS_TABLE)
         .upsert(batchWithTimestamp, { onConflict: 'id' });
       
       if (upsertError) {
@@ -334,7 +336,7 @@ export async function syncPlayerStats(): Promise<{ success: boolean; error?: str
         for (let i = 0; i < unchangedPlayerIds.length; i += batchSize) {
           const batch = unchangedPlayerIds.slice(i, i + batchSize);
           await supabase
-            .from('teamRosters')
+            .from(PLAYER_ROSTER_STATS_TABLE)
             .update({ lastSynced: currentTime })
             .in('id', batch);
         }
@@ -445,7 +447,7 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
 
 /**
  * Sync player roster data (jersey numbers, rookie status, veteran status).
- * Inserts rows for anyone on the API roster who is not yet in teamRosters (stats sync can fill in later).
+ * Inserts rows for anyone on the API roster who is not yet in playoffStats (stats sync can fill in later).
  */
 export async function syncPlayerRoster(): Promise<{ success: boolean; error?: string; updated?: number; inserted?: number }> {
   try {
@@ -511,7 +513,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       
       const playerIds = players.map(p => p.id);
       const { data: existingPlayers, error: fetchError } = await supabase
-        .from('teamRosters')
+        .from(PLAYER_ROSTER_STATS_TABLE)
         .select('id, player_name, number, rookie, veteran')
         .in('id', playerIds);
       
@@ -568,7 +570,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
           console.log(`  🔄 PLAYER ROSTER: ${playerName} (${player.id}) - Changes: ${changedFields.join(', ')}`);
           
           const { error: updateError } = await supabase
-            .from('teamRosters')
+            .from(PLAYER_ROSTER_STATS_TABLE)
             .update({
               number: playerNumber,
               rookie: playerRookie,
@@ -616,10 +618,11 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
             penalty_minutes: null,
             power_play_goals: null,
             lastSynced: currentTime,
+            season_id: PLAYER_ROSTER_SYNC_SEASON_ID,
           }));
 
           const { error: insertError } = await supabase
-            .from('teamRosters')
+            .from(PLAYER_ROSTER_STATS_TABLE)
             .upsert(batch, { onConflict: 'id' });
 
           if (insertError) {
@@ -656,7 +659,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       for (let i = 0; i < allProcessedPlayerIds.length; i += batchSize) {
         const batch = allProcessedPlayerIds.slice(i, i + batchSize);
         await supabase
-          .from('teamRosters')
+          .from(PLAYER_ROSTER_STATS_TABLE)
           .update({ lastSynced: currentTime })
           .in('id', batch);
       }

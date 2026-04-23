@@ -5,7 +5,8 @@ const HOCKEYTECH_KEY = 'ccb91f29d6744675';
 const CLIENT_CODE = 'ahl';
 const LEAGUE_ID = '4';
 const SITE_ID = '3';
-const PLAYOFF_BRACKET_SYNC_INTERVAL_HOURS = 24;
+/** How long DB-backed bracket data can age before a background/tab refresh hits the API again. */
+const PLAYOFF_BRACKET_SYNC_INTERVAL_HOURS = 1;
 
 /** Playoff bracket season id (distinct from regular-season id used in standings). Update when league republishes. */
 export const PLAYOFF_BRACKET_SEASON_ID = 92;

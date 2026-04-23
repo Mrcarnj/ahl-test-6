@@ -126,7 +126,7 @@ export default function PlayoffsScreen() {
   const onPull = useCallback(async () => {
     setPullRefreshing(true);
     try {
-      await refreshPlayoffBracket();
+      await refreshPlayoffBracket({ force: true });
     } finally {
       setPullRefreshing(false);
     }

@@ -125,7 +125,7 @@ type ScheduleContext = {
     playoffBracket: PlayoffBracketData | null;
     playoffBracketError: string | null;
     syncingPlayoffBracket: boolean;
-    refreshPlayoffBracket: () => Promise<void>;
+    refreshPlayoffBracket: (options?: { force?: boolean }) => Promise<void>;
     scheduleSyncStatus: {
         status: 'idle' | 'running' | 'success' | 'error';
         source?: 'startup' | 'foreground' | 'manual' | 'other';
@@ -258,12 +258,14 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
     };
 
-    const refreshPlayoffBracket = useCallback(async () => {
+    const refreshPlayoffBracket = useCallback(async (options?: { force?: boolean }) => {
         setSyncingPlayoffBracket(true);
         setPlayoffBracketError(null);
         try {
             let data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
-            const shouldSync = await withTimeout(shouldSyncPlayoffBracket(), 8000, 'Playoff bracket should-sync check');
+            const shouldSync = options?.force
+                ? true
+                : await withTimeout(shouldSyncPlayoffBracket(), 8000, 'Playoff bracket should-sync check');
             if (!data.rounds.length || shouldSync) {
                 const syncResult = await withTimeout(syncPlayoffBracketToDb(), 20000, 'Playoff bracket sync');
                 if (!syncResult.success) {

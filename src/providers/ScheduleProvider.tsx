@@ -1,5 +1,6 @@
 //src/providers/ScheduleProvider.tsx
 import { format, parse } from "date-fns";
+import { enUS } from "date-fns/locale/en-US";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
@@ -823,13 +824,9 @@ export function formatGameTimeFromHomeWallClock(
         const [hs, ms, ss] = hms.split(':');
         const wall = new Date(Y, M - 1, D, parseInt(hs, 10), parseInt(ms, 10), parseInt(ss, 10));
         const utcInstant = fromZonedTime(wall, homeIanaTimezone);
-        const xxx = formatInTimeZone(utcInstant, homeIanaTimezone, 'XXX');
-        const m = xxx.match(/^([+-])(\d{2}):(\d{2})$/);
-        if (!m || m[3] !== '00') {
-            return formatInTimeZone(utcInstant, homeIanaTimezone, 'h:mm a zzz');
-        }
-        const timetz = `${hms}${m[1]}${m[2]}`;
-        return formatGameTime(timetz, gameDate);
+        // Do not use formatGameTime here: it maps numeric offsets to EST/EDT vs CST/CDT, but CDT and EDT
+        // both use -05, so Central teams were labeled Eastern. Use the team's IANA zone for abbrs.
+        return formatInTimeZone(utcInstant, homeIanaTimezone, "h:mm a zzz", { locale: enUS });
     } catch {
         return raw;
     }

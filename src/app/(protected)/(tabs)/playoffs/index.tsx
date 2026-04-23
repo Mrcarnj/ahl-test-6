@@ -17,8 +17,8 @@ import type { BracketMatchup, BracketTeam } from '@/src/lib/playoffBracket';
 import { mapApiTeamCodeToAbbrev } from '@/src/lib/playoffBracket';
 import { getTeamLogo, useSchedule, type Team } from '@/src/providers/ScheduleProvider';
 
-const ROUND_COLUMN_WIDTH = 210;
-const CONNECTOR_GUTTER = 28;
+const ROUND_COLUMN_WIDTH = 158;
+const CONNECTOR_GUTTER = 20;
 const ROUND_BADGE_HEIGHT = 22;
 const CARD_HEIGHT = 112;
 const CARD_GAP = 10;
@@ -65,14 +65,18 @@ function MatchupCard({
           <BracketTeamLogo abbrev={a1} />
           <Text style={styles.teamAbbrev}>{a1 ?? 'TBD'}</Text>
         </View>
-        <Text style={styles.teamWins}>{matchup.team1_wins}</Text>
+        <View style={styles.teamWinsCol}>
+          <Text style={styles.teamWins}>{matchup.team1_wins}</Text>
+        </View>
       </View>
       <View style={styles.teamRow}>
         <View style={styles.teamRowLeft}>
           <BracketTeamLogo abbrev={a2} />
           <Text style={styles.teamAbbrev}>{a2 ?? 'TBD'}</Text>
         </View>
-        <Text style={styles.teamWins}>{matchup.team2_wins}</Text>
+        <View style={styles.teamWinsCol}>
+          <Text style={styles.teamWins}>{matchup.team2_wins}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -242,7 +246,8 @@ const styles = StyleSheet.create({
   matchupCard: {
     backgroundColor: '#1a1a1a',
     borderRadius: 8,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 5,
     paddingBottom: 14,
     height: CARD_HEIGHT,
     borderWidth: 1,
@@ -258,25 +263,32 @@ const styles = StyleSheet.create({
   },
   teamRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
   },
   teamRowLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
+  },
+  teamWinsCol: {
+    minWidth: 28,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingLeft: 0,
   },
   teamAbbrev: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
   },
   teamWins: {
     color: '#fff',
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '700',
-    lineHeight: 36,
+    lineHeight: 30,
   },
   teamLogo: {
     width: 22,

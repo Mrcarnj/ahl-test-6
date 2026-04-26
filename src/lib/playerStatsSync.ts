@@ -457,7 +457,6 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     let totalInserted = 0;
     let totalProcessed = 0;
     let teamsProcessed = 0;
-    let teamsFailed = 0;
     const allProcessedPlayerIds: number[] = [];
     const currentTime = new Date().toISOString();
 
@@ -492,20 +491,17 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       const teamAbbrev = teamIdToAbbrev.get(teamId);
       if (!teamAbbrev) {
         console.error(`  ❌ PLAYER ROSTER: No abbreviation mapping for HockeyTech team_id=${teamId}`);
-        teamsFailed++;
         continue;
       }
-      
+
       const apiData = await fetchTeamRoster(teamId);
       if (!apiData) {
-        teamsFailed++;
         continue;
       }
-      
+
       const players = transformRosterData(apiData, teamAbbrev);
       if (players.length === 0) {
         console.log(`  ⚠️ PLAYER ROSTER: No players found for team ${teamId}`);
-        teamsFailed++;
         continue;
       }
       
@@ -519,7 +515,6 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       
       if (fetchError) {
         console.error(`  ❌ PLAYER ROSTER: Error fetching existing players for team ${teamId}:`, fetchError);
-        teamsFailed++;
         continue;
       }
       
@@ -903,53 +898,4 @@ export async function syncTeamStandings(): Promise<{ success: boolean; error?: s
   }
 }
 
-/**
- * Perform both player stats and roster syncs if needed
- */
-export async function performPlayerSyncs(): Promise<void> {
-  try {
-    const shouldStats = await shouldSyncPlayerStats();
-    const shouldRoster = await shouldSyncPlayerRoster();
-    const shouldStandings = await shouldSyncTeamStandings();
-    
-    if (shouldStats) {
-      console.log('🔄 PLAYER SYNC: Running player stats sync...');
-      await syncPlayerStats();
-    } else {
-      console.log('⏭️ PLAYER SYNC: Player stats sync not needed (recent sync found)');
-    }
-    
-    if (shouldRoster) {
-      console.log('🔄 PLAYER SYNC: Running player roster sync...');
-      await syncPlayerRoster();
-    } else {
-      console.log('⏭️ PLAYER SYNC: Player roster sync not needed (recent sync found)');
-    }
-    
-    if (shouldStandings) {
-      console.log('🔄 TEAM SYNC: Running team standings sync...');
-      await syncTeamStandings();
-    } else {
-      console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
-    }
-  } catch (error) {
-    console.error('❌ PLAYER SYNC: Error performing syncs:', error);
-  }
-}
-
-/**
- * Force sync all player and team data (bypasses time check)
- * Useful for manual testing or forcing an immediate sync
- */
-export async function forceSyncAll(): Promise<void> {
-  console.log('🔄 FORCE SYNC: Running all syncs (bypassing time check)...');
-  try {
-    await syncPlayerStats();
-    await syncPlayerRoster();
-    await syncTeamStandings();
-    console.log('✅ FORCE SYNC: All syncs complete');
-  } catch (error) {
-    console.error('❌ FORCE SYNC: Error performing syncs:', error);
-  }
-}
 

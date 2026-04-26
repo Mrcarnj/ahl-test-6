@@ -40,9 +40,6 @@ export default function SyncToastHost() {
         durationMs,
       });
 
-      // stopAnimation is a method on Animated.Value (not Animated module)
-      // Some RN runtimes don't have Animated.stopAnimation.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (opacity as any).stopAnimation?.();
       opacity.setValue(0);
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();

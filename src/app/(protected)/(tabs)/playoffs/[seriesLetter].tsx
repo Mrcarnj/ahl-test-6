@@ -95,7 +95,7 @@ function findSeries(seriesLetter: string, rounds: { matchups: BracketMatchup[] }
 export default function PlayoffSeriesScreen() {
   const { seriesLetter } = useLocalSearchParams<{ seriesLetter: string }>();
   const { playoffBracket, refreshPlayoffBracket } = useSchedule();
-  const teams = playoffBracket?.teams ?? {};
+  const teams = useMemo(() => playoffBracket?.teams ?? {}, [playoffBracket]);
   const rounds = playoffBracket?.rounds ?? [];
   const series = seriesLetter ? findSeries(seriesLetter, rounds) : null;
 

@@ -34,7 +34,7 @@ export default function ICalSetup() {
       setIcalUrl(roster.ical_url);
       validateUrl(roster.ical_url);
     }
-  }, [roster?.ical_url, user?.id]);
+  }, [roster?.ical_url, user?.id, roster?.auth_id]);
 
   const validateUrl = (url: string) => {
     const trimmedUrl = url.trim();
@@ -123,7 +123,7 @@ export default function ICalSetup() {
           />
           {icalUrl.trim() && !isValidUrl && (
             <Text style={styles.errorText}>
-              URL must start with "https://www.horizonwebref.com/syncICS"
+              {`URL must start with "https://www.horizonwebref.com/syncICS"`}
             </Text>
           )}
         </View>
@@ -133,7 +133,7 @@ export default function ICalSetup() {
           <View style={styles.instructionsList}>
             <Text style={styles.instructionStep}>1. Open your Horizon Web Ref App</Text>
             <Text style={styles.instructionStep}>2. Log In</Text>
-            <Text style={styles.instructionStep}>3. Navigate to "Schedule" from the homepage</Text>
+            <Text style={styles.instructionStep}>{`3. Navigate to "Schedule" from the homepage`}</Text>
             <Text style={styles.instructionStep}>4. Click iCal Sync URL at the top</Text>
             <Text style={styles.instructionStep}>5. Copy the generated link</Text>
             <Text style={styles.instructionStep}>6. Paste into field above</Text>

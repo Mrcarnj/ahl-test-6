@@ -7,12 +7,12 @@ import { supabase } from "../lib/supabase";
 import { clearAllRosterCaches } from './RosterProvider';
 import { APP_REFRESH_EVENT } from '../lib/events';
 
-type AuthContext = {
+type AuthContextType = {
     session: Session | null;
     user: User | null;
 };
 
-const AuthContext = createContext<AuthContext>({
+const AuthContext = createContext<AuthContextType>({
     session: null,
     user: null,
 });
@@ -22,62 +22,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const [lastForegroundSyncAt, setLastForegroundSyncAt] = useState<number>(0);
     const startupSyncTriggeredRef = useRef(false);
     const lastBackgroundAtRef = useRef<number | null>(null);
-
-    // const checkTosAcceptance = async (userId: string, skipRedirect = false) => {
-    //     try {
-    //         console.log('Checking TOS acceptance for user:', userId);
-            
-    //         // Add timeout to prevent hanging
-    //         const queryPromise = supabase
-    //             .from('roster')
-    //             .select('accepted_tos, changedpassword, ical_url')
-    //             .eq('auth_id', userId)
-    //             .single();
-            
-    //         const timeoutPromise = new Promise((_, reject) => 
-    //             setTimeout(() => reject(new Error('TOS check timeout')), 5000)
-    //         );
-            
-    //         let data, error;
-    //         try {
-    //             const result = await Promise.race([queryPromise, timeoutPromise]);
-    //             data = result.data;
-    //             error = result.error;
-    //         } catch (timeoutError) {
-    //             console.warn('⚠️ TOS check timed out, continuing anyway:', timeoutError);
-    //             return; // Exit early on timeout
-    //         }
-
-    //         if (error) {
-    //             console.error('Error checking TOS:', error);
-    //             return;
-    //         }
-
-    //         console.log('TOS check result:', data);
-
-    //         // Skip redirect if we're already in the middle of a password change
-    //         if (skipRedirect) {
-    //             console.log('Skipping redirect - password change in progress');
-    //             return;
-    //         }
-            
-    //         console.log('Will proceed with redirect checks...');
-
-    //         // Handle different auth states
-    //         if (!data.changedpassword) {
-    //             console.log('Password needs to be changed');
-    //             router.replace('/(loginflow)/changepassword');
-    //         } else if (!data.accepted_tos) {
-    //             console.log('TOS needs to be accepted');
-    //             router.replace('/(loginflow)/tos');
-    //         } else if (!data.ical_url) {
-    //             console.log('iCal URL needs to be set up');
-    //             router.replace('/(loginflow)/ical-setup');
-    //         }
-    //     } catch (error) {
-    //         console.error('Error in TOS check:', error);
-    //     }
-    // };
 
     const triggerLoginSync = async () => {
         // Schedule sync is orchestrated by ScheduleProvider so we have one consistent pipeline

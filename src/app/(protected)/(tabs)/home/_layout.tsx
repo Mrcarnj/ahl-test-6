@@ -1,26 +1,5 @@
 // app/(protected)/(tabs)/home/_layout.tsx
-import { useRoster } from "@/src/providers/RosterProvider";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { View, Text } from 'react-native';
-
-const HeaderTitle = () => {
-    const { roster } = useRoster();
-    
-    return (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ color: '#ffffff', fontSize: 20 }}>
-                Welcome, {roster?.firstname}
-            </Text>
-            <MaterialCommunityIcons 
-                name="whistle" 
-                size={26} 
-                color="#ff6600" 
-                style={{ marginLeft: 8 }} 
-            />
-        </View>
-    );
-};
 
 export default function HomeLayout() {
   return (

@@ -54,7 +54,3 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_SYNC_TASK, async ({ data, error, 
 
 export { BACKGROUND_NOTIFICATION_SYNC_TASK };
 
-
-
-
-

@@ -11,7 +11,7 @@ import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Details = () => {
-    const { rosterId, source } = useLocalSearchParams<{ rosterId: string; source: string }>();
+    const { rosterId } = useLocalSearchParams<{ rosterId: string; source: string }>();
     const { allRosters } = useRoster();
     const { hasPermission, requestPermissions } = useContactsPermissions();
     const [photoBase64, setPhotoBase64] = useState<string | null>(null);

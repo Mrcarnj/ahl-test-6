@@ -70,7 +70,7 @@ export class BackgroundSyncService {
         } else if ('skipped' in result && result.skipped) {
           console.log('Background sync skipped - recent sync found');
         } else {
-          const errorMessage = 'error' in result ? result.error : 'Unknown error';
+          const errorMessage = ('error' in result ? result.error : undefined) ?? 'Unknown error';
           console.error('Background sync failed:', errorMessage);
           await this.logSyncError(errorMessage);
         }
@@ -130,7 +130,7 @@ export class BackgroundSyncService {
     if (result.success) {
       await this.logSyncResult(result);
     } else {
-      const errorMessage = 'error' in result ? result.error : 'Unknown error';
+      const errorMessage = ('error' in result ? result.error : undefined) ?? 'Unknown error';
       await this.logSyncError(errorMessage);
     }
     

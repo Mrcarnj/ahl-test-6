@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as BackgroundFetch from 'expo-background-fetch';
-import * as TaskManager from 'expo-task-manager';
-
-const BACKGROUND_FETCH_TASK = 'background-fetch';
 
 export const useBackgroundPermissions = () => {
     const [isBackgroundAllowed, setIsBackgroundAllowed] = useState(false);

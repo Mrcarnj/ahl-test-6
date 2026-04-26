@@ -49,15 +49,3 @@ export const safeAsyncStorage = {
     }
   }
 };
-
-// Test AsyncStorage availability on app start
-export const testAsyncStorage = async (): Promise<boolean> => {
-  try {
-    await AsyncStorage.setItem('__test__', 'test');
-    await AsyncStorage.removeItem('__test__');
-    return true;
-  } catch (error) {
-    console.warn('AsyncStorage is not available:', error);
-    return false;
-  }
-};

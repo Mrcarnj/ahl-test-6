@@ -1,5 +1,5 @@
 //src/providers/RosterProvider.tsx
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { withTimeout } from '../lib/withTimeout';
 import { supabase } from "../lib/supabase";
@@ -24,15 +24,15 @@ type Roster = {
     // Add other roster fields here
 };
 
-type RosterContext = {
+type RosterContextType = {
     roster: Roster | null;
-    allRosters: Roster[]; // Add this
+    allRosters: Roster[];
     loading: boolean;
     error: string | null;
     refreshRoster: () => Promise<{ success: boolean; error?: string }>;
 };
 
-const RosterContext = createContext<RosterContext>({
+const RosterContext = createContext<RosterContextType>({
     roster: null,
     allRosters: [],
     loading: false,
@@ -45,9 +45,11 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const [roster, setRoster] = useState<Roster | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [allRosters, setAllRosters] = useState<Roster[]>([]); // Add this
-    const [lastFetch, setLastFetch] = useState<Date | null>(null);
-    
+    const [allRosters, setAllRosters] = useState<Roster[]>([]);
+    const lastFetchRef = useRef<Date | null>(null);
+    const fetchRosterRef = useRef<(force?: boolean) => Promise<{ success: boolean; error?: string }>>(async () => ({ success: false }));
+    const loadCachedDataRef = useRef<() => Promise<boolean>>(async () => false);
+
     const ROSTER_CACHE_VERSION = 1;
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
     const CACHE_KEY = user?.id ? `rosterCache_${user.id}` : 'rosterCache';
@@ -63,20 +65,21 @@ export default function RosterProvider({ children }: PropsWithChildren) {
                     return false;
                 }
                 const isExpired = new Date().getTime() - timestamp > CACHE_DURATION;
-                
+
                 if (!isExpired) {
                     console.log('Using cached roster data');
                     setRoster(roster);
                     setAllRosters(allRosters);
-                    setLastFetch(new Date(timestamp));
-                    return true; // Cache was valid and loaded
+                    lastFetchRef.current = new Date(timestamp);
+                    return true;
                 }
             }
         } catch (e) {
             console.error('Error loading cache:', e);
         }
-        return false; // No valid cache found
+        return false;
     };
+    loadCachedDataRef.current = loadCachedData;
 
     const saveToCache = async (rosterData: Roster | null, allRostersData: Roster[]) => {
         try {
@@ -95,8 +98,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     const fetchRoster = async (force = false): Promise<{ success: boolean; error?: string }> => {
         if (!user?.id) return { success: false, error: 'No user' };
 
-        // Check if we can use cached data
-        if (!force && lastFetch && (new Date().getTime() - lastFetch.getTime() < CACHE_DURATION)) {
+        if (!force && lastFetchRef.current && (new Date().getTime() - lastFetchRef.current.getTime() < CACHE_DURATION)) {
             console.log('Using memory-cached roster data');
             return { success: true };
         }
@@ -105,7 +107,6 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(true);
             setError(null);
 
-            // Fetch user's roster
             const { data: userRosterData, error: userRosterError } = await withTimeout(
                 supabase
                     .from('roster')
@@ -118,7 +119,6 @@ export default function RosterProvider({ children }: PropsWithChildren) {
 
             if (userRosterError) throw userRosterError;
 
-            // Fetch all rosters
             const { data: allRostersData, error: allRostersError } = await withTimeout(
                 supabase
                     .from('roster')
@@ -129,12 +129,10 @@ export default function RosterProvider({ children }: PropsWithChildren) {
 
             if (allRostersError) throw allRostersError;
 
-            // Update state
             setRoster(userRosterData);
             setAllRosters(allRostersData || []);
-            setLastFetch(new Date());
+            lastFetchRef.current = new Date();
 
-            // Save to cache
             await saveToCache(userRosterData, allRostersData || []);
 
             return { success: true };
@@ -149,6 +147,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(false);
         }
     };
+    fetchRosterRef.current = fetchRoster;
 
     // Clear roster data when user changes or logs out
     useEffect(() => {
@@ -156,7 +155,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             console.log('🧹 No user ID, clearing roster data');
             setRoster(null);
             setAllRosters([]);
-            setLastFetch(null);
+            lastFetchRef.current = null;
             setError(null);
         }
     }, [user?.id]);
@@ -164,9 +163,9 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     // Initial load - try cache first, then fetch if needed
     useEffect(() => {
         const initializeData = async () => {
-            const hasCachedData = await loadCachedData();
+            const hasCachedData = await loadCachedDataRef.current();
             if (!hasCachedData) {
-                fetchRoster();
+                fetchRosterRef.current();
             }
         };
 
@@ -176,9 +175,7 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     }, [user?.id]);
 
     // Expose refreshRoster as a way to force fetch new data
-    const refreshRoster = async () => {
-        return fetchRoster(true);
-    };
+    const refreshRoster = useCallback(() => fetchRosterRef.current(true), []);
 
     return (
         <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster }}>
@@ -186,17 +183,6 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         </RosterContext.Provider>
     );
 }
-
-export const getOfficialPhoto = (lastfirstfullname: string) => {
-    if (lastfirstfullname) {
-        // Simplified path - assuming logos are directly in the logos bucket
-        const formattedName = lastfirstfullname.toLowerCase();
-        const filePath = `roster/${formattedName}.png`;
-        const { data: { publicUrl } } = supabase.storage.from('headshots').getPublicUrl(filePath);
-        return publicUrl || 'https://via.placeholder.com/150';
-    }
-    return 'https://via.placeholder.com/150';
-};
 
 export const useRoster = () => useContext(RosterContext);
 

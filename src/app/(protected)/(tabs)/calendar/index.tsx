@@ -1,15 +1,14 @@
 // app/(protected)/(tabs)/calendar/index.tsx
 
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Dimensions, Text, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import ViewShot from "react-native-view-shot";
 import { useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useAuth } from '@/src/providers/AuthProvider';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import { withTimeout } from '@/src/lib/withTimeout';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
@@ -28,7 +27,7 @@ export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
-  const { myGames, loading, syncScheduleFromIcal } = useSchedule();
+  const { myGames, syncScheduleFromIcal } = useSchedule();
   const router = useRouter();
   const { syncStatus, refreshSyncStatus } = useHockeySync();
 
@@ -129,7 +128,7 @@ export default function CalendarScreen() {
             enableSwipeMonths={true}
             hideExtraDays={false}
             firstDay={0}
-            showFiveWeeks={true}
+            showSixWeeks={true}
             style={styles.calendar}
             markingType={'custom'}
             markedDates={markedDates}
@@ -271,9 +270,9 @@ const calendarTheme = {
   textDisabledColor: '#444444',
   arrowColor: '#ff6600',
   monthTextColor: '#ffffff',
-  textDayFontWeight: '300',
-  textMonthFontWeight: 'bold',
-  textDayHeaderFontWeight: '300',
+  textDayFontWeight: '300' as const,
+  textMonthFontWeight: 'bold' as const,
+  textDayHeaderFontWeight: '300' as const,
   textDayFontSize: 16,
   textMonthFontSize: 20,
   textDayHeaderFontSize: 14,

@@ -1,6 +1,6 @@
 // app/(protected)/arena/[teamId].tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
@@ -21,25 +21,24 @@ export default function ArenaDetailsScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchArenaDetails = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('teams')
+          .select('arenaname, parking_latitude, parking_longitude, parking_instructions, locker_room_instructions')
+          .eq('id', teamId)
+          .single();
+
+        if (error) throw error;
+        setArenaDetails(data);
+      } catch (error) {
+        console.error('Error fetching arena details:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchArenaDetails();
   }, [teamId]);
-
-  const fetchArenaDetails = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('teams')
-        .select('arenaname, parking_latitude, parking_longitude, parking_instructions, locker_room_instructions')
-        .eq('id', teamId)
-        .single();
-
-      if (error) throw error;
-      setArenaDetails(data);
-    } catch (error) {
-      console.error('Error fetching arena details:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDirectionsPress = () => {
     if (!arenaDetails) return;

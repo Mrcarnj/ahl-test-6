@@ -163,6 +163,65 @@ function toBool(value: unknown): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
 }
 
+/** Top-to-bottom display order within a round: H, I, J, … */
+function sortMatchupsBySeriesLetter(matchups: BracketMatchup[]): void {
+  matchups.sort((a, b) =>
+    String(a.series_letter ?? '').localeCompare(String(b.series_letter ?? ''), undefined, {
+      sensitivity: 'base',
+    })
+  );
+}
+
+/**
+ * Wins needed to clinch, from scheduled `games` length (HockeyTech lists all legs).
+ * Round fallback when `games` is empty (TBD series).
+ */
+function winsToClinchSeries(matchup: BracketMatchup): number {
+  const n = Array.isArray(matchup.games) ? matchup.games.length : 0;
+  if (n >= 7) return 4;
+  if (n >= 4) return 3;
+  if (n >= 2) return 2;
+  if (n === 1) return 2;
+  const rnd = Number(matchup.round);
+  if (Number.isNaN(rnd) || rnd <= 1) return 2;
+  if (rnd === 2) return 3;
+  return 4;
+}
+
+/**
+ * `1` = team1 won, `2` = team2 won. Uses `winner` when the feed sets it; otherwise infers from
+ * win totals vs series length (the API often leaves `winner` blank even when the series is over).
+ */
+export function bracketResolvedWinnerSlot(matchup: BracketMatchup): 1 | 2 | null {
+  const id1 = String(matchup.team1 ?? '').trim();
+  const id2 = String(matchup.team2 ?? '').trim();
+  if (!id1 || id1 === '0' || !id2 || id2 === '0') return null;
+
+  const raw = matchup.winner;
+  if (raw != null && String(raw).trim() !== '' && String(raw).trim() !== '0') {
+    const w = String(raw).trim();
+    if (w === id1) return 1;
+    if (w === id2) return 2;
+  }
+
+  const w1 = toInt(matchup.team1_wins);
+  const w2 = toInt(matchup.team2_wins);
+  if (w1 === w2) return null;
+
+  const need = winsToClinchSeries(matchup);
+  const hi = Math.max(w1, w2);
+  const lo = Math.min(w1, w2);
+  if (hi < need || lo >= need) return null;
+  return w1 > w2 ? 1 : 2;
+}
+
+/** True if this team row lost a decided series (for bracket UI). */
+export function isBracketTeamSlotEliminated(matchup: BracketMatchup, slot: 1 | 2): boolean {
+  const won = bracketResolvedWinnerSlot(matchup);
+  if (!won) return false;
+  return slot !== won;
+}
+
 export async function fetchPlayoffBracket(
   seasonId: number = PLAYOFF_BRACKET_SEASON_ID
 ): Promise<PlayoffBracketData> {
@@ -200,6 +259,7 @@ export async function fetchPlayoffBracket(
       m.team2_wins = toInt(m.team2_wins);
       m.games = Array.isArray(m.games) ? (m.games as BracketGame[]) : [];
     }
+    sortMatchupsBySeriesLetter(r.matchups);
   }
 
   return {
@@ -393,7 +453,7 @@ export async function fetchPlayoffBracketFromDb(
   if (gamesError) throw gamesError;
 
   const mapByApiId = new Map<number, { api_team_code: string; team_name: string | null }>();
-  for (const r of ((mapRows || []) as Array<{ api_team_id: number; api_team_code: string; team_name: string | null }>)) {
+  for (const r of ((mapRows || []) as { api_team_id: number; api_team_code: string; team_name: string | null }[])) {
     mapByApiId.set(r.api_team_id, { api_team_code: r.api_team_code, team_name: r.team_name });
   }
 
@@ -459,7 +519,10 @@ export async function fetchPlayoffBracketFromDb(
 
   const rounds = Array.from(roundsMap.entries())
     .sort(([a], [b]) => a - b)
-    .map(([, value]) => value);
+    .map(([, value]) => {
+      sortMatchupsBySeriesLetter(value.matchups);
+      return value;
+    });
 
   return {
     teams,

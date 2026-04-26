@@ -1,8 +1,7 @@
 // app/(protected)/(tabs)/calendar/_layout.tsx
-import { useRoster } from "@/src/providers/RosterProvider";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { View, Text, TouchableOpacity } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import * as Sharing from 'expo-sharing';
 
 declare global {

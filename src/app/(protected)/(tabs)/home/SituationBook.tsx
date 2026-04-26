@@ -7,7 +7,7 @@ import ruleBookText from '../../../../lib/SituationBookPdfText.json';  // Adjust
 
 export default function SituationBook() {
     const source = {
-        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf',
+        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2025-26_AHLRuleBook.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI1LTI2X0FITFJ1bGVCb29rLnBkZiIsImlhdCI6MTc3Njc0MjcyMSwiZXhwIjoxODA4Mjc4NzIxfQ.LcmkdvTh1uuwBP-hBqVeNIubRBisoKSmW9mBAuRmA5A',
         cache: true
     };
 

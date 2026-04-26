@@ -45,7 +45,7 @@ async function setupNotificationCategories() {
       },
     ], {
       intentIdentifiers: [],
-      hiddenPreviewsBodyPlaceholder: 'Game change notification',
+      previewPlaceholder: 'Game change notification',
       categorySummaryFormat: '%u more game changes',
     });
     
@@ -160,7 +160,7 @@ export async function scheduleGameDayNotification(game: Schedule) {
         body: `${game.gametime} \n${game.awayTeamData?.city} @ ${game.homeTeamData?.city}\n${game.homeTeamData?.arenaname}`,
         data: { gameId: game.gameid },
       },
-      trigger: localNotificationDate,
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: localNotificationDate },
     });
 
     return notificationId;
@@ -264,11 +264,6 @@ export async function sendGameChangeNotification(
             android: {
               channelId: 'game_changes',
               priority: Notifications.AndroidNotificationPriority.HIGH,
-              // Use BigTextStyle for expandable content on Android
-              style: {
-                type: Notifications.AndroidNotificationStyle.BIGTEXT,
-                text: body, // Full message for expanded view
-              },
             },
           }),
           data: { 

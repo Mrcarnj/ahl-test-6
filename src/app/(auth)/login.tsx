@@ -1,9 +1,7 @@
 import React, { useState } from 'react'
-import { Alert, StyleSheet, View, AppState, TextInput, Button, TouchableOpacity, Text, Image } from 'react-native'
+import { Alert, StyleSheet, View, AppState, TextInput, TouchableOpacity, Text, Image } from 'react-native'
 import { supabase } from '../../lib/supabase'
-import { Redirect, router } from 'expo-router'
-import { useAuth } from '@/src/providers/AuthProvider'
-import { useRoster } from '@/src/providers/RosterProvider'
+import { router } from 'expo-router'
 
 // Tells Supabase Auth to continuously refresh the session automatically if
 // the app is in the foreground. When this is added, you will continue to receive
@@ -21,9 +19,6 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const { session, user } = useAuth();
-  const { roster } = useRoster();
-
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email) && email.length < 255;

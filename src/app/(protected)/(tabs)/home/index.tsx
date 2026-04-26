@@ -1,5 +1,5 @@
 // app/(protected)/(tabs)/home/index.tsx
-import AppRefreshControl from '@/src/components/AppRefreshControl';
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { formatGameTime, useSchedule } from '@/src/providers/ScheduleProvider';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, loading, syncingSchedule, syncingStats, syncingStandings } = useSchedule();
+    const { myGames } = useSchedule();
     const { roster } = useRoster();
     const { syncStatus } = useHockeySync();
 
@@ -201,7 +201,7 @@ const TestScheduleScreen = () => {
                                         {todayEvent.awayteam} @ {todayEvent.hometeam}
                                     </Text>
                                     <Text style={styles.gameDetails}>
-                                        {formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // {todayEvent.homeTeamData?.arenaname}
+                                        {`${formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // ${todayEvent.homeTeamData?.arenaname ?? ''}`}
                                     </Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={24} color="#ff6600" />
@@ -256,7 +256,7 @@ const TestScheduleScreen = () => {
                                         {game.awayteam} @ {game.hometeam}
                                     </Text>
                                     <Text style={styles.gameDetails}>
-                                        {formatGameTime(game.gametime, game.gamedate)} // {game.homeTeamData?.arenaname}
+                                        {`${formatGameTime(game.gametime, game.gamedate)} // ${game.homeTeamData?.arenaname ?? ''}`}
                                     </Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={24} color="#ff6600" />
@@ -276,9 +276,9 @@ const TestScheduleScreen = () => {
                 <View style={styles.separator} />
 
                 <View style={styles.section}>
-                    {ruleLinks.map((link, index) => (
+                    {ruleLinks.map((link) => (
                         <TouchableOpacity
-                            key={index}
+                            key={link.title}
                             onPress={() => openLink(link)}
                             style={styles.gameCard}
                         >
@@ -296,9 +296,9 @@ const TestScheduleScreen = () => {
 
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>External Links</Text>
-                    {externalUrlLinks.map((link, index) => (
+                    {externalUrlLinks.map((link) => (
                         <TouchableOpacity
-                            key={index}
+                            key={link.title}
                             onPress={() => openLink(link)}
                             style={styles.linkButton}
                         >
@@ -339,17 +339,6 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 20,
     },
-    syncBanner: {
-        backgroundColor: '#ff6600',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        alignItems: 'center',
-    },
-    syncBannerText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
     lastSyncRow: {
         paddingHorizontal: 16,
         paddingTop: 6,
@@ -370,20 +359,20 @@ const styles = StyleSheet.create({
         padding: 15,
         borderRadius: 8,
         marginBottom: 12,
-        flexDirection: 'row',  // Add this to align content and arrow
-        alignItems: 'center',  // Add this to center vertically
-        justifyContent: 'space-between', // Add this to put arrow on right
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     gameCardToday: {
         backgroundColor: '#1a1a1a',
         padding: 15,
         borderRadius: 8,
-        flexDirection: 'row',  // Add this to align content and arrow
-        alignItems: 'center',  // Add this to center vertically
-        justifyContent: 'space-between', // Add this to put arrow on right
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     gameContent: {
-        flex: 1,  // Add this to take up remaining space
+        flex: 1,
     },
     gameId: {
         fontSize: 16,
@@ -438,12 +427,6 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 16,
         fontStyle: 'italic',
-        textAlign: 'center',
-        padding: 20,
-    },
-    loadingText: {
-        color: '#fff',
-        fontSize: 16,
         textAlign: 'center',
         padding: 20,
     },

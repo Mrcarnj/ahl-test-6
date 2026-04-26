@@ -1,16 +1,12 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSchedule, formatGameTime, Schedule } from '@/src/providers/ScheduleProvider';
+import { useSchedule, Schedule } from '@/src/providers/ScheduleProvider';
 import { format, parse, isToday as checkIsToday } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useState } from 'react';
-import { useAuth } from '@/src/providers/AuthProvider';
 
 export default function AllGames() {
     const router = useRouter();
     const { myGames } = useSchedule();
-    const [refreshing, setRefreshing] = useState(false);
-    const { refreshSchedule } = useSchedule();
 
 
     const formatGameDate = (dateString: string) => {

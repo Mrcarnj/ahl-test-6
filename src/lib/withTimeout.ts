@@ -1,5 +1,5 @@
 export function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   ms: number,
   label = 'Operation'
 ): Promise<T> {
@@ -11,7 +11,7 @@ export function withTimeout<T>(
     }, ms);
   });
 
-  return Promise.race([promise, timeoutPromise]).finally(() => {
+  return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
 }

@@ -1,17 +1,15 @@
 // app/(protected)/(tabs)/roster/index.tsx
-import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, Platform, InputAccessoryView, Keyboard, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, ScrollView } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
 import { router } from 'expo-router';
-import { useAuth } from '@/src/providers/AuthProvider';
-
-// RosterItem component remains the same
-const RosterItem = memo(({ item, onPress }: {
+const RosterItem = memo(function RosterItem({ item, onPress }: {
     item: { id: number; lastfirstfullname: string },
     onPress: (id: number) => void
-}) => (
+}) {
+    return (
     <TouchableOpacity
         style={styles.itemContainer}
         onPress={() => onPress(item.id)}
@@ -19,17 +17,20 @@ const RosterItem = memo(({ item, onPress }: {
         <Text style={styles.itemText}>{item.lastfirstfullname}</Text>
         <Ionicons name="chevron-forward" size={20} color="#ff6600" />
     </TouchableOpacity>
-));
+    );
+});
 
 const RosterScreen = () => {
     const { allRosters, loading, error, refreshRoster } = useRoster();
+    const refreshRosterRef = useRef(refreshRoster);
+    refreshRosterRef.current = refreshRoster;
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredRosters, setFilteredRosters] = useState<Roster[]>([]);
     const [adminRosters, setAdminRosters] = useState<Roster[]>([]);
 
     useEffect(() => {
-        refreshRoster();
+        refreshRosterRef.current();
     }, []);
 
     const sanitizeSearchQuery = (query: string): string => {

@@ -215,7 +215,7 @@ PODS:
     - ExpoModulesCore
   - ExpoDevice (8.0.8):
     - ExpoModulesCore
-  - ExpoFileSystem (19.0.15):
+  - ExpoFileSystem (19.0.21):
     - ExpoModulesCore
   - ExpoFont (14.0.8):
     - ExpoModulesCore
@@ -1573,7 +1573,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-  - react-native-blob-util (0.22.2):
+  - react-native-blob-util (0.24.7):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1734,6 +1734,28 @@ PODS:
     - ReactNativeDependencies
     - Yoga
   - react-native-view-shot (4.0.3):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-webview (13.15.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2428,6 +2450,7 @@ DEPENDENCIES:
   - react-native-pdf (from `../node_modules/react-native-pdf`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - react-native-view-shot (from `../node_modules/react-native-view-shot`)
+  - react-native-webview (from `../node_modules/react-native-webview`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native/ReactCommon/oscompat`)
   - React-perflogger (from `../node_modules/react-native/ReactCommon/reactperflogger`)
@@ -2619,6 +2642,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-safe-area-context"
   react-native-view-shot:
     :path: "../node_modules/react-native-view-shot"
+  react-native-webview:
+    :path: "../node_modules/react-native-webview"
   React-NativeModulesApple:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios"
   React-oscompat:
@@ -2712,7 +2737,7 @@ SPEC CHECKSUMS:
   ExpoClipboard: af650d14765f19c60ce2a1eaf9dfe6445eff7365
   ExpoContacts: f39087ad6b85f388184a52f9858393b2800b0d2e
   ExpoDevice: 914f89bdd190fcb5d7be074cf3a3bffdaa2ef05d
-  ExpoFileSystem: 5fb091ea11198e109ceef2bdef2e6e66523e62c4
+  ExpoFileSystem: 858a44267a3e6e9057e0888ad7c7cfbf55d52063
   ExpoFont: 86ceec09ffed1c99cfee36ceb79ba149074901b5
   ExpoHaptics: 807476b0c39e9d82b7270349d6487928ce32df84
   ExpoHead: 5570e5edbe54fd8f88e51e8b94bf2931caaa7363
@@ -2765,11 +2790,12 @@ SPEC CHECKSUMS:
   React-logger: 7b234de35acb469ce76d6bbb0457f664d6f32f62
   React-Mapbuffer: 85140be073ac6c3fd2c74dead95fbab2f02e6821
   React-microtasksnativemodule: 76142165bc0f6ea98eae79e06c071c1e3aa3ae85
-  react-native-blob-util: 7d55208bf10ca5ebe8a3c69ea21dc71e47e61dd6
+  react-native-blob-util: 2cd03ba048b02f3a20509bbafb5b0a79ae0b0b2d
   react-native-maps: 82f5215ce0b3a149594835ab9e397733c87bfd2a
   react-native-pdf: 03f89eb9a823bd7087a3f6a4894c432eddcfda66
   react-native-safe-area-context: 8dc43e60dd67fd2be098486fd8195e143fb47c6f
   react-native-view-shot: 8853a6bacbf77899d550773a84986f251f509ffc
+  react-native-webview: ea441b2e73f711c183580fb6db89aa587f0dd92a
   React-NativeModulesApple: a9464983ccc0f66f45e93558671f60fc7536e438
   React-oscompat: 73db7dbc80edef36a9d6ed3c6c4e1724ead4236d
   React-perflogger: 123272debf907cc423962adafcf4513320e43757

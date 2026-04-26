@@ -111,7 +111,7 @@ export interface TeamRoster {
     veteran: boolean | null;
 }
 
-type ScheduleContext = {
+type ScheduleContextType = {
     allGames: Schedule[];
     myGames: Schedule[];
     /** Playoff skater stats / roster rows (`playoffStats`, season 92). */
@@ -144,7 +144,7 @@ type ScheduleContext = {
     realtimeEnabled: boolean;
 };
 
-const ScheduleContext = createContext<ScheduleContext>({
+const ScheduleContext = createContext<ScheduleContextType>({
     allGames: [],
     myGames: [],
     teamRosters: [],
@@ -176,7 +176,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracketData | null>(null);
     const [playoffBracketError, setPlayoffBracketError] = useState<string | null>(null);
     const [syncingPlayoffBracket, setSyncingPlayoffBracket] = useState(false);
-    const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContext['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
+    const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContextType['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
     const [blockingOverlayVisible, setBlockingOverlayVisible] = useState(false);
     const blockingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -185,6 +185,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [realtimeEnabled, setRealtimeEnabled] = useState(false);
     const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+    const loadingRef = useRef(loading);
+    loadingRef.current = loading;
+    const isRefreshingRef = useRef(isRefreshing);
+    isRefreshingRef.current = isRefreshing;
+    const syncScheduleFromIcalRef = useRef<ScheduleContextType['syncScheduleFromIcal']>(async () => ({ success: false }));
+    const fetchScheduleRef = useRef<() => Promise<{ success: boolean; error?: string }>>(async () => ({ success: false }));
 
     const fetchSchedule = async (): Promise<{ success: boolean; error?: string }> => {
         if (!roster?.lastfirstfullname) {
@@ -238,8 +244,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
-            setTeamRosters(rostersData);
-            setTeamRostersRegularSeason(regularSeasonRosters);
+            setTeamRosters(rostersData as unknown as TeamRoster[]);
+            setTeamRostersRegularSeason(regularSeasonRosters as unknown as TeamRoster[]);
     
             console.log('🔍 SCHEDULE: Filtering games for official:', roster.lastfirstfullname);
             // Since we're already filtering at the database level, we can just use the processed games directly
@@ -258,6 +264,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('🔄 SCHEDULE: Loading state reset');
         }
     };
+    fetchScheduleRef.current = fetchSchedule;
 
     const refreshPlayoffBracket = useCallback(async (options?: { force?: boolean }) => {
         setSyncingPlayoffBracket(true);
@@ -343,8 +350,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                             'Regular season rosters refetch after player sync'
                         ),
                     ]);
-                    setTeamRosters(rostersAfterSync as TeamRoster[]);
-                    setTeamRostersRegularSeason(rsAfterSync as TeamRoster[]);
+                    setTeamRosters(rostersAfterSync as unknown as TeamRoster[]);
+                    setTeamRostersRegularSeason(rsAfterSync as unknown as TeamRoster[]);
                     console.log(
                         `✅ SCHEDULE: Team rosters refreshed (playoffs ${rostersAfterSync.length}, RS ${rsAfterSync.length} rows)`
                     );
@@ -429,7 +436,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             }
         }
     };
-    
+    syncScheduleFromIcalRef.current = syncScheduleFromIcal;
+
     // Setup real-time subscription to schedule table
     useEffect(() => {
         if (!roster?.lastfirstfullname) return;
@@ -503,7 +511,6 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                                 const officialFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2'];
                                 for (const change of changedFields) {
                                     if (officialFields.some(field => change.startsWith(field))) {
-                                        const oldValueMatch = change.match(/→ "([^"]+)"/);
                                         const oldValueBeforeMatch = change.match(/"([^"]+)" →/);
                                         if (oldValueBeforeMatch && oldValueBeforeMatch[1] !== 'null') {
                                             replacedPerson = oldValueBeforeMatch[1];
@@ -535,7 +542,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         
                         // Refresh the schedule to update the UI
                         console.log('🔄 Refreshing schedule...');
-                        await fetchSchedule();
+                        await fetchScheduleRef.current();
                     } else {
                         console.log('ℹ️ Change does not affect current user, skipping refresh');
                     }
@@ -566,17 +573,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
     // Fetch schedule when roster data changes
     useEffect(() => {
-        if (roster?.lastfirstfullname && !loading && !isRefreshing) {
+        if (roster?.lastfirstfullname && !loadingRef.current && !isRefreshingRef.current) {
             console.log('👤 Roster data changed, triggering schedule fetch...');
-            console.log('📋 Current state - loading:', loading, 'refreshing:', isRefreshing);
+            console.log('📋 Current state - loading:', loadingRef.current, 'refreshing:', isRefreshingRef.current);
             // IMPORTANT:
             // Run iCal sync first, then fetch schedule, so initial UI reflects newly inserted games.
-            void syncScheduleFromIcal({ blocking: true, source: 'startup', showInBanner: false });
+            void syncScheduleFromIcalRef.current({ blocking: true, source: 'startup', showInBanner: false });
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
-                loading,
-                isRefreshing
+                loading: loadingRef.current,
+                isRefreshing: isRefreshingRef.current,
             });
         }
     }, [roster?.lastfirstfullname]);
@@ -601,7 +608,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     );
                     
                     // Attempt to refresh with timeout protection
-                    await Promise.race([syncScheduleFromIcal({ blocking: !!data?.blocking, source: data?.source ? 'foreground' : 'other', showInBanner: false }), timeoutPromise])
+                    await Promise.race([syncScheduleFromIcalRef.current({ blocking: !!data?.blocking, source: data?.source ? 'foreground' : 'other', showInBanner: false }), timeoutPromise])
                         .catch(error => {
                             console.error('❌ SCHEDULE: Background refresh timed out or failed:', error);
                         });
@@ -831,20 +838,3 @@ export function formatGameTimeFromHomeWallClock(
         return raw;
     }
 }
-
-// Helper function to format game date and time
-export const formatGameDateTime = (gamedate: string, gametime: string) => {
-    const dateTime = new Date(`${gamedate}T${gametime}`);
-    return dateTime.toLocaleString();
-};
-
-// Helper function to get assignment role
-export const getAssignmentRole = (game: Schedule, lastfirstfullname: string) => {
-    if (game.referee1 === lastfirstfullname) return 'Referee 1';
-    if (game.referee2 === lastfirstfullname) return 'Referee 2';
-    if (game.linesperson1 === lastfirstfullname) return 'Linesperson 1';
-    if (game.linesperson2 === lastfirstfullname) return 'Linesperson 2';
-    return null;
-};
-
-// Helper function to get team logo URL or fallback

@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const Profile = () => {
     const { user } = useAuth();
     const { roster, refreshRoster } = useRoster();
-    const { myGames, refreshSchedule } = useSchedule();
+    const { myGames } = useSchedule();
 
     // State for collapsible sections
     const [expandedSeasons, setExpandedSeasons] = useState<Set<string>>(new Set());

@@ -1,12 +1,10 @@
 // app/(protected)/_layout.tsx
-import { router, Tabs, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import RosterProvider from "../../providers/RosterProvider";
 import ScheduleProvider from "../../providers/ScheduleProvider";
 import { NotificationProvider } from "../../providers/NotificationProvider";
-import { FontAwesome } from '@expo/vector-icons';
 import SyncBlockingOverlayHost from '@/src/components/SyncBlockingOverlayHost';
 
-// Define the type for our route params
 type GameRouteParams = {
   id: string;
   source: 'calendar' | 'home';

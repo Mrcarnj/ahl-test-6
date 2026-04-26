@@ -26,7 +26,7 @@ export default function ChangePassword() {
  const [confirmPassword, setConfirmPassword] = useState('');
  const [loading, setLoading] = useState(false);
  const { user } = useAuth();
- const { roster, refreshRoster } = useRoster();
+ const { refreshRoster } = useRoster();
  const router = useRouter();
 
  const [validations, setValidations] = useState({

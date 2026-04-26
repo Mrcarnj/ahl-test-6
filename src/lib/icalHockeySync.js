@@ -921,7 +921,6 @@ async function sendNotificationsForGameChange(newGame, existingGame, changedFiel
     
     let replacedPerson = null;
     for (const change of officialChanges) {
-      const field = change.split(':')[0];
       const oldValue = change.split('"')[1]; // Extract old value
       if (oldValue && oldValue !== 'null') {
         replacedPerson = oldValue;

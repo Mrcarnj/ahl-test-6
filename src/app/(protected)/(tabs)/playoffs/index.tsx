@@ -14,15 +14,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { BracketMatchup, BracketTeam } from '@/src/lib/playoffBracket';
-import { mapApiTeamCodeToAbbrev } from '@/src/lib/playoffBracket';
+import { isBracketTeamSlotEliminated, mapApiTeamCodeToAbbrev } from '@/src/lib/playoffBracket';
 import { getTeamLogo, useSchedule, type Team } from '@/src/providers/ScheduleProvider';
 
 const ROUND_COLUMN_WIDTH = 158;
-const CONNECTOR_GUTTER = 20;
+/** Space between round columns (same as old bracket connector gutter). */
+const ROUND_COLUMN_GAP = 20;
 const ROUND_BADGE_HEIGHT = 22;
 const CARD_HEIGHT = 112;
 const CARD_GAP = 10;
-const CARD_CENTER_Y = CARD_HEIGHT / 2;
 
 function teamAbbrevFromBracket(teams: Record<string, BracketTeam>, teamId: string): string | null {
   if (!teamId || teamId === '0') return null;
@@ -31,16 +31,22 @@ function teamAbbrevFromBracket(teams: Record<string, BracketTeam>, teamId: strin
   return mapApiTeamCodeToAbbrev(row.team_code);
 }
 
-function BracketTeamLogo({ abbrev }: { abbrev: string | null }) {
+function BracketTeamLogo({ abbrev, eliminated }: { abbrev: string | null; eliminated?: boolean }) {
   if (!abbrev) {
     return (
-      <View style={styles.tbdLogo}>
+      <View style={[styles.tbdLogo, eliminated && styles.eliminatedMuted]}>
         <Text style={styles.tbdText}>TBD</Text>
       </View>
     );
   }
   const uri = getTeamLogo({ abbreviation: abbrev } as Team);
-  return <Image source={{ uri }} style={styles.teamLogo} resizeMode="contain" />;
+  return (
+    <Image
+      source={{ uri }}
+      style={[styles.teamLogo, eliminated && styles.eliminatedMuted]}
+      resizeMode="contain"
+    />
+  );
 }
 
 function MatchupCard({
@@ -54,6 +60,8 @@ function MatchupCard({
 }) {
   const a1 = teamAbbrevFromBracket(teams, matchup.team1);
   const a2 = teamAbbrevFromBracket(teams, matchup.team2);
+  const slot1Out = isBracketTeamSlotEliminated(matchup, 1);
+  const slot2Out = isBracketTeamSlotEliminated(matchup, 2);
 
   return (
     <Pressable onPress={onPress} style={styles.matchupCard}>
@@ -62,52 +70,23 @@ function MatchupCard({
       </View>
       <View style={styles.teamRow}>
         <View style={styles.teamRowLeft}>
-          <BracketTeamLogo abbrev={a1} />
-          <Text style={styles.teamAbbrev}>{a1 ?? 'TBD'}</Text>
+          <BracketTeamLogo abbrev={a1} eliminated={slot1Out} />
+          <Text style={[styles.teamAbbrev, slot1Out && styles.teamAbbrevEliminated]}>{a1 ?? 'TBD'}</Text>
         </View>
         <View style={styles.teamWinsCol}>
-          <Text style={styles.teamWins}>{matchup.team1_wins}</Text>
+          <Text style={[styles.teamWins, slot1Out && styles.teamWinsEliminated]}>{matchup.team1_wins}</Text>
         </View>
       </View>
       <View style={styles.teamRow}>
         <View style={styles.teamRowLeft}>
-          <BracketTeamLogo abbrev={a2} />
-          <Text style={styles.teamAbbrev}>{a2 ?? 'TBD'}</Text>
+          <BracketTeamLogo abbrev={a2} eliminated={slot2Out} />
+          <Text style={[styles.teamAbbrev, slot2Out && styles.teamAbbrevEliminated]}>{a2 ?? 'TBD'}</Text>
         </View>
         <View style={styles.teamWinsCol}>
-          <Text style={styles.teamWins}>{matchup.team2_wins}</Text>
+          <Text style={[styles.teamWins, slot2Out && styles.teamWinsEliminated]}>{matchup.team2_wins}</Text>
         </View>
       </View>
     </Pressable>
-  );
-}
-
-function RoundConnectors({ matchupCount }: { matchupCount: number }) {
-  if (matchupCount <= 0) return null;
-  const yPoints = Array.from({ length: matchupCount }, (_, i) => i * (CARD_HEIGHT + CARD_GAP) + CARD_CENTER_Y);
-  const firstY = yPoints[0];
-  const lastY = yPoints[yPoints.length - 1];
-
-  return (
-    <View style={styles.connectorLayer} pointerEvents="none">
-      {yPoints.map((y, index) => (
-        <View key={`stub-${index}`} style={[styles.connectorStub, { top: y }]} />
-      ))}
-      {matchupCount > 1 ? (
-        <View
-          style={[
-            styles.connectorSpine,
-            {
-              top: firstY,
-              height: Math.max(2, lastY - firstY),
-            },
-          ]}
-        />
-      ) : null}
-      {matchupCount > 1 ? (
-        <View style={[styles.connectorOut, { top: firstY + (lastY - firstY) / 2 }]} />
-      ) : null}
-    </View>
   );
 }
 
@@ -179,10 +158,10 @@ export default function PlayoffsScreen() {
         ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardContent}>
-          {rounds.map((round, roundIndex) => (
+          {rounds.map((round) => (
             <View key={`round-${round.round}`} style={styles.roundColumnWrap}>
               <View style={styles.roundColumn}>
-              <Text style={styles.roundBadge}>R{round.round}</Text>
+                <Text style={styles.roundBadge}>R{round.round}</Text>
                 <View style={styles.roundCards}>
                   {(round.matchups ?? []).map((m) => (
                     <MatchupCard
@@ -199,9 +178,6 @@ export default function PlayoffsScreen() {
                   ))}
                 </View>
               </View>
-              {roundIndex < rounds.length - 1 ? (
-                <RoundConnectors matchupCount={round.matchups?.length ?? 0} />
-              ) : null}
             </View>
           ))}
         </ScrollView>
@@ -223,12 +199,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   boardContent: {
-    gap: 2,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ROUND_COLUMN_GAP,
     paddingBottom: 8,
   },
   roundColumnWrap: {
-    width: ROUND_COLUMN_WIDTH + CONNECTOR_GUTTER,
-    position: 'relative',
+    width: ROUND_COLUMN_WIDTH,
   },
   roundColumn: {
     width: ROUND_COLUMN_WIDTH,
@@ -290,6 +267,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 30,
   },
+  teamAbbrevEliminated: {
+    color: '#5a5a5a',
+  },
+  teamWinsEliminated: {
+    color: '#4a4a4a',
+  },
+  eliminatedMuted: {
+    opacity: 0.45,
+  },
   teamLogo: {
     width: 22,
     height: 22,
@@ -306,33 +292,6 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 8,
     fontWeight: 'bold',
-  },
-  connectorLayer: {
-    position: 'absolute',
-    left: ROUND_COLUMN_WIDTH,
-    top: ROUND_BADGE_HEIGHT + 4,
-    width: CONNECTOR_GUTTER,
-    bottom: 0,
-  },
-  connectorStub: {
-    position: 'absolute',
-    left: 0,
-    width: 12,
-    height: 1,
-    backgroundColor: '#3a3a3a',
-  },
-  connectorSpine: {
-    position: 'absolute',
-    left: 12,
-    width: 1,
-    backgroundColor: '#2d2d2d',
-  },
-  connectorOut: {
-    position: 'absolute',
-    left: 12,
-    width: 12,
-    height: 1,
-    backgroundColor: '#3a3a3a',
   },
   errorText: {
     color: '#ff4444',

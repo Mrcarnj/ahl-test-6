@@ -1,7 +1,7 @@
 // app/(auth)/tos.tsx
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
-import React, { useState, useEffect, useRef } from 'react';
-import { router, useRouter } from 'expo-router';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
@@ -16,34 +16,12 @@ export default function TermsOfService() {
   const scrollViewRef = useRef<ScrollView>(null);
   const router = useRouter();
 
-  // Handle hardware back button
-  useEffect(() => {
-    const backAction = () => {
-      handleDecline();
-      return true;
-    };
-
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove();
-  }, []);
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 20; // Adjust this value as needed
-    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >=
-      contentSize.height - paddingToBottom;
-
-    if (isCloseToBottom && !hasReachedBottom) {
-      setHasReachedBottom(true);
-    }
-  };
-
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
     router.replace('/(auth)/login');
-  };
+  }, [router]);
 
-  const handleDecline = () => {
+  const handleDecline = useCallback(() => {
     Alert.alert(
       "Decline Terms of Service",
       "If you decline the Terms of Service, you will be signed out and cannot use the app. Do you want to continue?",
@@ -59,6 +37,28 @@ export default function TermsOfService() {
         }
       ]
     );
+  }, [handleSignOut]);
+
+  // Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      handleDecline();
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [handleDecline]);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 20;
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - paddingToBottom;
+
+    if (isCloseToBottom && !hasReachedBottom) {
+      setHasReachedBottom(true);
+    }
   };
 
   const handleAcceptTOS = async () => {
@@ -159,7 +159,7 @@ export default function TermsOfService() {
       >
         <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
         <Text style={styles.text}>
-          By accessing or using AHL Officials App ("the App"), you agree to comply with and be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the App.
+          {`By accessing or using AHL Officials App ("the App"), you agree to comply with and be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the App.`}
         </Text>
 
         <Text style={styles.sectionTitle}>2. Description of Service</Text>
@@ -184,17 +184,17 @@ export default function TermsOfService() {
 
         <Text style={styles.subTitle}>3.3 Data Currency Responsibility</Text>
         <Text style={styles.text}>
-          The data presented on the App may not always be up to date. It is the user's responsibility to verify how current the data is by cross-referencing it with the official sources mentioned above. Reliance on the App for time-sensitive or critical information is done at the user's own risk.
+          {`The data presented on the App may not always be up to date. It is the user's responsibility to verify how current the data is by cross-referencing it with the official sources mentioned above. Reliance on the App for time-sensitive or critical information is done at the user's own risk.`}
         </Text>
 
         <Text style={styles.sectionTitle}>4. User Responsibilities</Text>
         <Text style={styles.text}>
-          It is the user's responsibility to verify any information displayed on the App with the official sources mentioned above. The App is intended to be a supplementary tool, and reliance on its data is at the user's own risk.
+          {`It is the user's responsibility to verify any information displayed on the App with the official sources mentioned above. The App is intended to be a supplementary tool, and reliance on its data is at the user's own risk.`}
         </Text>
 
         <Text style={styles.sectionTitle}>5. Intellectual Property</Text>
         <Text style={styles.text}>
-          All intellectual property rights in the App and its content, except for the data aggregated from external sources, are owned by Mike Dietrich. Unauthorized use of the App's intellectual property is prohibited.
+          {`All intellectual property rights in the App and its content, except for the data aggregated from external sources, are owned by Mike Dietrich. Unauthorized use of the App's intellectual property is prohibited.`}
         </Text>
 
         <Text style={styles.sectionTitle}>6. Limitation of Liability</Text>
@@ -212,7 +212,7 @@ export default function TermsOfService() {
 
         <Text style={styles.sectionTitle}>8. Updates to the App</Text>
         <Text style={styles.text}>
-          The App is provided "as is" and may be updated or modified at any time without notice. Dan Flynn is not obligated to maintain or support the App.
+          {`The App is provided "as is" and may be updated or modified at any time without notice. Dan Flynn is not obligated to maintain or support the App.`}
         </Text>
 
         <Text style={styles.sectionTitle}>9. Termination</Text>

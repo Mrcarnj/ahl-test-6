@@ -293,13 +293,10 @@ function TeamSeasonRosterPager({
 }
 
 const GameDetails = () => {
-  const { id, source } = useLocalSearchParams<{ id: string; source: string }>();
-  const { allGames, myGames } = useSchedule();
+  const { id } = useLocalSearchParams<{ id: string; source: string }>();
+  const { myGames } = useSchedule();
   const { allRosters } = useRoster();
   const [activeTab, setActiveTab] = useState("crew");
-  const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const { refreshSchedule } = useSchedule();
 
   // Current season constant
   const CURRENT_SEASON = "2025-26";
@@ -836,16 +833,10 @@ const GameDetails = () => {
             {game.awayTeamData && (
               <>
                 <Text style={styles.teamStats}>
-                  GP: {game.awayTeamData.games_played || "0"},{" "}
-                  {game.awayTeamData.wins || "0"}-
-                  {game.awayTeamData.losses || "0"}-
-                  {game.awayTeamData.otl || "0"}-{game.awayTeamData.sol || "0"}{" "}
-                  // Pts: {game.awayTeamData.points || "0"}
+                  {`GP: ${game.awayTeamData.games_played || "0"}, ${game.awayTeamData.wins || "0"}-${game.awayTeamData.losses || "0"}-${game.awayTeamData.otl || "0"}-${game.awayTeamData.sol || "0"} // Pts: ${game.awayTeamData.points || "0"}`}
                 </Text>
                 <Text style={styles.teamRank}>
-                  {game.awayTeamData.division || "N/A"} #
-                  {game.awayTeamData.division_rank || ""} // Overall #
-                  {game.awayTeamData.overall_rank || "N/A"}
+                  {`${game.awayTeamData.division || "N/A"} #${game.awayTeamData.division_rank || ""} // Overall #${game.awayTeamData.overall_rank || "N/A"}`}
                 </Text>
               </>
             )}
@@ -863,16 +854,10 @@ const GameDetails = () => {
             {game.homeTeamData && (
               <>
                 <Text style={styles.teamStats}>
-                  GP: {game.homeTeamData.games_played || "0"},{" "}
-                  {game.homeTeamData.wins || "0"}-
-                  {game.homeTeamData.losses || "0"}-
-                  {game.homeTeamData.otl || "0"}-{game.homeTeamData.sol || "0"}{" "}
-                  // Pts: {game.homeTeamData.points || "0"}
+                  {`GP: ${game.homeTeamData.games_played || "0"}, ${game.homeTeamData.wins || "0"}-${game.homeTeamData.losses || "0"}-${game.homeTeamData.otl || "0"}-${game.homeTeamData.sol || "0"} // Pts: ${game.homeTeamData.points || "0"}`}
                 </Text>
                 <Text style={styles.teamRank}>
-                  {game.homeTeamData.division || "N/A"} #
-                  {game.homeTeamData.division_rank || ""} // Overall #
-                  {game.homeTeamData.overall_rank || "N/A"}
+                  {`${game.homeTeamData.division || "N/A"} #${game.homeTeamData.division_rank || ""} // Overall #${game.homeTeamData.overall_rank || "N/A"}`}
                 </Text>
               </>
             )}
@@ -888,7 +873,7 @@ const GameDetails = () => {
                 {game.homeTeamData?.arenaname || "Arena not specified"}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.divider}> // </Text>
+            <Text style={styles.divider}>{' // '}</Text>
             <TouchableOpacity onPress={() => handleParkingPress(game)}>
               <View style={styles.parkingContainer}>
                 <FontAwesome5 name="parking" size={14} color="#666666" />

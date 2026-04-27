@@ -21,6 +21,7 @@ const TestScheduleScreen = () => {
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
         { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
+        { title: 'Rule Genie', screenName: "/(protected)/home/RuleGenie" },
         { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
         { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
         { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
@@ -286,6 +287,7 @@ const TestScheduleScreen = () => {
                                 <Text style={styles.link}>{link.title}</Text>
                                 {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
                                 {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                                {link.title === 'Rule Genie' && <MaterialCommunityIcons name="robot-happy-outline" size={24} color="#fff" style={styles.bookIcon} />}
                             </View>
                             <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                         </TouchableOpacity>

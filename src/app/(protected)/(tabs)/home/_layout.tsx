@@ -52,6 +52,18 @@ export default function HomeLayout() {
             headerTintColor: '#ffffff',
           }}
         />
+        <Stack.Screen
+          name="RuleGenie"
+          options={{
+            headerTitle: "Rule Genie",
+            headerBackTitle: "Home",
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#000000',
+            },
+            headerTintColor: '#ffffff',
+          }}
+        />
     </Stack>
   );
 }

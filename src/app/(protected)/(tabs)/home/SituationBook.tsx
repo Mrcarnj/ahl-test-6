@@ -1,87 +1,91 @@
-// app/(protected)/(tabs)/home/situatuonBook.tsx
-import { View, StyleSheet, Dimensions, TextInput, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
-import React, { useState, useEffect } from 'react';
-import Pdf from 'react-native-pdf';
+// app/(protected)/(tabs)/home/SituationBook.tsx
 import AntDesign from '@expo/vector-icons/AntDesign';
-import ruleBookText from '../../../../lib/SituationBookPdfText.json';  // Adjust path as needed
+import React, { useState } from 'react';
+import {
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { WebView } from 'react-native-webview';
+import ruleBookText from '../../../../lib/SituationBookPdfText.json';
+
+const SITUATION_BOOK_URL =
+    'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI0LTI1IE5ITCBTaXR1YXRpb24gSGFuZGJvb2sgKENPTkZJREVOVElBTCkucGRmIiwiaWF0IjoxNzc3MjUzNjg5LCJleHAiOjE5MzQ5MzM2ODl9.M5pvM1xCRUE3R7M8cJjtCWYytv-0uHSI9dK_8QHIgyU';
 
 export default function SituationBook() {
-    const source = {
-        uri: 'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2025-26_AHLRuleBook.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI1LTI2X0FITFJ1bGVCb29rLnBkZiIsImlhdCI6MTc3Njc0MjcyMSwiZXhwIjoxODA4Mjc4NzIxfQ.LcmkdvTh1uuwBP-hBqVeNIubRBisoKSmW9mBAuRmA5A',
-        cache: true
-    };
-
-    const [currentPage, setCurrentPage] = useState(1);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState<number[]>([]);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
 
-    useEffect(() => {
-        // Navigate to the current result page if searchResults and currentResultIndex are set
-        if (searchResults.length > 0) {
-            setCurrentPage(searchResults[currentResultIndex]);
-        }
-    }, [searchResults, currentResultIndex]);
-
     const handleSearch = () => {
-        // Find pages containing the search term
         const results = ruleBookText
             .filter(page => page.text.toLowerCase().includes(searchTerm.toLowerCase()))
             .map(page => page.page);
 
         setSearchResults(results);
-        setCurrentResultIndex(0);  // Reset to first result
-        if (results.length > 0) {
-            setCurrentPage(results[0]);
-            console.log(`Found ${results.length} results on pages: ${results}`);
-        } else {
+        setCurrentResultIndex(0);
+        if (results.length === 0) {
             alert('No results found.');
         }
     };
 
     const goToNextResult = () => {
         if (searchResults.length > 0) {
-            const nextIndex = (currentResultIndex + 1) % searchResults.length;
-            setCurrentResultIndex(nextIndex);
+            setCurrentResultIndex((currentResultIndex + 1) % searchResults.length);
         }
     };
 
     const goToPreviousResult = () => {
         if (searchResults.length > 0) {
-            const prevIndex = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
-            setCurrentResultIndex(prevIndex);
+            setCurrentResultIndex(
+                (currentResultIndex - 1 + searchResults.length) % searchResults.length,
+            );
         }
     };
 
     return (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}
-        keyboardVerticalOffset={90}>
-            <Pdf
-                trustAllCerts={false}
-                source={source}
-                page={currentPage}
-                onLoadComplete={(numberOfPages, filePath) => {
-                    console.log(`Number of pages: ${numberOfPages}`);
-                }}
-                onPageChanged={(page, numberOfPages) => {
-                    console.log(`Current page: ${page}`);
-                }}
-                onError={(error) => {
-                    console.log(error);
-                }}
-                onPressLink={(uri) => {
-                    console.log(`Link pressed: ${uri}`);
-                }}
-                style={styles.pdf}
-            />
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+            keyboardVerticalOffset={90}
+        >
+            {loadError && (
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>Failed to load situation book.</Text>
+                    <Text style={styles.errorHint}>Check your connection and try again.</Text>
+                </View>
+            )}
 
-            {/* Search Bar */}
+            {!loadError && (
+                <WebView
+                    source={{ uri: SITUATION_BOOK_URL }}
+                    style={styles.webview}
+                    onLoadStart={() => setLoading(true)}
+                    onLoad={() => setLoading(false)}
+                    onError={() => { setLoading(false); setLoadError(true); }}
+                />
+            )}
+
+            {loading && !loadError && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#ff6600" />
+                    <Text style={styles.loadingText}>Loading situation book…</Text>
+                </View>
+            )}
+
             <View style={styles.searchContainer}>
                 <TextInput
                     style={styles.searchBar}
                     maxLength={50}
-                    placeholder="Search..."
-                    placeholderTextColor={'#ccc'}
+                    placeholder="Search situation book…"
+                    placeholderTextColor="#ccc"
                     value={searchTerm}
                     onChangeText={setSearchTerm}
                     returnKeyType="search"
@@ -89,7 +93,7 @@ export default function SituationBook() {
                 />
                 {searchTerm.length > 0 && (
                     <TouchableOpacity
-                        onPress={() => setSearchTerm('')}
+                        onPress={() => { setSearchTerm(''); setSearchResults([]); }}
                         style={styles.clearButton}
                     >
                         <AntDesign name="close-circle" size={16} color="#666" />
@@ -97,14 +101,13 @@ export default function SituationBook() {
                 )}
             </View>
 
-            {/* Search Navigation Controls */}
             {searchResults.length > 0 && searchTerm !== '' && (
                 <View style={styles.navigationContainer}>
                     <TouchableOpacity onPress={goToPreviousResult}>
                         <AntDesign name="up" size={24} color="#ff6600" />
                     </TouchableOpacity>
                     <Text style={styles.resultInfo}>
-                        Result {currentResultIndex + 1} of {searchResults.length}
+                        Page {searchResults[currentResultIndex]} ({currentResultIndex + 1} of {searchResults.length})
                     </Text>
                     <TouchableOpacity onPress={goToNextResult}>
                         <AntDesign name="down" size={24} color="#ff6600" />
@@ -120,10 +123,38 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000',
     },
-    pdf: {
+    webview: {
         flex: 1,
-        width: Dimensions.get('window').width,
         backgroundColor: '#000',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#000',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+    loadingText: {
+        color: '#fff',
+        marginTop: 12,
+        fontSize: 15,
+    },
+    errorContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 30,
+    },
+    errorText: {
+        color: '#ff6600',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 8,
+    },
+    errorHint: {
+        color: '#888',
+        fontSize: 14,
+        textAlign: 'center',
     },
     searchContainer: {
         position: 'relative',
@@ -135,14 +166,14 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: 5,
         paddingHorizontal: 10,
-        paddingRight: 35,  // Make room for the clear button
+        paddingRight: 35,
         color: '#fff',
     },
     clearButton: {
         position: 'absolute',
         right: 10,
-        top: 7,  // Centers the icon vertically
-        padding: 5,  // Larger touch target
+        top: 7,
+        padding: 5,
     },
     navigationContainer: {
         flexDirection: 'row',

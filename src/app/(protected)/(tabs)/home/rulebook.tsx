@@ -33,6 +33,9 @@ const normalizeWord = (value: string) =>
     .replace(/[^a-z0-9]/g, "")
     .trim();
 
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const levenshteinDistance = (a: string, b: string) => {
   const rows = a.length + 1;
   const cols = b.length + 1;
@@ -58,31 +61,43 @@ const levenshteinDistance = (a: string, b: string) => {
 };
 
 const matchesFuzzy = (pageText: string, searchTerm: string) => {
-  const normalizedTerm = normalizeWord(searchTerm);
+  const rawTerm = searchTerm.toLowerCase().trim();
+  const normalizedTerm = normalizeWord(rawTerm);
   if (!normalizedTerm) return false;
 
   const lowerText = pageText.toLowerCase();
-  if (lowerText.includes(searchTerm.toLowerCase().trim())) return true;
+  const termParts = rawTerm.split(/[^a-z0-9]+/).filter(Boolean);
+
+  if (termParts.length > 1) {
+    // Multi-word queries should match hyphenated forms like "head butt" -> "head-butting".
+    const joinedPattern = `\\b${termParts
+      .map(escapeRegex)
+      .join("[\\s-]*")}[a-z0-9-]*\\b`;
+    if (new RegExp(joinedPattern, "i").test(lowerText)) return true;
+  }
+
+  // Prefer token boundary matching so "rough" matches "roughing" but not "through".
+  const stemRegex = new RegExp(`\\b${escapeRegex(rawTerm)}[a-z0-9]*\\b`, "i");
+  if (stemRegex.test(lowerText)) return true;
 
   const words = pageText
     .split(/\s+/)
     .map(normalizeWord)
     .filter((word) => word.length >= 3);
 
-  const termPrefix = normalizedTerm.slice(0, Math.min(normalizedTerm.length, 5));
-  const maxDistance = normalizedTerm.length <= 5 ? 1 : 2;
-
   return words.some((word) => {
-    if (word.includes(normalizedTerm)) return true;
+    if (word === normalizedTerm) return true;
     if (word.startsWith(normalizedTerm)) return true;
-    if (normalizedTerm.startsWith(word) && word.length >= 4) return true;
-
-    const wordPrefix = word.slice(0, Math.min(word.length, 7));
-    if (wordPrefix.includes(termPrefix) || termPrefix.includes(wordPrefix)) {
+    if (normalizedTerm.length >= 5 && normalizedTerm.startsWith(word)) {
       return true;
     }
 
-    const compareChunk = word.slice(0, Math.min(word.length, normalizedTerm.length + 2));
+    // Typo tolerance is anchored at word start to avoid mid-word false positives.
+    const compareChunk = word.slice(0, normalizedTerm.length);
+    const maxDistance =
+      normalizedTerm.length >= 8 ? 2 : normalizedTerm.length >= 5 ? 1 : 0;
+
+    if (maxDistance === 0) return false;
     return levenshteinDistance(compareChunk, normalizedTerm) <= maxDistance;
   });
 };

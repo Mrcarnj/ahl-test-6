@@ -36,6 +36,18 @@ function rosterNum(value: number | null | undefined): number {
   return Number(value);
 }
 
+/**
+ * Keep skaters with numeric GP above placeholder GP values (e.g. "-").
+ * HockeyTech playoff roster rows can include "-" before stats are populated.
+ */
+function gpSortGroup(value: TeamRoster["games_played"]): number {
+  if (typeof value === "number" && Number.isFinite(value)) return 0;
+  if (typeof value === "string" && value.trim() !== "" && value.trim() !== "-") {
+    return Number.isFinite(Number(value)) ? 0 : 1;
+  }
+  return 1;
+}
+
 /** Full roster for one club: match `teams.abbreviation` + sort for display. */
 function rosterPlayersForTeam(
   teamRosters: TeamRoster[],
@@ -45,6 +57,9 @@ function rosterPlayersForTeam(
   return teamRosters
     .filter((player) => player.team === teamAbbrev)
     .sort((a, b) => {
+      const gpGroupDiff = gpSortGroup(a.games_played) - gpSortGroup(b.games_played);
+      if (gpGroupDiff !== 0) return gpGroupDiff;
+
       if (rosterNum(b.points) !== rosterNum(a.points)) {
         return rosterNum(b.points) - rosterNum(a.points);
       }

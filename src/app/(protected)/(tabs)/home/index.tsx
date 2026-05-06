@@ -14,7 +14,7 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames } = useSchedule();
+    const { myGames, playoffBracket } = useSchedule();
     const { roster } = useRoster();
     const { syncStatus } = useHockeySync();
 
@@ -151,11 +151,145 @@ const TestScheduleScreen = () => {
         };
     }, []);
 
-    const getGamesInDateRange = useCallback((dateRange: string) => {
-        if (!dateRange) return [];
-
+    const gamesOnExpenseReport = useMemo(() => {
         const { rangeStartDate, rangeEndDate } = expenseReportData;
         if (!rangeStartDate || !rangeEndDate) return [];
+
+        const getPlayoffCode = (game: typeof myGames[number]): string => {
+            const rawGameId = String(game.gameid || '').trim().toUpperCase();
+            const rawGameCode = String(game.gamecode || '').trim().toUpperCase();
+
+            const hasSeriesPattern = (value: string): boolean => /[A-Z]\d+/.test(value);
+
+            // Prefer whichever field actually contains the playoff series/game token (e.g., M2, O3).
+            if (hasSeriesPattern(rawGameId)) return rawGameId.match(/[A-Z]\d+/)?.[0] ?? rawGameId;
+            if (hasSeriesPattern(rawGameCode)) return rawGameCode.match(/[A-Z]\d+/)?.[0] ?? rawGameCode;
+            return '';
+        };
+
+        const numericGameId = (game: typeof myGames[number]): string | null => {
+            const raw = String(game.gameid ?? '').trim();
+            if (!raw) return null;
+            return /^\d+$/.test(raw) ? raw : null;
+        };
+
+        const isPlayoffGame = (game: typeof myGames[number]): boolean => {
+            const id = getPlayoffCode(game);
+            if (!id) return false;
+            if (id.startsWith('EX')) return false;
+            return /^[A-Z]\d+$/.test(id);
+        };
+
+        const seriesLetterFromCode = (gameCode: string): string | null => {
+            const normalized = gameCode.trim().toUpperCase();
+            const startMatch = normalized.match(/^([A-Z])/);
+            if (startMatch) return startMatch[1];
+            const embeddedMatch = normalized.match(/([A-Z])\d+/);
+            if (embeddedMatch) return embeddedMatch[1];
+            const alphaMatch = normalized.match(/([A-Z])/);
+            if (alphaMatch && alphaMatch[1] !== 'E') return alphaMatch[1];
+            return null;
+        };
+
+        const fallbackRoundFromSeriesLetter = (seriesLetter: string | null): number | undefined => {
+            if (!seriesLetter) return undefined;
+            const letter = seriesLetter.toUpperCase().charCodeAt(0);
+            if (!Number.isFinite(letter)) return undefined;
+            // HockeyTech fallback buckets when bracket mapping is temporarily unavailable.
+            // Keeps known behavior: G => R1, M/O => R2.
+            if (letter >= 65 && letter <= 76) return 1; // A-L
+            if (letter >= 77 && letter <= 82) return 2; // M-R
+            if (letter >= 83 && letter <= 85) return 3; // S-U
+            if (letter >= 86 && letter <= 90) return 4; // V-Z
+            return undefined;
+        };
+
+        const displayCodeForGame = (game: typeof myGames[number]): string => {
+            const playoffCode = getPlayoffCode(game);
+            if (!playoffCode) return '';
+            const normalized = playoffCode.match(/[A-Z]\d+/);
+            return normalized ? normalized[0] : playoffCode;
+        };
+
+        const gameIdSort = (a: string, b: string): number => {
+            const aMatch = a.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+            const bMatch = b.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+            if (aMatch && bMatch) {
+                if (aMatch[1] !== bMatch[1]) return aMatch[1].localeCompare(bMatch[1]);
+                return Number(aMatch[2]) - Number(bMatch[2]);
+            }
+            const aNum = Number(a);
+            const bNum = Number(b);
+            if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+            return a.localeCompare(b);
+        };
+
+        const playoffRoundBySeries = new Map<string, number>();
+        const playoffRoundByGameId = new Map<string, number>();
+        const openPlayoffRounds = new Set<number>();
+
+        playoffBracket?.rounds.forEach((round) => {
+            const roundNum = Number(round.round);
+            if (!Number.isFinite(roundNum)) return;
+
+            let roundStillOpen = false;
+            round.matchups.forEach((matchup) => {
+                const seriesLetter = String(matchup.series_letter ?? '').trim().toUpperCase();
+                if (!seriesLetter) return;
+                playoffRoundBySeries.set(seriesLetter, roundNum);
+
+                (matchup.games ?? []).forEach((bracketGame) => {
+                    const bracketGameId = String(bracketGame.game_id ?? '').trim();
+                    if (bracketGameId) {
+                        playoffRoundByGameId.set(bracketGameId, roundNum);
+                    }
+                });
+
+                const isActive = String(matchup.active ?? '').toLowerCase();
+                const winner = String(matchup.winner ?? '').trim();
+                const hasWinner = winner !== '' && winner !== '0';
+                if (isActive === '1' || isActive === 'true' || isActive === 'yes' || !hasWinner) {
+                    roundStillOpen = true;
+                }
+            });
+
+            if (roundStillOpen) {
+                openPlayoffRounds.add(roundNum);
+            }
+        });
+
+        const playoffGamesWithRound = myGames
+            .filter((game) => isPlayoffGame(game))
+            .map((game) => {
+                const byGameIdRound = numericGameId(game)
+                    ? playoffRoundByGameId.get(numericGameId(game)!)
+                    : undefined;
+                if (Number.isFinite(byGameIdRound)) {
+                    return { game, round: byGameIdRound as number };
+                }
+
+                const seriesLetter = seriesLetterFromCode(getPlayoffCode(game));
+                const bySeriesRound = seriesLetter ? playoffRoundBySeries.get(seriesLetter) : undefined;
+                const fallbackRound = fallbackRoundFromSeriesLetter(seriesLetter);
+                return { game, round: bySeriesRound ?? fallbackRound };
+            })
+            .filter((entry): entry is { game: typeof myGames[number]; round: number } => Number.isFinite(entry.round));
+
+        if (playoffGamesWithRound.length > 0) {
+            const myOpenRounds = playoffGamesWithRound
+                .map(({ round }) => round)
+                .filter((round) => openPlayoffRounds.has(round));
+
+            const currentRound = myOpenRounds.length > 0
+                ? Math.min(...myOpenRounds)
+                : Math.max(...playoffGamesWithRound.map(({ round }) => round));
+
+            return playoffGamesWithRound
+                .filter(({ round }) => round === currentRound)
+                .map(({ game }) => displayCodeForGame(game))
+                .filter((code) => Boolean(code))
+                .sort(gameIdSort);
+        }
 
         const startDateStr = format(rangeStartDate, 'yyyy-MM-dd');
         const endDateStr = format(rangeEndDate, 'yyyy-MM-dd');
@@ -163,8 +297,8 @@ const TestScheduleScreen = () => {
         return myGames
             .filter(game => game.gamedate >= startDateStr && game.gamedate <= endDateStr)
             .map(game => game.gameid)
-            .sort((a, b) => Number(a) - Number(b));
-    }, [myGames, expenseReportData]);
+            .sort(gameIdSort);
+    }, [myGames, expenseReportData, playoffBracket]);
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
@@ -230,8 +364,8 @@ const TestScheduleScreen = () => {
                                 Date Range Due: {dateRange}
                             </Text>
                             <Text style={styles.dateRangeText}>
-                                Games on Report: {getGamesInDateRange(dateRange).length > 0
-                                    ? getGamesInDateRange(dateRange).join(', ')
+                                Games on Report: {gamesOnExpenseReport.length > 0
+                                    ? gamesOnExpenseReport.join(', ')
                                     : 'No games in this period'}
                             </Text>
                         </>

@@ -237,3 +237,74 @@ create index IF not exists idx_user_push_tokens_auth_id on public.user_push_toke
 create trigger update_user_push_tokens_updated_at BEFORE
 update on user_push_tokens for EACH row
 execute FUNCTION update_updated_at_column ();
+
+create table public.hockeytech_team_map (
+  api_team_id integer not null,
+  api_team_code text not null,
+  team_abbreviation text not null,
+  team_name text null,
+  updated_at timestamp with time zone not null default now(),
+  constraint hockeytech_team_map_pkey primary key (api_team_id),
+  constraint hockeytech_team_map_team_abbrev_fkey foreign key (team_abbreviation) references public.teams (abbreviation)
+) TABLESPACE pg_default;
+
+create table public.playoff_series (
+  season_id integer not null,
+  series_letter text not null,
+  round integer not null,
+  series_name text not null,
+  round_type_name text null,
+  feeder_series1 text null,
+  feeder_series2 text null,
+  team1_api_team_id integer null,
+  team2_api_team_id integer null,
+  winner_api_team_id integer null,
+  team1_abbreviation text null,
+  team2_abbreviation text null,
+  winner_abbreviation text null,
+  team1_wins integer not null default 0,
+  team2_wins integer not null default 0,
+  ties integer not null default 0,
+  active boolean not null default true,
+  content_en text null,
+  content_fr text null,
+  updated_at timestamp with time zone not null default now(),
+  season_label text null,
+  constraint playoff_series_pkey primary key (season_id, series_letter),
+  constraint playoff_series_team1_api_fkey foreign key (team1_api_team_id) references public.hockeytech_team_map (api_team_id),
+  constraint playoff_series_team2_api_fkey foreign key (team2_api_team_id) references public.hockeytech_team_map (api_team_id),
+  constraint playoff_series_winner_api_fkey foreign key (winner_api_team_id) references public.hockeytech_team_map (api_team_id),
+  constraint playoff_series_team1_abbrev_fkey foreign key (team1_abbreviation) references public.teams (abbreviation),
+  constraint playoff_series_team2_abbrev_fkey foreign key (team2_abbreviation) references public.teams (abbreviation),
+  constraint playoff_series_winner_abbrev_fkey foreign key (winner_abbreviation) references public.teams (abbreviation)
+) TABLESPACE pg_default;
+
+create table public.playoff_games (
+  game_id bigint not null,
+  season_id integer not null,
+  series_letter text not null,
+  round integer not null,
+  game_number text null,
+  date_time timestamp with time zone null,
+  home_api_team_id integer null,
+  visiting_api_team_id integer null,
+  home_abbreviation text null,
+  visiting_abbreviation text null,
+  home_goal_count integer not null default 0,
+  visiting_goal_count integer not null default 0,
+  status text null,
+  game_status text null,
+  if_necessary boolean not null default false,
+  game_notes text null,
+  flo_hockey_url text null,
+  flo_core_event_id text null,
+  flo_live_event_id text null,
+  updated_at timestamp with time zone not null default now(),
+  season_label text null,
+  constraint playoff_games_pkey primary key (game_id),
+  constraint playoff_games_series_fkey foreign key (season_id, series_letter) references public.playoff_series (season_id, series_letter),
+  constraint playoff_games_home_api_fkey foreign key (home_api_team_id) references public.hockeytech_team_map (api_team_id),
+  constraint playoff_games_visiting_api_fkey foreign key (visiting_api_team_id) references public.hockeytech_team_map (api_team_id),
+  constraint playoff_games_home_abbrev_fkey foreign key (home_abbreviation) references public.teams (abbreviation),
+  constraint playoff_games_visiting_abbrev_fkey foreign key (visiting_abbreviation) references public.teams (abbreviation)
+) TABLESPACE pg_default;

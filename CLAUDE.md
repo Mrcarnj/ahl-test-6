@@ -79,9 +79,9 @@ On each startup/foreground event, **ScheduleProvider** runs:
 1. **iCal sync** (`icalHockeySync.js`) — fetches the official's HorizonWebRef iCal URL, parses games, upserts to `schedule` table.
 2. **Schedule fetch** — reads `schedule` + joined `teams` from Supabase filtered to this official.
 3. **Background syncs** (gated to once per 24 h via AsyncStorage timestamps):
-   - `syncPlayerStats` — HockeyTech API → `teamRosters` table (season 93).
-   - `syncPlayerRoster` — HockeyTech team rosters → `teamRosters` table (season 93).
-   - `syncTeamStandings` — HockeyTech standings → `teams` table (season 93).
+   - `syncPlayerStats` — HockeyTech API → `teamRosters` table (season 94).
+   - `syncPlayerRoster` — HockeyTech team rosters → `teamRosters` table (season 94).
+   - `syncTeamStandings` — HockeyTech standings → `teams` table (season 94).
    - `syncPlayoffBracketToDb` — disabled while playoffs are hidden.
 
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.
@@ -98,12 +98,12 @@ scraped theahl.com on a cron into `teamRosters`; that duplicated
 
 ### Key season IDs / tables
 
-Current season is **2026-27 = HockeyTech season_id 93**.
+Current season is **2026-27 = HockeyTech season_id 94**.
 
 | Data | Table | Season ID |
 |---|---|---|
-| Regular season standings | `teams` columns | 93 |
-| Regular season player stats + rosters | `teamRosters` | 93 (`PLAYER_ROSTER_SYNC_SEASON_ID`) |
+| Regular season standings | `teams` columns | 94 |
+| Regular season player stats + rosters | `teamRosters` | 94 (`PLAYER_ROSTER_SYNC_SEASON_ID`) |
 | Playoff player stats + rosters (inactive) | `playoffStats` | 92 |
 | Playoff bracket (inactive) | `playoff_bracket` | 92 (`PLAYOFF_BRACKET_SEASON_ID`) |
 

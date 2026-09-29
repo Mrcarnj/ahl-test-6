@@ -7,10 +7,10 @@ import { supabase } from './supabase';
 
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
 
-// API endpoints (2026-27 regular season, HockeyTech season_id 93)
-const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=93&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
-const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=93&key=ccb91f29d6744675&client_code=ahl&fmt=json";
-const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=93&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+// API endpoints (2026-27 regular season, HockeyTech season_id 94)
+const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=94&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=94&key=ccb91f29d6744675&client_code=ahl&fmt=json";
+const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=94&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
 
 // All AHL team IDs
 // (BRI/Bridgeport 317 left the league after 2025-26; HAM/Hamilton 457 joined for 2026-27.)
@@ -61,15 +61,21 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 
 /**
  * Check if player stats sync is needed (24 hours since last sync)
- * Checks the lastSynced column in the active roster stats table
+ *
+ * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
+ * row of the season we are about to write. An unscoped check reads the newest
+ * `lastSynced` in the whole table, so right after a season rollover the
+ * previous season's freshly-synced rows look like the new season is already up
+ * to date and suppress the first sync for a full day.
  */
 export async function shouldSyncPlayerStats(): Promise<boolean> {
   try {
-    // Get the most recent lastSynced timestamp from any player
-    // If all lastSynced are NULL, this will return no rows and we'll sync
+    // Most recent lastSynced among the active season's players.
+    // No such row (rollover, or all NULL) means sync now.
     const { data, error } = await supabase
       .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
+      .eq('season_id', PLAYER_ROSTER_SYNC_SEASON_ID)
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
       .limit(1)
@@ -93,15 +99,21 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
 
 /**
  * Check if player roster sync is needed (24 hours since last sync)
- * Checks the lastSynced column in the active roster stats table
+ *
+ * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
+ * row of the season we are about to write. An unscoped check reads the newest
+ * `lastSynced` in the whole table, so right after a season rollover the
+ * previous season's freshly-synced rows look like the new season is already up
+ * to date and suppress the first sync for a full day.
  */
 export async function shouldSyncPlayerRoster(): Promise<boolean> {
   try {
-    // Get the most recent lastSynced timestamp from any player
-    // If all lastSynced are NULL, this will return no rows and we'll sync
+    // Most recent lastSynced among the active season's players.
+    // No such row (rollover, or all NULL) means sync now.
     const { data, error } = await supabase
       .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
+      .eq('season_id', PLAYER_ROSTER_SYNC_SEASON_ID)
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
       .limit(1)

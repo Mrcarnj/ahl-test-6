@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendGameChangeNotification } from './notificationService';
 import { supabase } from './supabase';
 import { buildIcalRequest } from './icalFeed';
+import { seasonLabelForGameDate } from './season';
 
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false, userId = null) {
@@ -238,9 +239,12 @@ function extractField(text, fieldName) {
     regex = new RegExp(fieldName + ':MAILTO:(.+?)(?:\\r?\\n|$)', 'i');
   } else {
     // Standard field extraction - handle multi-line fields
-    // Look for field name followed by colon, then capture everything until next field or end
+    // Look for field name followed by colon, then capture everything until next field or end.
+    // The field name may carry iCal parameters before the colon
+    // (e.g. `DTSTART;TZID=America/New_York:20261003T180000`), so allow and skip them.
     const nextFieldPattern = '\\r?\\n[A-Z][A-Z0-9-]*[:;]';
-    regex = new RegExp(fieldName + ':(.+?)(?=' + nextFieldPattern + '|\\r?\\nEND:VEVENT|$)', 'is');
+    const params = '(?:;[^:\\r\\n]*)?';
+    regex = new RegExp(fieldName + params + ':(.+?)(?=' + nextFieldPattern + '|\\r?\\nEND:VEVENT|$)', 'is');
   }
   
   const match = text.match(regex);
@@ -383,6 +387,26 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     
     const teamTimezone = teamData.timezone;
     
+    // HorizonWebRef now sends local wall-clock times carrying a TZID parameter
+    // (`DTSTART;TZID=America/New_York:20261003T180000`) in place of the old
+    // fake-UTC `20261003T220000Z`. That TZID is the league's own zone, not the
+    // arena's -- the description says `Time mode: org`, and Central/Mountain
+    // venues get tagged `America/New_York` too -- so it is ignored. The digits
+    // are already the home arena's wall clock, which is exactly what `gametime`
+    // stores, so no shifting is done: just stamp the home team's offset on.
+    const localMatch = icalTime.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+    if (localMatch) {
+      const [, lYear, lMonth, lDay, lHour, lMinute, lSecond] = localMatch;
+      const localOffset = getTimezoneOffset(
+        new Date(`${lYear}-${lMonth}-${lDay}T${lHour}:${lMinute}:${lSecond}`),
+        teamTimezone
+      );
+      const localTime = `${lYear}-${lMonth}-${lDay}T${lHour}:${lMinute}:${lSecond}${localOffset}`;
+      console.log(`   Wall-clock iCal time: ${icalTime} (${teamTimezone}) -> ${localTime}`);
+      return localTime;
+    }
+    
+    // Legacy fake-UTC path, kept in case the feed reverts.
     // Parse the iCal time format - handle both UTC (Z) and timezone offset formats
     const timeMatch = icalTime.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z|[+-]\d{2})$/);
     if (!timeMatch) {
@@ -620,19 +644,6 @@ function getSecondSundayOfMonth(year, month) {
   return firstSunday + 7;
 }
 
-function determineSeasonFromDate(gameDate) {
-  const date = new Date(gameDate);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1; // 1-based month
-  
-  // AHL season runs roughly Oct-June
-  if (month >= 10) {
-    return `${year}-${(year + 1).toString().slice(2)}`;
-  } else {
-    return `${year - 1}-${year.toString().slice(2)}`;
-  }
-}
-
 async function convertToDbFormat(game) {
   // Validate that startTime exists before processing
   if (!game.startTime) {
@@ -665,7 +676,7 @@ async function convertToDbFormat(game) {
   
   return {
     gameid: game.gameId,
-    season: determineSeasonFromDate(gameDate),
+    season: seasonLabelForGameDate(gameDate),
     awayteam: game.awayTeam,
     hometeam: game.homeTeam,
     gamedate: gameDate,

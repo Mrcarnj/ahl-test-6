@@ -8,4 +8,4 @@
 export const PLAYER_ROSTER_STATS_TABLE = 'teamRosters' as const
 
 /** HockeyTech / DB season_id for the active skater stats + rosters (2026-27 regular season). */
-export const PLAYER_ROSTER_SYNC_SEASON_ID = 93
+export const PLAYER_ROSTER_SYNC_SEASON_ID = 94

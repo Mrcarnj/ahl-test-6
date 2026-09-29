@@ -6,6 +6,7 @@ import {
     getTeamCoach,
     getTeamLogo,
     Schedule,
+    Team,
     TeamRoster,
     useSchedule,
 } from "@/src/providers/ScheduleProvider";
@@ -29,6 +30,7 @@ import {
   View,
 } from "react-native";
 import { Alert } from "@/src/lib/alert";
+import { currentSeasonLabel } from "@/src/lib/season";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
 function rosterNum(value: number | null | undefined): number {
@@ -38,9 +40,13 @@ function rosterNum(value: number | null | undefined): number {
 
 /**
  * Keep skaters with numeric GP above placeholder GP values (e.g. "-").
- * HockeyTech playoff roster rows can include "-" before stats are populated.
+ * HockeyTech roster rows can arrive as null (roster insert before the stats
+ * sync) or as a placeholder string, so this takes the wider runtime shape
+ * rather than the column's declared type.
  */
-function gpSortGroup(value: TeamRoster["games_played"]): number {
+function gpSortGroup(
+  value: number | string | null | undefined,
+): number {
   if (typeof value === "number" && Number.isFinite(value)) return 0;
   if (typeof value === "string" && value.trim() !== "" && value.trim() !== "-") {
     return Number.isFinite(Number(value)) ? 0 : 1;
@@ -78,14 +84,45 @@ function formatRosterStat(value: number | null | undefined): string {
   return String(value);
 }
 
+/**
+ * Standings for one club, or null when the DB has none.
+ *
+ * `teams` holds a single seasonless set of standings columns, so a club that is
+ * not in the active season's standings feed keeps whatever was last written
+ * (e.g. BRI, which left the league after 2025-26). Returning null for empty
+ * columns keeps the UI from dressing missing data up as a real 0-0-0-0 record.
+ */
+function teamStandings(team: Team | null | undefined) {
+  if (!team) return null;
+  const has = (value: string | null) => value != null && value !== "";
+  if (!has(team.games_played) && !has(team.points)) return null;
+  return {
+    record: `GP: ${team.games_played ?? "0"}, ${team.wins ?? "0"}-${team.losses ?? "0"}-${team.otl ?? "0"}-${team.sol ?? "0"} // Pts: ${team.points ?? "0"}`,
+    rank: has(team.division_rank)
+      ? `${team.division ?? "N/A"} #${team.division_rank} // Overall #${team.overall_rank ?? "N/A"}`
+      : null,
+  };
+}
+
 function formatRosterPlayerName(
   player: Pick<TeamRoster, "player_name">,
 ): string {
   return (player.player_name ?? "").replace(/\s\+-\s*$/, "");
 }
 
-/** Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`. */
+/**
+ * Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`.
+ *
+ * Renders nothing when the club has no skaters for the active season. Before
+ * opening night HockeyTech serves the new season's roster feed with coaches
+ * only, and we never fall back to the preseason rows, so an empty roster is
+ * normal and should look empty rather than showing bare table headers.
+ */
 function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
+  if (teamRoster.length === 0) {
+    return null;
+  }
+
   const pointsLeaders = [...teamRoster]
     .sort((a, b) => {
       if (rosterNum(b.points) !== rosterNum(a.points)) {
@@ -259,27 +296,14 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
  * regular season roster directly via `TeamRosterStatsTables`.
  */
 
-/**
- * Season label for today (e.g. "2026-27"). The AHL season runs Oct–June, so
- * anything from October on belongs to the season starting that year.
- * Must stay in sync with `determineSeasonFromDate` in `src/lib/icalHockeySync.js`.
- */
-function currentSeasonLabel(now: Date = new Date()): string {
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 10
-    ? `${year}-${String(year + 1).slice(2)}`
-    : `${year - 1}-${String(year).slice(2)}`;
-}
-
 const GameDetails = () => {
   const { id } = useLocalSearchParams<{ id: string; source: string }>();
   const { myGames } = useSchedule();
   const { allRosters } = useRoster();
   const [activeTab, setActiveTab] = useState("crew");
 
-  // Derived, not hardcoded, so it doesn't go stale at season rollover.
-  // Mirrors `determineSeasonFromDate` in `src/lib/icalHockeySync.js`.
+  // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
+  // one definition with the sync that writes `schedule.season`.
   const CURRENT_SEASON = currentSeasonLabel();
 
   const game = myGames.find(
@@ -679,7 +703,9 @@ const GameDetails = () => {
           </View>
         </View>
 
-        <View style={styles.separator} />
+        {regularSeasonRoster.length > 0 && (
+          <View style={styles.separator} />
+        )}
 
         <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
@@ -758,7 +784,9 @@ const GameDetails = () => {
           </View>
         </View>
 
-        <View style={styles.separator} />
+        {regularSeasonRoster.length > 0 && (
+          <View style={styles.separator} />
+        )}
 
         <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
@@ -785,6 +813,9 @@ const GameDetails = () => {
     }
   };
 
+  const awayStandings = teamStandings(game.awayTeamData);
+  const homeStandings = teamStandings(game.homeTeamData);
+
   return (
     <ScrollView
       style={styles.container}
@@ -803,14 +834,12 @@ const GameDetails = () => {
               }}
               style={styles.teamLogo}
             />
-            {game.awayTeamData && (
+            {awayStandings && (
               <>
-                <Text style={styles.teamStats}>
-                  {`GP: ${game.awayTeamData.games_played || "0"}, ${game.awayTeamData.wins || "0"}-${game.awayTeamData.losses || "0"}-${game.awayTeamData.otl || "0"}-${game.awayTeamData.sol || "0"} // Pts: ${game.awayTeamData.points || "0"}`}
-                </Text>
-                <Text style={styles.teamRank}>
-                  {`${game.awayTeamData.division || "N/A"} #${game.awayTeamData.division_rank || ""} // Overall #${game.awayTeamData.overall_rank || "N/A"}`}
-                </Text>
+                <Text style={styles.teamStats}>{awayStandings.record}</Text>
+                {awayStandings.rank && (
+                  <Text style={styles.teamRank}>{awayStandings.rank}</Text>
+                )}
               </>
             )}
           </View>
@@ -824,14 +853,12 @@ const GameDetails = () => {
               }}
               style={styles.teamLogo}
             />
-            {game.homeTeamData && (
+            {homeStandings && (
               <>
-                <Text style={styles.teamStats}>
-                  {`GP: ${game.homeTeamData.games_played || "0"}, ${game.homeTeamData.wins || "0"}-${game.homeTeamData.losses || "0"}-${game.homeTeamData.otl || "0"}-${game.homeTeamData.sol || "0"} // Pts: ${game.homeTeamData.points || "0"}`}
-                </Text>
-                <Text style={styles.teamRank}>
-                  {`${game.homeTeamData.division || "N/A"} #${game.homeTeamData.division_rank || ""} // Overall #${game.homeTeamData.overall_rank || "N/A"}`}
-                </Text>
+                <Text style={styles.teamStats}>{homeStandings.record}</Text>
+                {homeStandings.rank && (
+                  <Text style={styles.teamRank}>{homeStandings.rank}</Text>
+                )}
               </>
             )}
           </View>

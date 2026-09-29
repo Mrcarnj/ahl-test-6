@@ -91,13 +91,18 @@ export interface TeamRoster {
     team: string;
     player_name: string;
     position: string;
-    games_played: number;
-    goals: number;
-    assists: number;
-    points: number;
-    plusMinus: number;
-    penalty_minutes: number;
-    power_play_goals: number;
+    /**
+     * Skater stats are nullable: `syncPlayerRoster` inserts a player as soon as
+     * they appear on a team's roster, before `syncPlayerStats` has any numbers
+     * for them, and writes these columns as null. The UI renders null as "–".
+     */
+    games_played: number | null;
+    goals: number | null;
+    assists: number | null;
+    points: number | null;
+    plusMinus: number | null;
+    penalty_minutes: number | null;
+    power_play_goals: number | null;
     number: string | null;
     rookie: boolean | null;
     veteran: boolean | null;
@@ -111,7 +116,7 @@ type ScheduleContextType = {
      * empty; kept on the context so the playoff screens still compile.
      */
     teamRosters: TeamRoster[];
-    /** Active regular season skater stats (`teamRosters`, `season_id` 93). */
+    /** Active regular season skater stats (`teamRosters`, `season_id` 94). */
     teamRostersRegularSeason: TeamRoster[];
     loading: boolean;
     syncingPlayerStats: boolean; // kept for compatibility (stats OR standings)

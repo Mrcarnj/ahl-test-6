@@ -48,7 +48,7 @@ export async function fetchAllTeamRosterRows(): Promise<Record<string, unknown>[
 }
 
 /**
- * Every `teamRosters` row for the active regular season (`season_id` 93).
+ * Every `teamRosters` row for the active regular season (`season_id` 94).
  * This is what the UI displays.
  */
 export async function fetchAllRegularSeasonTeamRosterRows(): Promise<

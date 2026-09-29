@@ -1,4 +1,4 @@
-// app/(protected)/(tabs)/home/SituationBook.tsx
+// src/screens/SituationBookScreen.tsx
 import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState } from 'react';
 import {
@@ -11,8 +11,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
-import ruleBookText from '../../../../lib/SituationBookPdfText.json';
+import PdfViewer from '@/src/components/PdfViewer';
+import ruleBookText from '@/src/lib/SituationBookPdfText.json';
 
 const SITUATION_BOOK_URL =
     'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI0LTI1IE5ITCBTaXR1YXRpb24gSGFuZGJvb2sgKENPTkZJREVOVElBTCkucGRmIiwiaWF0IjoxNzc3MjUzNjg5LCJleHAiOjE5MzQ5MzM2ODl9.M5pvM1xCRUE3R7M8cJjtCWYytv-0uHSI9dK_8QHIgyU';
@@ -64,8 +64,8 @@ export default function SituationBook() {
             )}
 
             {!loadError && (
-                <WebView
-                    source={{ uri: SITUATION_BOOK_URL }}
+                <PdfViewer
+                    uri={SITUATION_BOOK_URL}
                     style={styles.webview}
                     onLoadStart={() => setLoading(true)}
                     onLoad={() => setLoading(false)}

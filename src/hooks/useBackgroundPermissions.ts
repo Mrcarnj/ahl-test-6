@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import * as BackgroundFetch from 'expo-background-fetch';
 
 export const useBackgroundPermissions = () => {

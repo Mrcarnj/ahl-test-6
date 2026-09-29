@@ -16,6 +16,14 @@ npm start
 expo run:ios
 expo run:android
 
+# Web (browser) — dev server
+npm run web
+
+# Web — production export + deploy to EAS Hosting
+npm run web:export
+npm run web:deploy       # preview URL
+npm run web:deploy:prod  # production
+
 # Lint
 npm run lint
 
@@ -103,6 +111,54 @@ Playoffs are switched off for 2026-27. Nothing was deleted — the routes under
 3. `src/lib/rosterStatsTable.ts` — point `PLAYER_ROSTER_STATS_TABLE` back at `playoffStats` and set the playoff season id.
 4. `game/[id].tsx` — restore `TeamSeasonRosterPager` (the Playoffs / Regular Season toggle) from git history.
 5. Bump `PLAYOFF_BRACKET_SEASON_ID` to the new playoff season.
+
+### Web build
+
+The same Expo Router app also builds for the browser (`npm run web`). There is
+one codebase; platform differences are handled two ways:
+
+- **`.web.tsx` / `.web.ts` siblings** for anything with no browser
+  implementation. Metro picks these automatically on web:
+
+  | Module | Native | Web |
+  |---|---|---|
+  | `components/PdfViewer` | `react-native-webview` | `<iframe>` (browser PDF viewer) |
+  | `components/ArenaMap` | `react-native-maps` | Google Maps embed `<iframe>` |
+  | `lib/alert` | RN `Alert` | `window.alert` / `window.confirm` (RN Web's `Alert.alert` is a **silent no-op**) |
+  | `lib/saveContact` | `expo-contacts` | vCard `.vcf` download |
+  | `lib/fetchImageBase64` | `expo-file-system` | `fetch` + `FileReader` |
+  | `lib/shareImage` | `expo-sharing` | Web Share API, falling back to download |
+  | `lib/icalFeed` | direct fetch | Cloudflare Worker `/ical` proxy (CORS) |
+
+- **`isWeb` from `src/lib/platform.ts`** for in-file branching (push
+  notifications are skipped on web; the home screen drops its Rulebook /
+  Situation Book buttons because they are menu items there).
+
+**Navigation.** `(tabs)/_layout.tsx` renders one `Tabs` navigator for both
+platforms. On native it draws the bottom tab bar; on web `tabBar` returns null
+and `components/nav/WebShell.tsx` supplies a left sidebar (>= 900px) or a
+hamburger drawer (below that). Menu entries live in
+`components/nav/navItems.ts` — add a route there and both platforms pick it up.
+
+Note this branches *inside* `_layout.tsx` rather than using a `_layout.web.tsx`:
+expo-router derives route names from filenames without stripping a `.web`
+suffix, so such a file would register as a route, not as the layout. Platform
+siblings are fine everywhere outside `src/app/`.
+
+**Rulebook / Situation Book** are now top-level routes
+(`(tabs)/rulebook.tsx`, `(tabs)/situation-book.tsx`) re-exporting
+`src/screens/`. They are `href: null` on native and reached from the home
+screen; on web they are sidebar links.
+
+**iCal sync on web** requires the Cloudflare Worker's `/ical` proxy, because
+HorizonWebRef sends no CORS headers. Set `EXPO_PUBLIC_ICAL_PROXY_URL`
+(see `.env.example`) and `ICAL_ALLOWED_ORIGINS` on the Worker.
+
+**Not available on web:** push notifications and background fetch. Game changes
+still arrive live through the Supabase Realtime subscription.
+
+Auth is unchanged across platforms — Supabase sessions persist through
+AsyncStorage, which is backed by `localStorage` in the browser.
 
 ### Teams
 

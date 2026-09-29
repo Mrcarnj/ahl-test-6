@@ -28,30 +28,6 @@ export default function HomeLayout() {
             headerTintColor: '#ffffff',
           }}
         />
-        <Stack.Screen 
-          name="rulebook" 
-          options={{
-            headerTitle: "Rulebook",
-            headerBackTitle: "Home",  // This is the correct property
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
-        <Stack.Screen 
-          name="SituationBook" 
-          options={{
-            headerTitle: "Situation Book",
-            headerBackTitle: "Home",  // This is the correct property
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: '#000000',
-            },
-            headerTintColor: '#ffffff',
-          }}
-        />
     </Stack>
   );
 }

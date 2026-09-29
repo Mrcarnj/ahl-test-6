@@ -10,6 +10,7 @@ import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
+import { isWeb } from '@/src/lib/platform';
 
 
 const TestScheduleScreen = () => {
@@ -19,8 +20,8 @@ const TestScheduleScreen = () => {
     const { syncStatus } = useHockeySync();
 
     const externalLinks = [
-        { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
-        { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
+        { title: 'Rulebook', screenName: "/(protected)/(tabs)/rulebook" },
+        { title: 'Situation Book', screenName: "/(protected)/(tabs)/situation-book" },
         { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
         { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
         { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
@@ -39,7 +40,9 @@ const TestScheduleScreen = () => {
         }
     }, [router]);
 
-    const ruleLinks = externalLinks.filter(link => link.screenName);
+    // On web these two live in the left-hand menu, so the home screen does not
+    // repeat them as buttons.
+    const ruleLinks = isWeb ? [] : externalLinks.filter(link => link.screenName);
     const externalUrlLinks = externalLinks.filter(link => link.url);
 
 
@@ -407,6 +410,8 @@ const TestScheduleScreen = () => {
                         <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                     </TouchableOpacity>
                 </View>
+                {ruleLinks.length > 0 && (
+                  <>
                 <View style={styles.separator} />
 
                 <View style={styles.section}>
@@ -425,6 +430,8 @@ const TestScheduleScreen = () => {
                         </TouchableOpacity>
                     ))}
                 </View>
+                  </>
+                )}
 
                 <View style={styles.separator} />
 

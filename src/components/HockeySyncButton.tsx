@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { fetchAndParseHockeySchedule, getLastSyncTime } from '../lib/icalHockeySync';
 
 interface HockeySyncButtonProps {

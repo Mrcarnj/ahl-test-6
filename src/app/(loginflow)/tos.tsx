@@ -1,5 +1,6 @@
 // app/(auth)/tos.tsx
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';

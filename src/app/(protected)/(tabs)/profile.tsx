@@ -5,7 +5,8 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {

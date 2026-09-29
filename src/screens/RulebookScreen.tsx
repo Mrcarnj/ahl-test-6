@@ -1,4 +1,4 @@
-// app/(protected)/(tabs)/home/rulebook.tsx
+// src/screens/RulebookScreen.tsx
 import AntDesign from "@expo/vector-icons/AntDesign";
 import React, { useState } from "react";
 import {
@@ -13,8 +13,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { WebView } from "react-native-webview";
-import ruleBookText from "../../../../lib/RuleBookPdfText_2025_26.json";
+import PdfViewer from "@/src/components/PdfViewer";
+import ruleBookText from "@/src/lib/RuleBookPdfText_2025_26.json";
 
 const RULEBOOK_URL =
   "https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2025-26_AHLRuleBook.pdf";
@@ -289,9 +289,8 @@ export default function Rulebook() {
       )}
 
       {!loadError && (
-        <WebView
-          key={rulebookUri}
-          source={{ uri: rulebookUri }}
+        <PdfViewer
+          uri={rulebookUri}
           style={styles.webview}
           onLoadStart={() => setLoading(true)}
           onLoad={() => setLoading(false)}
@@ -359,7 +358,7 @@ export default function Rulebook() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                Results for "{searchTerm.trim()}"
+                Results for &quot;{searchTerm.trim()}&quot;
               </Text>
               <TouchableOpacity onPress={() => setResultsVisible(false)}>
                 <AntDesign name="close" size={20} color="#fff" />

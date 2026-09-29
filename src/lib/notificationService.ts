@@ -3,7 +3,8 @@ import { toZonedTime } from 'date-fns-tz';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Alert, Linking, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { supabase } from '../lib/supabase';
 import { Schedule } from '../providers/ScheduleProvider';
 // Import background task handler to register it

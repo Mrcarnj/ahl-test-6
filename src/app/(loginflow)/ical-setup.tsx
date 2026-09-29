@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   SafeAreaView,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { useAuth } from '../../providers/AuthProvider';
 import { useRoster } from '../../providers/RosterProvider';
 import { supabase } from '../../lib/supabase';

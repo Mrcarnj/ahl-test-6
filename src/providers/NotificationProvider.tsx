@@ -7,6 +7,7 @@ import { performAutoSync } from '../lib/icalHockeySync';
 import { APP_REFRESH_EVENT } from '../lib/events';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
+import { isWeb } from '../lib/platform';
 
 type NotificationContextType = {
   pushToken: string | null;
@@ -25,6 +26,10 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const [scheduledNotifications, setScheduledNotifications] = useState<string[]>([]);
 
   useEffect(() => {
+    // The web build has no push token and no local notification scheduling;
+    // game changes still arrive live over the Supabase Realtime subscription.
+    if (isWeb) return;
+
     if (user?.id) {
       registerForPushNotificationsAsync(user.id).then(token => {
         if (token) {
@@ -35,6 +40,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, [user?.id]);
 
   useEffect(() => {
+    if (isWeb) return;
+
     // Handle notifications when app is in foreground or background
     // This listener fires for all notifications, regardless of app state
     // When a notification with content-available: 1 is received:
@@ -117,7 +124,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       setScheduledNotifications(newScheduledIds);
     };
 
-    if (myGames.length > 0) {
+    if (!isWeb && myGames.length > 0) {
       scheduleNotifications();
     }
   }, [myGames]);

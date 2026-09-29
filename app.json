@@ -43,8 +43,14 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "AHL Officials",
+      "shortName": "AHL Officials",
+      "backgroundColor": "#000000",
+      "themeColor": "#ff6600",
+      "description": "Schedule, rosters and standings for AHL officials.",
+      "lang": "en"
     },
     "plugins": [
       "expo-router",

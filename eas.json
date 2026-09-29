@@ -17,5 +17,15 @@
   },
   "submit": {
     "production": {}
+  },
+  "hosting": {
+    "environments": {
+      "preview": {
+        "alias": "preview"
+      },
+      "production": {
+        "alias": "production"
+      }
+    }
   }
 }

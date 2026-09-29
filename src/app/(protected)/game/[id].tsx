@@ -19,16 +19,16 @@ import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Image,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { Alert } from "@/src/lib/alert";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
 function rosterNum(value: number | null | undefined): number {

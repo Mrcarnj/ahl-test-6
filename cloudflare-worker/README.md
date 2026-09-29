@@ -80,6 +80,35 @@ All endpoints require authentication with the API key:
 curl -H "Authorization: Bearer your-api-key" https://your-worker-url.workers.dev/run-all
 ```
 
+## iCal proxy (`/ical`)
+
+The web build cannot fetch a user's HorizonWebRef feed directly: `horizonwebref.com`
+sends no `Access-Control-Allow-Origin` header, so the browser blocks the request.
+`GET /ical?url=<encoded feed url>` fetches the feed server-side and returns it
+with CORS headers. The native app is unaffected and still fetches directly.
+
+This endpoint is **not** behind the API key — the feed URL is itself the secret.
+Two guards keep it from being an open proxy:
+
+- the target must start with `https://www.horizonwebref.com/syncICS`, and
+- the request `Origin` must be allowed.
+
+Set the allowed origins in the Worker environment:
+
+```
+ICAL_ALLOWED_ORIGINS=https://your-web-app.example.com,https://preview--your-app.expo.app
+```
+
+`http://localhost:8081` and `http://localhost:19006` are always allowed so local
+`npm run web` works against a deployed Worker.
+
+Point the app at it with `EXPO_PUBLIC_ICAL_PROXY_URL` (see `.env.example` in the
+repo root):
+
+```
+EXPO_PUBLIC_ICAL_PROXY_URL=https://your-worker-url.workers.dev/ical
+```
+
 ## Limitations
 
 - Cloudflare Workers have a maximum execution time of 30 seconds

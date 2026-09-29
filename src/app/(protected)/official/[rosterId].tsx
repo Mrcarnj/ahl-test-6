@@ -3,11 +3,12 @@ import { useContactsPermissions } from '@/src/hooks/useContactsPermissions';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { AntDesign, FontAwesome, FontAwesome6 } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as Contacts from 'expo-contacts';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '@/src/lib/alert';
+import { fetchImageBase64 } from '@/src/lib/fetchImageBase64';
+import { saveContact } from '@/src/lib/saveContact';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Details = () => {
@@ -18,32 +19,17 @@ const Details = () => {
 
     const selectedRoster = allRosters.find(r => r.id === parseInt(rosterId));
 
-    // Fetch and convert the photo to base64 if it exists
+    // Pre-fetch the headshot as base64 so it can be embedded in the contact card.
     useEffect(() => {
-        const fetchPhoto = async () => {
-            if (selectedRoster?.photo) {
-                try {
-                    // Use only FileSystem.cacheDirectory, which is always available in Expo
-                    const cacheDir = FileSystem.cacheDirectory ?? '';
-                    const fileUri = `${cacheDir}temp_contact_photo.jpg`;
-                    const downloadResult = await FileSystem.downloadAsync(
-                        selectedRoster.photo,
-                        fileUri
-                    );
+        const photo = selectedRoster?.photo;
+        if (!photo) return;
 
-                    if (downloadResult.status === 200) {
-                        const base64 = await FileSystem.readAsStringAsync(fileUri, {
-                            encoding: FileSystem.EncodingType.Base64,
-                        });
-                        setPhotoBase64(base64);
-                    }
-                } catch (error) {
-                    console.error('Error fetching photo:', error);
-                }
-            }
-        };
+        let cancelled = false;
+        fetchImageBase64(photo).then((base64) => {
+            if (!cancelled) setPhotoBase64(base64);
+        });
 
-        fetchPhoto();
+        return () => { cancelled = true; };
     }, [selectedRoster?.photo]);
 
     const cleanPhoneNumber = (phone: string) => {
@@ -65,65 +51,19 @@ const Details = () => {
     const createContact = async () => {
         if (!selectedRoster) return;
 
-        try {
-            if (!hasPermission) {
-                const granted = await requestPermissions();
-                if (!granted) {
-                    Alert.alert(
-                        'Permission Required',
-                        'This app needs permission to add contacts.',
-                        [
-                            { text: 'OK', onPress: () => requestPermissions() }
-                        ]
-                    );
-                    return;
-                }
-            }
-
-            const contact: Contacts.Contact = {
+        const result = await saveContact(
+            {
                 firstName: selectedRoster.firstname,
                 lastName: selectedRoster.lastname,
-                phoneNumbers: [{
-                    label: Contacts.Fields.PhoneNumbers,
-                    number: selectedRoster.phonenumber,
-                }],
-                emails: [{
-                    label: Contacts.Fields.Emails,
-                    email: selectedRoster.email,
-                }],
-                company: 'AHL Officials',
-                jobTitle: 'Official',
-                contactType: Contacts.ContactTypes.Person,
-                name: `${selectedRoster.firstname} ${selectedRoster.lastname}`
-            };
+                phoneNumber: selectedRoster.phonenumber,
+                email: selectedRoster.email,
+                photoBase64,
+            },
+            // Native needs address-book permission; the web build ignores this.
+            async () => hasPermission || (await requestPermissions()),
+        );
 
-            // Add photo to contact if available
-            if (photoBase64) {
-                contact.imageAvailable = true;
-                contact.image = {
-                    uri: `data:image/jpeg;base64,${photoBase64}`
-                };
-            }
-
-            const result = await Contacts.addContactAsync(contact);
-
-            if (result) {
-                Alert.alert(
-                    'Success',
-                    'Contact was successfully added to your contacts!',
-                    [{ text: 'OK' }]
-                );
-            } else {
-                throw new Error('Failed to add contact');
-            }
-        } catch (error) {
-            console.error('Error adding contact:', error);
-            Alert.alert(
-                'Error',
-                'Unable to add contact. Please try again.',
-                [{ text: 'OK' }]
-            );
-        }
+        Alert.alert(result.title, result.message, [{ text: 'OK' }]);
     };
 
 

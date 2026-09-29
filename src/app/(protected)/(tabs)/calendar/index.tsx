@@ -1,7 +1,7 @@
 // app/(protected)/(tabs)/calendar/index.tsx
 
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Dimensions, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import React, { useState, useRef, useMemo } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, ScrollView, RefreshControl, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
 import { format } from 'date-fns';
@@ -12,9 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import { withTimeout } from '@/src/lib/withTimeout';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
-
-const screenWidth = Dimensions.get('window').width;
-const calendarWidth = screenWidth * 0.98;
+import { isWeb } from '@/src/lib/platform';
 
 type CustomMarking = {
   gameTime?: string;
@@ -25,6 +23,10 @@ type CustomMarking = {
 
 export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
+  // On web the calendar sits inside the content column next to the sidebar, so
+  // it has to size against its own container rather than the whole window.
+  const { width: windowWidth } = useWindowDimensions();
+  const [containerWidth, setContainerWidth] = useState(windowWidth);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const { myGames, syncScheduleFromIcal } = useSchedule();
@@ -62,6 +64,24 @@ export default function CalendarScreen() {
   };
 
   global.captureCalendar = captureCalendar;
+
+  const onContainerLayout = (event: LayoutChangeEvent) => {
+    const { width } = event.nativeEvent.layout;
+    if (width > 0) setContainerWidth(width);
+  };
+
+  // react-native-calendars lays its grid out from explicit cell sizes, so these
+  // have to be recomputed whenever the container resizes.
+  const dynamicStyles = useMemo(() => {
+    const calendarWidth = containerWidth * 0.98;
+    return {
+      calendar: { width: containerWidth },
+      dayContainer: {
+        width: calendarWidth / 7,
+        height: (calendarWidth * 1.4) / 6,
+      },
+    };
+  }, [containerWidth]);
 
   const onDayPress = (day: DateData) => {
     const selectedDate = day.dateString;
@@ -106,8 +126,11 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.disclaimer}><MaterialIcons name="tips-and-updates" /> Pull To Refresh</Text>
+      <View style={styles.container} onLayout={onContainerLayout}>
+        <Text style={styles.disclaimer}>
+          <MaterialIcons name="tips-and-updates" />{' '}
+          {isWeb ? 'Use Refresh in the menu to sync' : 'Pull To Refresh'}
+        </Text>
         <Text style={styles.disclaimer}>Tap orange game days to access game details</Text>
         <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
         <ScrollView
@@ -129,7 +152,7 @@ export default function CalendarScreen() {
             hideExtraDays={false}
             firstDay={0}
             showSixWeeks={true}
-            style={styles.calendar}
+            style={[styles.calendar, dynamicStyles.calendar]}
             markingType={'custom'}
             markedDates={markedDates}
             theme={calendarTheme}
@@ -142,6 +165,7 @@ export default function CalendarScreen() {
                   onPress={() => date && onDayPress(date)}
                   style={[
                     styles.dayContainer,
+                    dynamicStyles.dayContainer,
                     marking?.selected && styles.selectedDayContainer,
                     isToday && styles.todayContainer
                   ]}
@@ -189,15 +213,12 @@ const styles = StyleSheet.create({
     paddingBottom: 0, // Remove bottom padding to reach tab bar
   },
   calendar: {
-    width: screenWidth,
     borderWidth: 0,
     flex: 1, // Use all available space
     paddingTop: -30, // Remove negative padding
     paddingBottom: 0, // Ensure no bottom padding
   },
   dayContainer: {
-    width: calendarWidth / 7,
-    height: (calendarWidth * 1.4) / 6,
     justifyContent: 'flex-start',
     borderWidth: 0.5,
     borderColor: '#333333',

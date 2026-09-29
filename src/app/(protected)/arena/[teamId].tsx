@@ -1,7 +1,7 @@
 // app/(protected)/arena/[teamId].tsx
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import ArenaMap from '@/src/components/ArenaMap';
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,10 +44,11 @@ export default function ArenaDetailsScreen() {
     if (!arenaDetails) return;
 
     const { parking_latitude, parking_longitude } = arenaDetails;
-    const scheme = Platform.select({ ios: 'maps:', android: 'geo:' });
     const url = Platform.select({
-      ios: `${scheme}?ll=${parking_latitude},${parking_longitude}&q=Parking`,
-      android: `${scheme}${parking_latitude},${parking_longitude}?q=Parking`
+      ios: `maps:?ll=${parking_latitude},${parking_longitude}&q=Parking`,
+      android: `geo:${parking_latitude},${parking_longitude}?q=Parking`,
+      // Browsers have no map scheme; hand off to Google Maps directions.
+      web: `https://www.google.com/maps/dir/?api=1&destination=${parking_latitude},${parking_longitude}`,
     });
 
     if (url) {
@@ -69,25 +70,10 @@ export default function ArenaDetailsScreen() {
         <Text style={styles.title}>{arenaDetails.arenaname}</Text>
         
         <View style={styles.mapContainer}>
-          <MapView
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={{
-              latitude: arenaDetails.parking_latitude,
-              longitude: arenaDetails.parking_longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            }}
-          >
-            <Marker
-              coordinate={{
-                latitude: arenaDetails.parking_latitude,
-                longitude: arenaDetails.parking_longitude,
-              }}
-              title="Official Parking"
-              description="Designated parking location"
-            />
-          </MapView>
+          <ArenaMap
+            latitude={arenaDetails.parking_latitude}
+            longitude={arenaDetails.parking_longitude}
+          />
           
           <TouchableOpacity 
             style={styles.directionsButton}
@@ -150,9 +136,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
   },
   directionsButton: {
     position: 'absolute',

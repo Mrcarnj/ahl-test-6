@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Alert, StyleSheet, View, AppState, TextInput, TouchableOpacity, Text, Image } from 'react-native'
+import { StyleSheet, View, AppState, TextInput, TouchableOpacity, Text, Image } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { supabase } from '../../lib/supabase'
 import { router } from 'expo-router'
 

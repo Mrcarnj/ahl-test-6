@@ -4,7 +4,8 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 
 const validatePassword = (password: string): boolean => {
  // Check for common attack patterns and invalid characters

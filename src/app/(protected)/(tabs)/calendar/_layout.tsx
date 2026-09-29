@@ -2,7 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { TouchableOpacity } from 'react-native';
-import * as Sharing from 'expo-sharing';
+import { shareImage } from '@/src/lib/shareImage';
 
 declare global {
   var captureCalendar: (() => Promise<string | null>) | undefined;
@@ -16,7 +16,7 @@ export default function HomeLayout() {
       if (global.captureCalendar) {
         const uri = await global.captureCalendar();
         if (uri) {
-          await Sharing.shareAsync(uri);
+          await shareImage(uri);
         }
       } else {
         console.error('captureCalendar function not found');

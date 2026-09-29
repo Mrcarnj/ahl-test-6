@@ -1,5 +1,6 @@
 import { runPlayerScraper } from './player-scraper.js';
 import { runNumbersScraper } from './numbers-scraper.js';
+import { handleIcalProxy } from './ical-proxy.js';
 
 // Maximum execution time for Cloudflare Workers is 30 seconds
 const MAX_EXECUTION_TIME = 28000; // 28 seconds in milliseconds
@@ -51,14 +52,20 @@ async function handleScheduled(event, env, ctx) {
  */
 async function handleRequest(request, env, ctx) {
   const url = new URL(request.url);
-  
+
+  // CORS proxy for the web app's iCal sync. Authenticated by the feed URL
+  // itself plus an origin check, so it runs before the API-key gate below.
+  if (url.pathname === '/ical') {
+    return handleIcalProxy(request, env);
+  }
+
   // Public status endpoint that doesn't require authentication
   if (url.pathname === '/status') {
     return new Response(JSON.stringify({
       status: 'online',
       message: 'AHL Scraper Worker is running',
       time: new Date().toISOString(),
-      endpoints: ['/run-all', '/run-player-scraper', '/run-numbers-scraper']
+      endpoints: ['/run-all', '/run-player-scraper', '/run-numbers-scraper', '/ical']
     }), { 
       status: 200,
       headers: { 'Content-Type': 'application/json' }

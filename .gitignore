@@ -43,3 +43,8 @@ app-example
 /android
 
 .env
+
+# Cloudflare Worker local secrets
+cloudflare-worker/.dev.vars
+cloudflare-worker/node_modules
+cloudflare-worker/.wrangler

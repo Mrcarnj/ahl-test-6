@@ -1,0 +1,4 @@
+# Local-only secrets for `npm run dev` (wrangler dev). Copy to `.dev.vars`,
+# which is gitignored. In production these live as Worker secrets instead.
+SUPABASE_KEY=your-supabase-service-role-key
+API_KEY=your-generated-api-key

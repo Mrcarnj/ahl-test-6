@@ -36,16 +36,28 @@ openssl rand -base64 32
 [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
 ```
 
-3. Configure environment variables in `wrangler.toml`:
+3. Log in to Cloudflare:
 
-```toml
-[vars]
-SUPABASE_URL = "your-supabase-url"
-SUPABASE_KEY = "your-supabase-key"
-API_KEY = "your-generated-api-key"  # Paste the generated key here
+```bash
+npx wrangler login
 ```
 
-4. Adjust the CRON schedule in `wrangler.toml` if needed:
+4. Set the two secrets. They are **not** kept in `wrangler.toml`, because that
+   file is committed to git — `SUPABASE_KEY` is the service-role key and
+   bypasses row-level security:
+
+```bash
+npx wrangler secret put SUPABASE_KEY   # Supabase service_role key
+npx wrangler secret put API_KEY        # the key generated in step 2
+```
+
+   Non-secret config (`SUPABASE_URL`, `ICAL_ALLOWED_ORIGINS`) lives in
+   `wrangler.toml` under `[vars]`.
+
+   For local `npm run dev`, copy `.dev.vars.example` to `.dev.vars` and fill it
+   in instead; that file is gitignored.
+
+5. Adjust the CRON schedule in `wrangler.toml` if needed:
 
 ```toml
 [triggers]
@@ -93,11 +105,17 @@ Two guards keep it from being an open proxy:
 - the target must start with `https://www.horizonwebref.com/syncICS`, and
 - the request `Origin` must be allowed.
 
-Set the allowed origins in the Worker environment:
+Set the allowed origins in `wrangler.toml`:
 
+```toml
+[vars]
+ICAL_ALLOWED_ORIGINS = "https://your-web-app.example.com,https://*.expo.app"
 ```
-ICAL_ALLOWED_ORIGINS=https://your-web-app.example.com,https://preview--your-app.expo.app
-```
+
+An entry of the form `https://*.example.com` matches any subdomain, which is
+what you want for EAS Hosting preview URLs (each preview deploy gets its own
+hostname). The wildcard stands in only for leading labels — `https://*.expo.app`
+matches `https://preview.expo.app` but not `https://evil-expo.app`.
 
 `http://localhost:8081` and `http://localhost:19006` are always allowed so local
 `npm run web` works against a deployed Worker.

@@ -31,6 +31,28 @@ function allowedOrigins(env) {
   return [...DEFAULT_ALLOWED_ORIGINS, ...configured];
 }
 
+/**
+ * An allowlist entry matches either exactly, or as a subdomain wildcard like
+ * `https://*.expo.app`. The wildcard only stands in for one or more leading
+ * labels, so `https://*.expo.app` matches `https://preview.expo.app` but never
+ * `https://evil-expo.app` — the dot is part of the required suffix.
+ *
+ * EAS Hosting gives every preview deploy its own hostname, so without the
+ * wildcard form the allowlist would need editing on each deploy.
+ */
+function originMatches(pattern, origin) {
+  if (pattern === origin) return true;
+
+  const wildcard = 'https://*.';
+  if (!pattern.startsWith(wildcard)) return false;
+
+  const suffix = pattern.slice(wildcard.length - 1); // keep the leading dot
+  if (!origin.startsWith('https://')) return false;
+
+  const host = origin.slice('https://'.length);
+  return host.endsWith(suffix) && host.length > suffix.length;
+}
+
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
@@ -48,7 +70,9 @@ function corsHeaders(origin) {
  */
 export async function handleIcalProxy(request, env) {
   const origin = request.headers.get('Origin') ?? '';
-  const isAllowedOrigin = allowedOrigins(env).includes(origin);
+  const isAllowedOrigin = allowedOrigins(env).some((pattern) =>
+    originMatches(pattern, origin),
+  );
 
   if (request.method === 'OPTIONS') {
     return new Response(null, {

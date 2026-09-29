@@ -1,0 +1,23 @@
+name = "ahl-scraper-worker"
+main = "index.js"
+compatibility_date = "2026-09-29"
+
+# Runs the player + numbers scrapers server-side so Supabase stays fresh
+# without the app having to do it. Every 8 hours (00:00, 08:00, 16:00 UTC).
+[triggers]
+crons = ["0 */8 * * *"]
+
+[vars]
+# Not secret: this URL is already embedded in the shipped app bundle.
+SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
+
+# Origins allowed to call the /ical CORS proxy, comma-separated.
+# localhost:8081 and localhost:19006 are always allowed, so this only needs
+# the deployed web app. A `https://*.example.com` entry matches any subdomain,
+# which is what you want for EAS Hosting preview URLs.
+ICAL_ALLOWED_ORIGINS = ""
+
+# SUPABASE_KEY and API_KEY are NOT set here — this file is committed to git.
+# Set them once with:
+#   npx wrangler secret put SUPABASE_KEY
+#   npx wrangler secret put API_KEY

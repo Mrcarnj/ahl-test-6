@@ -3,11 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 // Create Supabase client - we'll initialize this in the function with env variables
 let supabase;
 
+// NOTE: these are theahl.com TEAM ids, not season ids (the variable name is legacy).
+// BRI/Bridgeport 317 removed (left the league after 2025-26); HAM/Hamilton 457 added.
 const SEASON_IDS = [
-    440, 402, 413, 317, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319, 389,
+    440, 402, 413, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319, 389,
     415, 313, 321, 327, 403, 309, 323, 372, 404, 405, 411, 324, 380, 335, 412,
-    390, 316
+    390, 316, 457
 ];
+
+// theahl.com season slug used in the scrape URLs.
+// TODO(2026-27): verify this is the slug for the current regular season before
+// re-enabling this worker — it writes to the live `teamRosters` table and
+// deletes each team's rows first, so a stale slug wipes current stats.
+const SEASON_SLUG = 86;
 
 async function updatePlayerNumbers(seasonId, numbers, env) {
     if (!numbers || numbers.length === 0) return;
@@ -57,7 +65,7 @@ async function fetchWithRetry(url, retries = 3) {
 }
 
 async function scrapeRosterNumbers(seasonId, env) {
-    const url = `https://theahl.com/stats/roster/${seasonId}/86`;
+    const url = `https://theahl.com/stats/roster/${seasonId}/${SEASON_SLUG}`;
     console.log(`\nScraping roster numbers from: ${seasonId}`);
     console.log(`URL: ${url}`);
 

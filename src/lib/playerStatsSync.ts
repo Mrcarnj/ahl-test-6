@@ -7,16 +7,17 @@ import { supabase } from './supabase';
 
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
 
-// API endpoints (playoffs season 92)
-const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=92&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
-const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=92&key=ccb91f29d6744675&client_code=ahl&fmt=json";
-const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=90&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+// API endpoints (2026-27 regular season, HockeyTech season_id 93)
+const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=93&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=93&key=ccb91f29d6744675&client_code=ahl&fmt=json";
+const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=93&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
 
 // All AHL team IDs
+// (BRI/Bridgeport 317 left the league after 2025-26; HAM/Hamilton 457 joined for 2026-27.)
 const TEAM_IDS = [
-  440, 402, 413, 317, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
+  440, 402, 413, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
   389, 415, 313, 321, 327, 403, 309, 323, 372, 404, 405, 411, 324, 380,
-  335, 412, 390, 316
+  335, 412, 390, 316, 457
 ];
 
 // Team code mapping (API code -> database abbreviation)
@@ -60,7 +61,7 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 
 /**
  * Check if player stats sync is needed (24 hours since last sync)
- * Checks the lastSynced column in playoffStats table
+ * Checks the lastSynced column in the active roster stats table
  */
 export async function shouldSyncPlayerStats(): Promise<boolean> {
   try {
@@ -92,7 +93,7 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
 
 /**
  * Check if player roster sync is needed (24 hours since last sync)
- * Checks the lastSynced column in playoffStats table
+ * Checks the lastSynced column in the active roster stats table
  */
 export async function shouldSyncPlayerRoster(): Promise<boolean> {
   try {
@@ -384,7 +385,9 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
   const roster = apiData.SiteKit.Roster;
   
   for (const item of roster) {
-    // Skip if item is not a dict (e.g., staff/coaches arrays)
+    // The feed ends with a nested array holding the team's coaching staff
+    // (GM, coaches, video coordinator) — those entries carry `role`/`person_id`
+    // instead of player fields. Skip them; they are not players.
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
     }
@@ -447,7 +450,7 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
 
 /**
  * Sync player roster data (jersey numbers, rookie status, veteran status).
- * Inserts rows for anyone on the API roster who is not yet in playoffStats (stats sync can fill in later).
+ * Inserts rows for anyone on the API roster who is not yet in the roster stats table (stats sync can fill in later).
  */
 export async function syncPlayerRoster(): Promise<{ success: boolean; error?: string; updated?: number; inserted?: number }> {
   try {

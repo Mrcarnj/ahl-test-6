@@ -14,20 +14,12 @@ import {
 } from "../lib/playerStatsSync";
 import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
 import { sendGameChangeNotification } from "../lib/notificationService";
-import {
-    fetchAllRegularSeasonTeamRosterRows,
-    fetchAllTeamRosterRows,
-} from "../lib/fetchAllTeamRosterRows";
+import { fetchAllRegularSeasonTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 import { APP_REFRESH_EVENT } from "../lib/events";
 import { withTimeout } from "../lib/withTimeout";
-import {
-    fetchPlayoffBracketFromDb,
-    shouldSyncPlayoffBracket,
-    syncPlayoffBracketToDb,
-    type PlayoffBracketData,
-} from "../lib/playoffBracket";
+import { type PlayoffBracketData } from "../lib/playoffBracket";
 
 // Import or define interfaces
 export interface Roster {
@@ -114,9 +106,12 @@ export interface TeamRoster {
 type ScheduleContextType = {
     allGames: Schedule[];
     myGames: Schedule[];
-    /** Playoff skater stats / roster rows (`playoffStats`, season 92). */
+    /**
+     * Playoff skater stats. Playoffs are hidden for 2026-27, so this is always
+     * empty; kept on the context so the playoff screens still compile.
+     */
     teamRosters: TeamRoster[];
-    /** Regular season snapshot (`teamRosters`, `season_id` 90). */
+    /** Active regular season skater stats (`teamRosters`, `season_id` 93). */
     teamRostersRegularSeason: TeamRoster[];
     loading: boolean;
     syncingPlayerStats: boolean; // kept for compatibility (stats OR standings)
@@ -173,14 +168,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [loading, setLoading] = useState(false);
     const [syncingStats, setSyncingStats] = useState(false);
     const [syncingStandings, setSyncingStandings] = useState(false);
-    const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracketData | null>(null);
-    const [playoffBracketError, setPlayoffBracketError] = useState<string | null>(null);
-    const [syncingPlayoffBracket, setSyncingPlayoffBracket] = useState(false);
+    // Playoffs hidden for 2026-27 — these stay at their empty values. Restore the
+    // useState versions along with `refreshPlayoffBracket` below.
+    const playoffBracket: PlayoffBracketData | null = null;
+    const playoffBracketError: string | null = null;
+    const syncingPlayoffBracket = false;
     const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContextType['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
     const [blockingOverlayVisible, setBlockingOverlayVisible] = useState(false);
     const blockingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
+    // Playoffs hidden for 2026-27 — no playoff stats are fetched. See `teamRosters` on the context type.
+    const teamRosters: TeamRoster[] = [];
     const [teamRostersRegularSeason, setTeamRostersRegularSeason] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [realtimeEnabled, setRealtimeEnabled] = useState(false);
@@ -224,15 +222,16 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 
             console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
     
-            console.log('👥 SCHEDULE: Fetching team rosters (playoffs + regular season)...');
+            console.log('👥 SCHEDULE: Fetching regular season team rosters...');
             const rostersStart = Date.now();
             
-            const [rostersData, regularSeasonRosters] = await Promise.all([
-                withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff team rosters fetch'),
-                withTimeout(fetchAllRegularSeasonTeamRosterRows(), 60000, 'Regular season team rosters fetch'),
-            ]);
+            const regularSeasonRosters = await withTimeout(
+                fetchAllRegularSeasonTeamRosterRows(),
+                60000,
+                'Regular season team rosters fetch'
+            );
                 
-            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (playoffs ${rostersData.length} rows, RS ${regularSeasonRosters.length} rows)`);
+            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (${regularSeasonRosters.length} rows)`);
             if (scheduleError) {
                 console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
                 throw scheduleError;
@@ -244,7 +243,6 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             // Process and set all games
             const processedGames = scheduleData || [];
             setAllGames(processedGames);
-            setTeamRosters(rostersData as unknown as TeamRoster[]);
             setTeamRostersRegularSeason(regularSeasonRosters as unknown as TeamRoster[]);
     
             console.log('🔍 SCHEDULE: Filtering games for official:', roster.lastfirstfullname);
@@ -266,6 +264,18 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     };
     fetchScheduleRef.current = fetchSchedule;
 
+    /**
+     * Playoffs are hidden for the 2026-27 regular season, so this is a no-op and
+     * `playoffBracket` stays null. To restore, delete this stub and un-comment
+     * the implementation below it (plus the post-standings sync in
+     * `runBackgroundSyncs`) once `PLAYOFF_BRACKET_SEASON_ID` points at the new
+     * playoff season.
+     */
+    const refreshPlayoffBracket = useCallback(async (_options?: { force?: boolean }) => {
+        return;
+    }, []);
+
+    /* Playoff bracket refresh — re-enable when playoffs come back.
     const refreshPlayoffBracket = useCallback(async (options?: { force?: boolean }) => {
         setSyncingPlayoffBracket(true);
         setPlayoffBracketError(null);
@@ -290,6 +300,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setSyncingPlayoffBracket(false);
         }
     }, []);
+    */
 
     const runBackgroundSyncs = async () => {
         try {
@@ -321,40 +332,21 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             if (shouldStandings) {
                 console.log('🔄 TEAM SYNC: Running team standings sync...');
                 await syncTeamStandings();
-                console.log('🔄 PLAYOFF BRACKET: Refreshing after standings sync...');
-                try {
-                    const syncResult = await withTimeout(syncPlayoffBracketToDb(), 20000, 'Playoff bracket sync');
-                    if (!syncResult.success) {
-                        throw new Error(syncResult.error || 'Playoff bracket sync failed');
-                    }
-                    const data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
-                    setPlayoffBracket(data);
-                    setPlayoffBracketError(null);
-                } catch (e) {
-                    const msg = e instanceof Error ? e.message : 'Bracket fetch failed';
-                    setPlayoffBracketError(msg);
-                    console.error('❌ PLAYOFF BRACKET (post-standings):', e);
-                }
+                // Playoff bracket sync is off while playoffs are hidden.
             } else {
                 console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
             }
 
-            // Player syncs write to `playoffStats` in the DB; refresh in-memory rows so game tabs show everyone.
+            // Player syncs write to `teamRosters` in the DB; refresh in-memory rows so game tabs show everyone.
             if (shouldStats || shouldRoster) {
                 try {
-                    const [rostersAfterSync, rsAfterSync] = await Promise.all([
-                        withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff rosters refetch after player sync'),
-                        withTimeout(
-                            fetchAllRegularSeasonTeamRosterRows(),
-                            60000,
-                            'Regular season rosters refetch after player sync'
-                        ),
-                    ]);
-                    setTeamRosters(rostersAfterSync as unknown as TeamRoster[]);
-                    setTeamRostersRegularSeason(rsAfterSync as unknown as TeamRoster[]);
-                    console.log(
-                        `✅ SCHEDULE: Team rosters refreshed (playoffs ${rostersAfterSync.length}, RS ${rsAfterSync.length} rows)`
+                    const rsAfterSync = await withTimeout(
+                        fetchAllRegularSeasonTeamRosterRows(),
+                        60000,
+                        'Regular season rosters refetch after player sync'
                     );
+                    setTeamRostersRegularSeason(rsAfterSync as unknown as TeamRoster[]);
+                    console.log(`✅ SCHEDULE: Team rosters refreshed (${rsAfterSync.length} rows)`);
                 } catch (rostersRefetchError) {
                     console.error('❌ SCHEDULE: Post-sync team rosters refetch error:', rostersRefetchError);
                 }

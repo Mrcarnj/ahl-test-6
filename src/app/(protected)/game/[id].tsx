@@ -252,59 +252,24 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
   );
 }
 
-function TeamSeasonRosterPager({
-  playoffRoster,
-  regularSeasonRoster,
-}: {
-  playoffRoster: TeamRoster[];
-  regularSeasonRoster: TeamRoster[];
-}) {
-  const [seasonPage, setSeasonPage] = useState(0);
+/*
+ * Playoffs are hidden for 2026-27. `TeamSeasonRosterPager` (the
+ * Playoffs / Regular Season toggle) lived here — restore it from git history
+ * when playoff stats come back. For now the team tabs render the current
+ * regular season roster directly via `TeamRosterStatsTables`.
+ */
 
-  return (
-    <View>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "center",
-          marginBottom: 10,
-        }}
-      >
-        <TouchableOpacity
-          style={[styles.tab, seasonPage === 0 && styles.activeTab]}
-          onPress={() => setSeasonPage(0)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              seasonPage === 0 && styles.activeTabText,
-            ]}
-          >
-            Playoffs
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, seasonPage === 1 && styles.activeTab]}
-          onPress={() => setSeasonPage(1)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              seasonPage === 1 && styles.activeTabText,
-            ]}
-          >
-            Regular Season
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TeamRosterStatsTables
-        teamRoster={seasonPage === 0 ? playoffRoster : regularSeasonRoster}
-      />
-    </View>
-  );
+/**
+ * Season label for today (e.g. "2026-27"). The AHL season runs Oct–June, so
+ * anything from October on belongs to the season starting that year.
+ * Must stay in sync with `determineSeasonFromDate` in `src/lib/icalHockeySync.js`.
+ */
+function currentSeasonLabel(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return month >= 10
+    ? `${year}-${String(year + 1).slice(2)}`
+    : `${year - 1}-${String(year).slice(2)}`;
 }
 
 const GameDetails = () => {
@@ -313,8 +278,9 @@ const GameDetails = () => {
   const { allRosters } = useRoster();
   const [activeTab, setActiveTab] = useState("crew");
 
-  // Current season constant
-  const CURRENT_SEASON = "2025-26";
+  // Derived, not hardcoded, so it doesn't go stale at season rollover.
+  // Mirrors `determineSeasonFromDate` in `src/lib/icalHockeySync.js`.
+  const CURRENT_SEASON = currentSeasonLabel();
 
   const game = myGames.find(
     (g) => g.gameid === id && g.season === CURRENT_SEASON,
@@ -642,9 +608,8 @@ const GameDetails = () => {
   );
 
   const AwayTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters, teamRostersRegularSeason } = useSchedule();
+    const { teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.awayTeamData?.abbreviation;
-    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
     const regularSeasonRoster = rosterPlayersForTeam(
       teamRostersRegularSeason,
       teamAbbrev,
@@ -716,18 +681,14 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <TeamSeasonRosterPager
-          playoffRoster={playoffRoster}
-          regularSeasonRoster={regularSeasonRoster}
-        />
+        <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
     );
   };
 
   const HomeTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters, teamRostersRegularSeason } = useSchedule();
+    const { teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.homeTeamData?.abbreviation;
-    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
     const regularSeasonRoster = rosterPlayersForTeam(
       teamRostersRegularSeason,
       teamAbbrev,
@@ -799,10 +760,7 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <TeamSeasonRosterPager
-          playoffRoster={playoffRoster}
-          regularSeasonRoster={regularSeasonRoster}
-        />
+        <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
     );
   };

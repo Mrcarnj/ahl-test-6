@@ -13,10 +13,11 @@ SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"
 
 # API endpoint with high limit to get all players (set to 2000 to cover all possible skaters)
-API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=92&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback"
+API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=93&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback"
 
-ROSTER_STATS_TABLE = "playoffStats"
-PLAYOFF_SEASON_ID = 92
+ROSTER_STATS_TABLE = "teamRosters"
+# 2026-27 regular season (HockeyTech season_id 93)
+ROSTER_SEASON_ID = 93
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -222,7 +223,7 @@ def insert_players(players: List[Dict]) -> None:
         
         try:
             # Upsert: insert if new, update if exists (based on id primary key)
-            batch_rows = [{**player, "season_id": PLAYOFF_SEASON_ID} for player in batch]
+            batch_rows = [{**player, "season_id": ROSTER_SEASON_ID} for player in batch]
             response = supabase.table(ROSTER_STATS_TABLE).upsert(
                 batch_rows,
                 on_conflict='id'

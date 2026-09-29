@@ -44,13 +44,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/*
+        Playoffs are hidden for the 2026-27 regular season. The routes still
+        exist; `href: null` just drops the tab from the bar. Restore by putting
+        back the tabBarLabel/tabBarIcon options below.
+      */}
       <Tabs.Screen
         name="playoffs"
         options={{
-          tabBarLabel: 'Playoffs',
-          tabBarIcon: ({ color }) => (
-            <FontAwesome name="trophy" size={22} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

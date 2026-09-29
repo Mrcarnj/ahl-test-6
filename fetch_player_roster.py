@@ -14,15 +14,16 @@ SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"
 
 # API base URL (team_id will be inserted)
-API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=92&key=ccb91f29d6744675&client_code=ahl&fmt=json"
+API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=93&key=ccb91f29d6744675&client_code=ahl&fmt=json"
 
-ROSTER_STATS_TABLE = "playoffStats"
+ROSTER_STATS_TABLE = "teamRosters"
 
 # All AHL team IDs
+# (BRI/Bridgeport 317 left the league after 2025-26; HAM/Hamilton 457 joined for 2026-27.)
 TEAM_IDS = [
-    440, 402, 413, 317, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
+    440, 402, 413, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
     389, 415, 313, 321, 327, 403, 309, 323, 372, 404, 405, 411, 324, 380,
-    335, 412, 390, 316
+    335, 412, 390, 316, 457
 ]
 
 # Initialize Supabase client
@@ -57,7 +58,9 @@ def transform_roster_data(api_data: Dict) -> List[Dict]:
     roster = site_kit['Roster']
     
     for item in roster:
-        # Skip if item is not a dict (e.g., staff/coaches arrays)
+        # The feed ends with a nested array holding the team's coaching staff
+        # (GM, coaches, video coordinator) — those entries carry role/person_id
+        # instead of player fields. Skip them; they are not players.
         if not isinstance(item, dict):
             continue
         

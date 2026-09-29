@@ -61,7 +61,9 @@ export default function WebShell({ children }: PropsWithChildren) {
     return (
       <View style={styles.wideRoot}>
         <SideNav />
-        <View style={styles.content}>{children}</View>
+        <View style={styles.content}>
+          <View style={styles.contentInner}>{children}</View>
+        </View>
       </View>
     );
   }
@@ -90,7 +92,9 @@ export default function WebShell({ children }: PropsWithChildren) {
         </Text>
       </View>
 
-      <View style={styles.content}>{children}</View>
+      <View style={styles.content}>
+        <View style={styles.contentInner}>{children}</View>
+      </View>
 
       {drawerOpen && (
         <Pressable
@@ -122,14 +126,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  // The outer box fills the remaining space. It must NOT use alignSelf here:
+  // wideRoot is a row, so the cross axis is vertical and `alignSelf: 'center'`
+  // would drop the default stretch and collapse this to zero height.
   content: {
     flex: 1,
     minWidth: 0,
-    // Keeps line lengths readable instead of stretching to an ultrawide monitor.
+    backgroundColor: '#000',
+  },
+  // Centring happens one level in, where the parent is a column and the cross
+  // axis is horizontal. Keeps line lengths readable on an ultrawide monitor.
+  contentInner: {
+    flex: 1,
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
     alignSelf: 'center',
-    backgroundColor: '#000',
   },
   header: {
     flexDirection: 'row',

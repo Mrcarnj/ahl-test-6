@@ -13,7 +13,10 @@ import { useAppRefresh } from '@/src/hooks/useAppRefresh';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import { WEB_NAV_ITEMS, type NavItem } from './navItems';
 
-export const SIDEBAR_WIDTH = 260;
+// Sized to the widest content: the "Situation Book" menu row (icon + gap +
+// label + padding) and the "AHL Officials" brand row. Anything wider is just
+// dead space.
+export const SIDEBAR_WIDTH = 220;
 
 type SideNavProps = {
   /** Called after a menu item is chosen, so the drawer can dismiss itself. */
@@ -33,7 +36,7 @@ export default function SideNav({ onNavigate }: SideNavProps) {
   const pathname = usePathname();
   const { roster } = useRoster();
   const { refreshing, refresh } = useAppRefresh();
-  const { syncStatus } = useHockeySync();
+  const { formatLastSyncTime } = useHockeySync();
 
   const handlePress = useCallback(
     (item: NavItem) => {
@@ -111,11 +114,10 @@ export default function SideNav({ onNavigate }: SideNavProps) {
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </Text>
         </Pressable>
+        {/* Relative time, so the column does not have to be wide enough for a
+            full locale timestamp. */}
         <Text style={styles.lastSync} numberOfLines={1}>
-          Last refresh:{' '}
-          {syncStatus.lastSyncTime
-            ? syncStatus.lastSyncTime.toLocaleString()
-            : 'Never'}
+          Synced {formatLastSyncTime()}
         </Text>
       </View>
     </View>
@@ -125,7 +127,11 @@ export default function SideNav({ onNavigate }: SideNavProps) {
 const styles = StyleSheet.create({
   container: {
     width: SIDEBAR_WIDTH,
-    flex: 1,
+    // `flex: 1` here would set flex-basis to 0 and let the sidebar grow to fill
+    // half the row, overriding the width above. It needs a fixed width that
+    // never shrinks, and full height in both the row and the absolute drawer.
+    flexShrink: 0,
+    height: '100%',
     backgroundColor: '#000',
     borderRightWidth: 1,
     borderRightColor: '#222',

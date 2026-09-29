@@ -37,6 +37,7 @@ export default function SideNav({ onNavigate }: SideNavProps) {
   const { roster } = useRoster();
   const { refreshing, refresh } = useAppRefresh();
   const { formatLastSyncTime } = useHockeySync();
+  const lastSync = formatLastSyncTime();
 
   const handlePress = useCallback(
     (item: NavItem) => {
@@ -117,7 +118,7 @@ export default function SideNav({ onNavigate }: SideNavProps) {
         {/* Relative time, so the column does not have to be wide enough for a
             full locale timestamp. */}
         <Text style={styles.lastSync} numberOfLines={1}>
-          Synced {formatLastSyncTime()}
+          {lastSync === 'Never synced' ? 'Never synced' : `Synced ${lastSync}`}
         </Text>
       </View>
     </View>

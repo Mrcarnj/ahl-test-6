@@ -1,147 +1,98 @@
-# AHL Scraper Cloudflare Worker
+# AHL iCal Proxy (Cloudflare Worker)
 
-This Cloudflare Worker runs the AHL player and number scrapers on a scheduled basis using Cloudflare's CRON triggers.
+A single-purpose Cloudflare Worker that lets the **web** build of AHL Officials
+fetch a user's HorizonWebRef iCal feed.
 
-## Features
+## Why this exists
 
-- Runs player-scraper.js and numbers-scraper.js in sequence
-- Scheduled to run every 8 hours (at 00:00, 08:00, 16:00 UTC)
-- Can be manually triggered via HTTP endpoints
-- Secured with API key authentication
-- Optimized for Cloudflare Workers environment
+`horizonwebref.com` sends no `Access-Control-Allow-Origin` header. The native
+app fetches a user's feed directly and is unaffected, but a browser blocks that
+request before the app ever sees the response. This Worker fetches the feed
+server-side and echoes it back with CORS headers.
 
-## Prerequisites
+That is all it does. It holds no credentials and touches no database.
 
-- [Node.js](https://nodejs.org/) (v16 or later)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
-- Cloudflare account
-- Supabase account with appropriate tables set up
+**It is not involved in stats, rosters or standings.** Those are synced by the
+app itself, straight from the HockeyTech API — see `src/lib/playerStatsSync.ts`
+(`syncPlayerStats`, `syncPlayerRoster`, `syncTeamStandings`).
+
+> Earlier versions of this Worker also scraped `theahl.com` on a cron into the
+> `teamRosters` table. That duplicated the app's own API syncs and was removed.
+> The scrapers are still in git history if they are ever needed again.
+
+## Endpoints
+
+| Route | Purpose |
+|---|---|
+| `GET /ical?url=<encoded feed url>` | Fetches the feed and returns it with CORS headers |
+| `GET /status` | Health check |
+
+There is no API key. The feed URL is itself the secret, and two guards keep the
+proxy from being useful to anyone else:
+
+- the target must start with `https://www.horizonwebref.com/syncICS`, and
+- the request `Origin` must be on the allowlist.
 
 ## Setup
-
-1. Install dependencies:
 
 ```bash
 cd cloudflare-worker
 npm install
-```
-
-2. Generate an API key for securing HTTP endpoints:
-
-```bash
-# On macOS/Linux
-openssl rand -base64 32
-
-# On Windows (PowerShell)
-[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-```
-
-3. Log in to Cloudflare:
-
-```bash
 npx wrangler login
-```
-
-4. Set the two secrets. They are **not** kept in `wrangler.toml`, because that
-   file is committed to git — `SUPABASE_KEY` is the service-role key and
-   bypasses row-level security:
-
-```bash
-npx wrangler secret put SUPABASE_KEY   # Supabase service_role key
-npx wrangler secret put API_KEY        # the key generated in step 2
-```
-
-   Non-secret config (`SUPABASE_URL`, `ICAL_ALLOWED_ORIGINS`) lives in
-   `wrangler.toml` under `[vars]`.
-
-   For local `npm run dev`, copy `.dev.vars.example` to `.dev.vars` and fill it
-   in instead; that file is gitignored.
-
-5. Adjust the CRON schedule in `wrangler.toml` if needed:
-
-```toml
-[triggers]
-crons = ["0 */8 * * *"] # Run every 8 hours (at 00:00, 08:00, 16:00 UTC)
-```
-
-## Deployment
-
-Deploy the worker to Cloudflare:
-
-```bash
 npx wrangler deploy
 ```
 
-## Usage
+That prints the Worker URL. There are no secrets to set.
 
-### Scheduled Execution
+Then point the app at it — in the **repo root** `.env` (see `.env.example`):
 
-The worker will automatically run according to the configured CRON schedule.
-
-### Manual Execution
-
-You can manually trigger the scrapers using the following HTTP endpoints:
-
-- Run both scrapers: `GET /run-all`
-- Run only player scraper: `GET /run-player-scraper`
-- Run only numbers scraper: `GET /run-numbers-scraper`
-
-All endpoints require authentication with the API key:
-
-```bash
-curl -H "Authorization: Bearer your-api-key" https://your-worker-url.workers.dev/run-all
+```
+EXPO_PUBLIC_ICAL_PROXY_URL=https://ahl-ical-proxy.<your-subdomain>.workers.dev/ical
 ```
 
-## iCal proxy (`/ical`)
+`EXPO_PUBLIC_*` values are baked in at bundle time, so restart the dev server or
+re-export after changing this.
 
-The web build cannot fetch a user's HorizonWebRef feed directly: `horizonwebref.com`
-sends no `Access-Control-Allow-Origin` header, so the browser blocks the request.
-`GET /ical?url=<encoded feed url>` fetches the feed server-side and returns it
-with CORS headers. The native app is unaffected and still fetches directly.
+## Allowed origins
 
-This endpoint is **not** behind the API key — the feed URL is itself the secret.
-Two guards keep it from being an open proxy:
-
-- the target must start with `https://www.horizonwebref.com/syncICS`, and
-- the request `Origin` must be allowed.
-
-Set the allowed origins in `wrangler.toml`:
+`http://localhost:8081` and `http://localhost:19006` are always allowed, so local
+`npm run web` works with no extra config. For a deployed web app, add its origin
+to `wrangler.toml` and redeploy:
 
 ```toml
 [vars]
 ICAL_ALLOWED_ORIGINS = "https://your-web-app.example.com,https://*.expo.app"
 ```
 
-An entry of the form `https://*.example.com` matches any subdomain, which is
-what you want for EAS Hosting preview URLs (each preview deploy gets its own
+An entry of the form `https://*.example.com` matches any subdomain, which is what
+you want for EAS Hosting preview URLs (each preview deploy gets its own
 hostname). The wildcard stands in only for leading labels — `https://*.expo.app`
-matches `https://preview.expo.app` but not `https://evil-expo.app`.
+matches `https://preview.expo.app` but **not** `https://evil-expo.app`.
 
-`http://localhost:8081` and `http://localhost:19006` are always allowed so local
-`npm run web` works against a deployed Worker.
+## Local development
 
-Point the app at it with `EXPO_PUBLIC_ICAL_PROXY_URL` (see `.env.example` in the
-repo root):
-
-```
-EXPO_PUBLIC_ICAL_PROXY_URL=https://your-worker-url.workers.dev/ical
+```bash
+npm run dev
 ```
 
-## Limitations
+Then, from another shell:
 
-- Cloudflare Workers have a maximum execution time of 30 seconds
-- The scrapers have been optimized to work within this limit by:
-  - Only processing the most recent seasons
-  - Using smaller chunk sizes
-  - Reducing timeouts and delays
-  - Implementing timeout handling
+```bash
+curl -i "http://127.0.0.1:8787/ical?url=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' 'https://www.horizonwebref.com/syncICS?...')"
+```
 
 ## Troubleshooting
 
-- If the worker times out, consider further reducing the number of seasons processed
-- Check the Cloudflare Workers logs for detailed error messages
-- Ensure your Supabase credentials are correct and have the necessary permissions
+- **`403 Origin not allowed`** — the browser's origin is not in
+  `ICAL_ALLOWED_ORIGINS`. Add it to `wrangler.toml` and redeploy.
+- **`403 Only HorizonWebRef iCal URLs may be proxied`** — the user's stored
+  `ical_url` does not start with `https://www.horizonwebref.com/syncICS`.
+- **`401 Access Denied. Invalid or expired link.`** — passed through from
+  HorizonWebRef; the user's feed URL has expired and they need to re-link it
+  in the app.
+- **App throws `EXPO_PUBLIC_ICAL_PROXY_URL is not set`** — missing from `.env`,
+  or the bundler was not restarted after adding it.
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.

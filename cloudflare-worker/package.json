@@ -1,15 +1,12 @@
 {
-  "name": "ahl-scraper-worker",
+  "name": "ahl-ical-proxy",
   "version": "1.0.0",
-  "description": "Cloudflare Worker to run AHL scrapers on a schedule",
+  "description": "Cloudflare Worker that proxies HorizonWebRef iCal feeds with CORS headers for the web app",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.46.1"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

@@ -32,7 +32,7 @@ eas build --profile development
 eas build --profile preview
 eas build --profile production
 
-# Cloudflare Worker (in cloudflare-worker/)
+# Cloudflare Worker — iCal CORS proxy for the web build (in cloudflare-worker/)
 npm run dev    # local wrangler dev
 npm run deploy # deploy to Cloudflare
 ```
@@ -86,7 +86,15 @@ On each startup/foreground event, **ScheduleProvider** runs:
 
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.
 
-A **Cloudflare Worker** (`cloudflare-worker/`) runs the player scraper + numbers scraper on a cron schedule to keep Supabase fresh server-side.
+All of this data comes from the **HockeyTech API** and is written by the app
+itself — nothing syncs it server-side. Stats go stale only until the next time
+someone opens the app.
+
+A **Cloudflare Worker** (`cloudflare-worker/`) exists solely to proxy
+HorizonWebRef iCal feeds with CORS headers for the web build. It holds no
+credentials, touches no database and runs on no schedule. (It previously also
+scraped theahl.com on a cron into `teamRosters`; that duplicated
+`playerStatsSync.ts` and was removed — the scrapers are in git history.)
 
 ### Key season IDs / tables
 
@@ -152,7 +160,8 @@ screen; on web they are sidebar links.
 
 **iCal sync on web** requires the Cloudflare Worker's `/ical` proxy, because
 HorizonWebRef sends no CORS headers. Set `EXPO_PUBLIC_ICAL_PROXY_URL`
-(see `.env.example`) and `ICAL_ALLOWED_ORIGINS` on the Worker.
+(see `.env.example`). `localhost` is allowed by default; add the deployed web
+app's origin to `ICAL_ALLOWED_ORIGINS` in `cloudflare-worker/wrangler.toml`.
 
 **Not available on web:** push notifications and background fetch. Game changes
 still arrive live through the Supabase Realtime subscription.

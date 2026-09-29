@@ -14,6 +14,22 @@ import { withTimeout } from '@/src/lib/withTimeout';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb } from '@/src/lib/platform';
 
+/**
+ * Vertical space the calendar screen needs around the six-week grid: the two
+ * hint lines, the month header and weekday row that react-native-calendars
+ * draws itself, and the last-sync line underneath.
+ */
+const CALENDAR_CHROME_HEIGHT = 160;
+
+/**
+ * Bounds for a web day cell. Between them the grid simply fills the height it
+ * has; the cap stops cells becoming absurd on a very tall display, and the
+ * floor keeps the date and matchup legible on a short one (where the page will
+ * scroll a little rather than render an unreadable grid).
+ */
+const MIN_DAY_HEIGHT = 54;
+const MAX_DAY_HEIGHT = 160;
+
 type CustomMarking = {
   gameTime?: string;
   selected?: boolean;
@@ -25,8 +41,11 @@ export default function CalendarScreen() {
   const calendarRef = useRef<ViewShot>(null);
   // On web the calendar sits inside the content column next to the sidebar, so
   // it has to size against its own container rather than the whole window.
-  const { width: windowWidth } = useWindowDimensions();
-  const [containerWidth, setContainerWidth] = useState(windowWidth);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [containerSize, setContainerSize] = useState({
+    width: windowWidth,
+    height: windowHeight,
+  });
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const { myGames, syncScheduleFromIcal } = useSchedule();
@@ -66,22 +85,38 @@ export default function CalendarScreen() {
   global.captureCalendar = captureCalendar;
 
   const onContainerLayout = (event: LayoutChangeEvent) => {
-    const { width } = event.nativeEvent.layout;
-    if (width > 0) setContainerWidth(width);
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) setContainerSize({ width, height });
   };
 
   // react-native-calendars lays its grid out from explicit cell sizes, so these
   // have to be recomputed whenever the container resizes.
   const dynamicStyles = useMemo(() => {
-    const calendarWidth = containerWidth * 0.98;
+    const { width, height } = containerSize;
+    const calendarWidth = width * 0.98;
+
+    // Native keeps the original width-derived height: on a phone the grid is
+    // taller than the viewport and the page scrolls, which is the expected feel.
+    //
+    // On web the column is far wider than a phone, so that same formula produces
+    // ~200px rows and a month that runs well off the bottom. Derive the row
+    // height from the height actually available instead, so the whole month fits
+    // without scrolling.
+    const dayHeight = isWeb
+      ? Math.min(
+          MAX_DAY_HEIGHT,
+          Math.max(MIN_DAY_HEIGHT, (height - CALENDAR_CHROME_HEIGHT) / 6),
+        )
+      : (calendarWidth * 1.4) / 6;
+
     return {
-      calendar: { width: containerWidth },
+      calendar: { width },
       dayContainer: {
         width: calendarWidth / 7,
-        height: (calendarWidth * 1.4) / 6,
+        height: dayHeight,
       },
     };
-  }, [containerWidth]);
+  }, [containerSize]);
 
   const onDayPress = (day: DateData) => {
     const selectedDate = day.dateString;

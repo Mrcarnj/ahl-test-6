@@ -8,6 +8,7 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { READING_MAX_WIDTH } from '@/src/lib/platform';
 
 export default function TermsOfService() {
   const { user } = useAuth();
@@ -288,6 +289,11 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     padding: 20,
+    // Keeps the terms readable rather than running the full width of a
+    // monitor. A no-op below READING_MAX_WIDTH, so phones are unchanged.
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
   },
   sectionTitle: {
     fontSize: 18,
@@ -321,6 +327,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#333',
     gap: 10,
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
   },
   button: {
     padding: 15,

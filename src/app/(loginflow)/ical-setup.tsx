@@ -14,6 +14,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useRoster } from '../../providers/RosterProvider';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
+import { FORM_MAX_WIDTH } from '@/src/lib/platform';
 
 export default function ICalSetup() {
   const { user } = useAuth();
@@ -168,6 +169,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 20,
+    // Centred column; a no-op below FORM_MAX_WIDTH, so phones are unchanged.
+    width: '100%',
+    maxWidth: FORM_MAX_WIDTH,
+    alignSelf: 'center',
   },
   header: {
     marginBottom: 30,

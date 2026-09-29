@@ -3,6 +3,7 @@ import { StyleSheet, View, AppState, TextInput, TouchableOpacity, Text, Image } 
 import { Alert } from '@/src/lib/alert';
 import { supabase } from '../../lib/supabase'
 import { router } from 'expo-router'
+import { FORM_MAX_WIDTH } from '@/src/lib/platform'
 
 // Tells Supabase Auth to continuously refresh the session automatically if
 // the app is in the foreground. When this is added, you will continue to receive
@@ -146,6 +147,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
+    // Centres the form column; below FORM_MAX_WIDTH this is a no-op, so phones
+    // are unaffected. The other (loginflow) screens already set #000 — this one
+    // was missing it and fell through to the platform default, which is why the
+    // web login rendered on light grey.
+    alignItems: 'center',
+    backgroundColor: '#000',
     padding: 8,
   },
   imageContainer: {
@@ -159,6 +166,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
+    maxWidth: FORM_MAX_WIDTH,
   },
   inputField: {
     marginVertical: 4,

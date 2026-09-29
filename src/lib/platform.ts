@@ -19,6 +19,15 @@ export const SIDEBAR_BREAKPOINT = 900;
 /** Keeps page content readable instead of stretching across an ultrawide monitor. */
 export const CONTENT_MAX_WIDTH = 1100;
 
+/**
+ * Max width for a centred form column (login, change password, iCal setup).
+ * Below this the layout is full-bleed, so phones are unaffected.
+ */
+export const FORM_MAX_WIDTH = 420;
+
+/** Max width for a column of body text, e.g. the terms of service. */
+export const READING_MAX_WIDTH = 720;
+
 export type Responsive = {
   /** True only on web at >= SIDEBAR_BREAKPOINT: render the permanent sidebar. */
   isWideLayout: boolean;

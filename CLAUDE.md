@@ -163,6 +163,12 @@ HorizonWebRef sends no CORS headers. Set `EXPO_PUBLIC_ICAL_PROXY_URL`
 (see `.env.example`). `localhost` is allowed by default; add the deployed web
 app's origin to `ICAL_ALLOWED_ORIGINS` in `cloudflare-worker/wrangler.toml`.
 
+Note that `EXPO_PUBLIC_*` values are inlined at transform time and Metro caches
+the result, so a stale cache bakes in the old value — for this variable that
+means a bundle whose iCal sync throws on every call, with no build error.
+`npm run web:export` passes `--clear` for that reason; after editing `.env`
+during development, restart with `npm run web -- --clear`.
+
 **Not available on web:** push notifications and background fetch. Game changes
 still arrive live through the Supabase Realtime subscription.
 

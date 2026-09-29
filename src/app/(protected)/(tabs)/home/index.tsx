@@ -12,6 +12,18 @@ import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb } from '@/src/lib/platform';
 
+/**
+ * The season the expense-report cycle covers. Expense reports fall every 14
+ * days from the start date up to the end date, and — just as importantly —
+ * only games inside this window belong on a report.
+ *
+ * Officials' `myGames` still contains last season's games (including its
+ * playoffs), so without this bound they leak onto the current season's first
+ * reports. Bump both when the season rolls over.
+ */
+const EXPENSE_SEASON_START = new Date(2026, 8, 22); // September 22, 2026
+const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
+
 
 const TestScheduleScreen = () => {
     const router = useRouter();
@@ -84,11 +96,11 @@ const TestScheduleScreen = () => {
     };
 
     const expenseReportData = useMemo(() => {
-        const startDate = new Date(2025, 8, 22); // September 22, 2025
-        const endDate = new Date(2026, 5, 30);   // June 30, 2026
+        const endDate = EXPENSE_SEASON_END;
         const today = new Date();
         today.setHours(0, 0, 0, 0);  // Set to start of day for accurate comparison
-        let nextDueDate = startDate;
+        // Copy, so the loop below can never advance the shared constant.
+        let nextDueDate = new Date(EXPENSE_SEASON_START);
     
         while (nextDueDate <= endDate) {
             // Create date objects for comparison that are set to start of day
@@ -157,6 +169,17 @@ const TestScheduleScreen = () => {
     const gamesOnExpenseReport = useMemo(() => {
         const { rangeStartDate, rangeEndDate } = expenseReportData;
         if (!rangeStartDate || !rangeEndDate) return [];
+
+        // Only this season's games can appear on this season's expense reports.
+        // `myGames` keeps prior seasons, and the playoff branch below ignores
+        // dates entirely, so without this bound last season's playoff games
+        // (e.g. M2, O3 from May) show up on the first report of the new season.
+        // gamedate is 'yyyy-MM-dd', so string comparison is chronological.
+        const seasonStartStr = format(EXPENSE_SEASON_START, 'yyyy-MM-dd');
+        const seasonEndStr = format(EXPENSE_SEASON_END, 'yyyy-MM-dd');
+        const seasonGames = myGames.filter(
+            (game) => game.gamedate >= seasonStartStr && game.gamedate <= seasonEndStr,
+        );
 
         const getPlayoffCode = (game: typeof myGames[number]): string => {
             const rawGameId = String(game.gameid || '').trim().toUpperCase();
@@ -261,7 +284,7 @@ const TestScheduleScreen = () => {
             }
         });
 
-        const playoffGamesWithRound = myGames
+        const playoffGamesWithRound = seasonGames
             .filter((game) => isPlayoffGame(game))
             .map((game) => {
                 const byGameIdRound = numericGameId(game)
@@ -297,7 +320,7 @@ const TestScheduleScreen = () => {
         const startDateStr = format(rangeStartDate, 'yyyy-MM-dd');
         const endDateStr = format(rangeEndDate, 'yyyy-MM-dd');
 
-        return myGames
+        return seasonGames
             .filter(game => game.gamedate >= startDateStr && game.gamedate <= endDateStr)
             .map(game => game.gameid)
             .sort(gameIdSort);

@@ -107,7 +107,13 @@ Current season is **2026-27 = HockeyTech season_id 93**.
 | Playoff player stats + rosters (inactive) | `playoffStats` | 92 |
 | Playoff bracket (inactive) | `playoff_bracket` | 92 (`PLAYOFF_BRACKET_SEASON_ID`) |
 
-When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), and `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`.
+When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`, and `EXPENSE_SEASON_START` / `EXPENSE_SEASON_END` in `src/app/(protected)/(tabs)/home/index.tsx`.
+
+Those last two do double duty: they drive the 14-day expense-report cycle *and*
+bound which games can appear on a report. `myGames` keeps prior seasons, and the
+playoff branch of `gamesOnExpenseReport` matches on game code rather than date,
+so without that bound last season's playoff games (`M2`, `O3`, …) surface on the
+new season's first reports.
 
 ### Playoffs are hidden
 

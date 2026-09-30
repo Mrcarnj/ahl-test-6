@@ -17,6 +17,20 @@ SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=94&key=ccb91f29d6744675&client_code=ahl&fmt=json"
 
 ROSTER_STATS_TABLE = "teamRosters"
+TEAMS_TABLE = "teams"
+
+# Coaching staff comes out of the same roster feed but only changes at the season
+# rollover, so it is off by default. Set to True to refresh it once, then back.
+UPDATE_COACHING_STAFF = False
+
+# Standings feed, read only to map HockeyTech team_id -> teams.abbreviation for
+# the coaching-staff update (the roster feed carries no team code).
+STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=94&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback"
+
+# API code -> database abbreviation
+TEAM_CODE_MAPPING = {
+    'LV': 'LHV',  # Lehigh Valley Phantoms
+}
 
 # All AHL team IDs
 # (BRI/Bridgeport 317 left the league after 2025-26; HAM/Hamilton 457 joined for 2026-27.)
@@ -28,6 +42,35 @@ TEAM_IDS = [
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+
+def build_team_id_to_abbrev() -> Dict[int, str]:
+    """HockeyTech numeric team_id -> teams.abbreviation, from the standings feed."""
+    mapping: Dict[int, str] = {}
+    try:
+        with urllib.request.urlopen(STANDINGS_API_URL) as response:
+            raw_data = response.read().decode('utf-8').strip()
+        # Strip JSONP callback wrapper: "myCallback(" ... ")"
+        if raw_data.startswith("myCallback("):
+            raw_data = raw_data[len("myCallback("):]
+            if raw_data.endswith(")"):
+                raw_data = raw_data[:-1]
+        data = json.loads(raw_data)
+    except Exception as e:
+        print(f"  ❌ Error fetching standings for team map: {str(e)}")
+        return mapping
+
+    for team in data.get('SiteKit', {}).get('Statviewtype', []):
+        if not isinstance(team, dict) or 'repeatheader' in team or not team.get('team_code'):
+            continue
+        try:
+            team_id = int(str(team.get('team_id')))
+        except (TypeError, ValueError):
+            continue
+        code = str(team['team_code'])
+        mapping[team_id] = TEAM_CODE_MAPPING.get(code, code)
+
+    return mapping
 
 
 def fetch_team_roster(team_id: int) -> Optional[Dict]:
@@ -105,6 +148,92 @@ def transform_roster_data(api_data: Dict) -> List[Dict]:
         players.append(player_data)
     
     return players
+
+
+def extract_coaching_staff(api_data: Dict) -> Dict[str, Optional[str]]:
+    """Pull head coach + first two assistant coaches from the feed's staff block.
+
+    The staff sits in a nested array at the end of SiteKit.Roster; entries carry
+    role/person_id instead of player fields. Fewer than two assistants leaves the
+    remaining column(s) None; more than two keeps the first two in feed order.
+    """
+    staff = {'headcoachname': None, 'assistantcoach1': None, 'assistantcoach2': None}
+
+    roster = (api_data or {}).get('SiteKit', {}).get('Roster')
+    if not isinstance(roster, list):
+        return staff
+
+    entries = []
+    for item in roster:
+        if isinstance(item, list):
+            entries.extend(item)
+        elif isinstance(item, dict) and item.get('role'):
+            entries.append(item)
+
+    assistants = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        role = str(entry.get('role') or '').strip().lower()
+        role_id = str(entry.get('role_id') or '').strip()
+        name = str(entry.get('name') or '').strip()
+        if not name:
+            name = f"{str(entry.get('first_name') or '').strip()} {str(entry.get('last_name') or '').strip()}".strip()
+        if not name:
+            continue
+
+        if not staff['headcoachname'] and (role_id == '2' or role == 'head coach'):
+            staff['headcoachname'] = name
+        elif role_id == '3' or role == 'assistant coach':
+            if len(assistants) < 2 and name not in assistants:
+                assistants.append(name)
+
+    staff['assistantcoach1'] = assistants[0] if len(assistants) > 0 else None
+    staff['assistantcoach2'] = assistants[1] if len(assistants) > 1 else None
+    return staff
+
+
+def update_coaching_staff(team_abbrev: str, staff: Dict[str, Optional[str]]) -> bool:
+    """Write a team's coaching staff to `teams`, skipping the write when unchanged.
+
+    headcoachname is NOT NULL, so it is only written when the feed has one.
+    """
+    update = {
+        'assistantcoach1': staff['assistantcoach1'],
+        'assistantcoach2': staff['assistantcoach2'],
+    }
+    if staff['headcoachname']:
+        update['headcoachname'] = staff['headcoachname']
+
+    try:
+        response = (
+            supabase.table(TEAMS_TABLE)
+            .select('headcoachname, assistantcoach1, assistantcoach2')
+            .eq('abbreviation', team_abbrev)
+            .execute()
+        )
+    except Exception as e:
+        print(f"  ❌ Error reading coaching staff for {team_abbrev}: {str(e)}")
+        return False
+
+    if not response.data:
+        print(f"  ⚠️  No teams row for {team_abbrev} - skipping coaching staff")
+        return False
+
+    existing = response.data[0]
+    changed = [k for k, v in update.items() if v != existing.get(k)]
+    if not changed:
+        return False
+
+    try:
+        supabase.table(TEAMS_TABLE).update(update).eq('abbreviation', team_abbrev).execute()
+    except Exception as e:
+        print(f"  ❌ Error updating coaching staff for {team_abbrev}: {str(e)}")
+        return False
+
+    summary = ', '.join(f'{k}: "{existing.get(k)}" -> "{update[k]}"' for k in changed)
+    print(f"  🔄 {team_abbrev} coaching staff - {summary}")
+    return True
 
 
 def update_players(players: List[Dict]) -> tuple:
@@ -190,7 +319,10 @@ def main():
     total_errors = 0
     teams_processed = 0
     teams_failed = 0
-    
+    staff_updated = 0
+
+    team_id_to_abbrev = build_team_id_to_abbrev() if UPDATE_COACHING_STAFF else {}
+
     print(f"\n🔄 Processing {len(TEAM_IDS)} teams...\n")
     
     for team_id in TEAM_IDS:
@@ -201,6 +333,16 @@ def main():
         if not api_data:
             teams_failed += 1
             continue
+        
+        # Coaching staff first: same payload, and it has to land even for a team
+        # whose player list comes back empty.
+        if UPDATE_COACHING_STAFF:
+            team_abbrev = team_id_to_abbrev.get(team_id)
+            if team_abbrev:
+                if update_coaching_staff(team_abbrev, extract_coaching_staff(api_data)):
+                    staff_updated += 1
+            else:
+                print(f"  ⚠️  No abbreviation mapping for team_id={team_id} - skipping coaching staff")
         
         # Transform data
         players = transform_roster_data(api_data)
@@ -234,6 +376,8 @@ def main():
     print(f"Total players processed: {total_players_processed}")
     print(f"🔄 Players updated: {total_updated}")
     print(f"⊘ Players unchanged: {total_unchanged}")
+    if UPDATE_COACHING_STAFF:
+        print(f"🔄 Coaching staffs updated: {staff_updated}")
     if total_errors > 0:
         print(f"❌ Errors: {total_errors}")
     print("=" * 60)

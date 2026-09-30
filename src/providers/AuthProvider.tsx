@@ -6,6 +6,7 @@ import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { supabase } from "../lib/supabase";
 import { clearAllRosterCaches } from './RosterProvider';
 import { APP_REFRESH_EVENT } from '../lib/events';
+import { isWeb } from '../lib/platform';
 
 type AuthContextType = {
     session: Session | null;
@@ -31,7 +32,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     };
 
     // On app foreground, request a schedule sync refresh (debounced).
+    //
+    // Native only. On web, RN Web maps AppState to document visibility, so this
+    // fires every time the user comes back to the app's browser tab — which is
+    // not a "returning to the app" event the way it is on iOS/Android. The web
+    // build therefore syncs on login/page load (the auth_startup emit below)
+    // and on the manual refresh button, and never on tab focus.
     useEffect(() => {
+        if (isWeb) return;
+
         const sub = AppState.addEventListener('change', async (next: AppStateStatus) => {
             if (next === 'background' || next === 'inactive') {
                 lastBackgroundAtRef.current = Date.now();
@@ -110,13 +119,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                             
                             // Trigger sync on successful authentication
                             if (event === 'SIGNED_IN') {
-                                console.log('🔄 AUTH: User signed in, triggering sync...');
-                                // Run sync in background without blocking the auth flow
-                                triggerLoginSync();
+                                // On web, supabase-js re-validates the stored session when the
+                                // browser tab regains focus and can re-emit SIGNED_IN for the
+                                // same session. Gating on the startup ref keeps that from
+                                // turning a tab switch into a schedule sync; the ref is
+                                // cleared on SIGNED_OUT so a real re-login still syncs.
+                                if (isWeb && startupSyncTriggeredRef.current) {
+                                    console.log('⊘ AUTH: SIGNED_IN on web after startup sync — not re-syncing');
+                                } else {
+                                    console.log('🔄 AUTH: User signed in, triggering sync...');
+                                    startupSyncTriggeredRef.current = true;
+                                    // Run sync in background without blocking the auth flow
+                                    triggerLoginSync();
+                                }
                             }
                         } else {
                             if (event === 'SIGNED_OUT') {
                                 console.log('Explicit sign out, clearing session');
+                                startupSyncTriggeredRef.current = false;
                                 setSession(null);
                                 await safeAsyncStorage.removeItem('session');
                                 // Clear all user-specific caches on logout

@@ -7,6 +7,13 @@ import { supabase } from './supabase';
 
 const SYNC_INTERVAL_HOURS = 24; // Sync once per day
 
+// Coaching staff (teams.headcoachname / assistantcoach1 / assistantcoach2) comes
+// out of the same roster feed, but it only changes at the season rollover — so it
+// is off here and does not run with the daily roster sync. Flip to true, run the
+// roster sync once, then flip back. (Same job as UPDATE_COACHING_STAFF in
+// fetch_player_roster.py, which can do it without shipping a build.)
+const SYNC_COACHING_STAFF = false;
+
 // API endpoints (2026-27 regular season, HockeyTech season_id 94)
 const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=94&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
 const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=94&key=ccb91f29d6744675&client_code=ahl&fmt=json";
@@ -460,6 +467,125 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
   return players;
 }
 
+type CoachingStaff = {
+  headcoachname: string | null;
+  assistantcoach1: string | null;
+  assistantcoach2: string | null;
+};
+
+/**
+ * Pull the head coach and (at most) the first two assistant coaches out of the
+ * roster feed's staff block — a nested array at the end of `SiteKit.Roster`
+ * whose entries carry `role`/`person_id` instead of player fields.
+ *
+ * Fewer than two assistants leaves the remaining column(s) null; more than two
+ * keeps the first two in feed order.
+ */
+function extractCoachingStaff(apiData: any): CoachingStaff {
+  const staff: CoachingStaff = {
+    headcoachname: null,
+    assistantcoach1: null,
+    assistantcoach2: null,
+  };
+
+  const roster = apiData?.SiteKit?.Roster;
+  if (!Array.isArray(roster)) {
+    return staff;
+  }
+
+  const staffName = (entry: any): string | null => {
+    const rawName = entry.name != null ? String(entry.name).trim() : '';
+    if (rawName) return rawName;
+    const fn = entry.first_name != null ? String(entry.first_name).trim() : '';
+    const ln = entry.last_name != null ? String(entry.last_name).trim() : '';
+    return `${fn} ${ln}`.trim() || null;
+  };
+
+  // Staff rows live in the nested array(s); tolerate a flat one too.
+  const entries: any[] = [];
+  for (const item of roster) {
+    if (Array.isArray(item)) {
+      entries.push(...item);
+    } else if (item && typeof item === 'object' && item.role) {
+      entries.push(item);
+    }
+  }
+
+  const assistants: string[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const role = entry.role != null ? String(entry.role).trim().toLowerCase() : '';
+    const roleId = toInt(entry.role_id);
+    const name = staffName(entry);
+    if (!name) continue;
+
+    if (!staff.headcoachname && (roleId === 2 || role === 'head coach')) {
+      staff.headcoachname = name;
+    } else if (roleId === 3 || role === 'assistant coach') {
+      if (assistants.length < 2 && !assistants.includes(name)) {
+        assistants.push(name);
+      }
+    }
+  }
+
+  staff.assistantcoach1 = assistants[0] ?? null;
+  staff.assistantcoach2 = assistants[1] ?? null;
+
+  return staff;
+}
+
+/**
+ * Write a team's coaching staff to `teams`, skipping the write when nothing changed.
+ * `headcoachname` is NOT NULL in the schema, so it is only written when the feed has one.
+ */
+async function updateTeamCoachingStaff(teamAbbrev: string, staff: CoachingStaff): Promise<boolean> {
+  const update: Record<string, string | null> = {
+    assistantcoach1: staff.assistantcoach1,
+    assistantcoach2: staff.assistantcoach2,
+  };
+  if (staff.headcoachname) {
+    update.headcoachname = staff.headcoachname;
+  }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('teams')
+    .select('headcoachname, assistantcoach1, assistantcoach2')
+    .eq('abbreviation', teamAbbrev)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error(`  ❌ PLAYER ROSTER: Error reading coaching staff for ${teamAbbrev}:`, fetchError);
+    return false;
+  }
+  if (!existing) {
+    console.warn(`  ⚠️ PLAYER ROSTER: No teams row for ${teamAbbrev} — skipping coaching staff`);
+    return false;
+  }
+
+  const changed = Object.keys(update).filter(
+    (key) => (update[key] ?? null) !== ((existing as any)[key] ?? null)
+  );
+  if (changed.length === 0) {
+    return false;
+  }
+
+  const { error: updateError } = await supabase
+    .from('teams')
+    .update(update)
+    .eq('abbreviation', teamAbbrev);
+
+  if (updateError) {
+    console.error(`  ❌ PLAYER ROSTER: Error updating coaching staff for ${teamAbbrev}:`, updateError);
+    return false;
+  }
+
+  const summary = changed
+    .map((key) => `${key}: "${(existing as any)[key] ?? null}" → "${update[key] ?? null}"`)
+    .join(', ');
+  console.log(`  🔄 PLAYER ROSTER: ${teamAbbrev} coaching staff — ${summary}`);
+  return true;
+}
+
 /**
  * Sync player roster data (jersey numbers, rookie status, veteran status).
  * Inserts rows for anyone on the API roster who is not yet in the roster stats table (stats sync can fill in later).
@@ -472,6 +598,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     let totalInserted = 0;
     let totalProcessed = 0;
     let teamsProcessed = 0;
+    let coachingStaffUpdated = 0;
     const allProcessedPlayerIds: number[] = [];
     const currentTime = new Date().toISOString();
 
@@ -512,6 +639,14 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       const apiData = await fetchTeamRoster(teamId);
       if (!apiData) {
         continue;
+      }
+
+      // Coaching staff first: it comes from the same payload and has to land
+      // even for a team whose player list is empty.
+      if (SYNC_COACHING_STAFF) {
+        if (await updateTeamCoachingStaff(teamAbbrev, extractCoachingStaff(apiData))) {
+          coachingStaffUpdated++;
+        }
       }
 
       const players = transformRosterData(apiData, teamAbbrev);
@@ -676,7 +811,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     }
     
     console.log(
-      `✅ PLAYER ROSTER: Sync complete — inserted: ${totalInserted}, updated: ${totalUpdated}, roster rows seen: ${totalProcessed}, teams: ${teamsProcessed}`
+      `✅ PLAYER ROSTER: Sync complete — inserted: ${totalInserted}, updated: ${totalUpdated}, roster rows seen: ${totalProcessed}, teams: ${teamsProcessed}, coaching staff updated: ${coachingStaffUpdated}`
     );
     
     return { success: true, updated: totalUpdated, inserted: totalInserted };

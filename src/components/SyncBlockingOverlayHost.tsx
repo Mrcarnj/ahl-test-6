@@ -38,11 +38,6 @@ export default function SyncBlockingOverlayHost() {
         </Text>
       )}
       <Text style={styles.subtitle}>Please wait</Text>
-      <Image
-        source={require('../../assets/images/playoff_logo_2026.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
     </View>
   );
 }
@@ -64,7 +59,6 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     marginBottom: 30,
-    marginTop: 30,
     borderRadius: 30,
   },
   title: {

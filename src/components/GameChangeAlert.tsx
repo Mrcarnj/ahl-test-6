@@ -1,0 +1,110 @@
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+
+export type GameChangeAlertData = {
+  title: string;
+  body: string;
+  gameId: string;
+};
+
+type Props = {
+  alert: GameChangeAlertData | null;
+  onDismiss: () => void;
+  onViewCrew: (gameId: string) => void;
+};
+
+/**
+ * Blocking pop-up for a game change that arrives while the app is open.
+ * There is deliberately no backdrop-tap dismissal: the official has to
+ * acknowledge it with "Okay" or jump to the game with "View Crew".
+ */
+export default function GameChangeAlert({ alert, onDismiss, onViewCrew }: Props) {
+  return (
+    <Modal
+      visible={alert !== null}
+      transparent
+      animationType="fade"
+      // Android hardware back acts as "Okay".
+      onRequestClose={onDismiss}
+    >
+      <View style={styles.backdrop}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{alert?.title}</Text>
+          <Text style={styles.body}>{alert?.body}</Text>
+
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
+            onPress={onDismiss}
+          >
+            <Text style={styles.primaryText}>Okay</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
+            onPress={() => alert && onViewCrew(alert.gameId)}
+          >
+            <Text style={styles.secondaryText}>View Crew</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#333',
+    padding: 20,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  body: {
+    color: '#ccc',
+    fontSize: 15,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  button: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  primary: {
+    backgroundColor: '#ff6600',
+  },
+  secondary: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#ff6600',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  primaryText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryText: {
+    color: '#ff6600',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

@@ -23,12 +23,16 @@ Notifications.setNotificationHandler({
       console.log('🔄 Game change notification detected in handler');
     }
     
-    // Always show notification, even in background
+    // A game change that arrives while the app is open is shown as a blocking
+    // in-app pop-up (NotificationProvider), so skip the OS banner for it.
+    // When the app is closed or backgrounded this handler is not consulted and
+    // the OS shows its normal banner; tapping it opens the game.
+    const isGameChange = data?.type === 'game_change';
     return {
       shouldPlaySound: true,
       shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowAlert: true,
+      shouldShowBanner: !isGameChange,
+      shouldShowAlert: !isGameChange,
       shouldShowList: true,
     };
   },

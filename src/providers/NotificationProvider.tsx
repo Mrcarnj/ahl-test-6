@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from 'react';
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useState } from 'react';
 import { AppState, DeviceEventEmitter } from 'react-native';
 import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
 import { performAutoSync } from '../lib/icalHockeySync';
@@ -8,6 +8,7 @@ import { APP_REFRESH_EVENT } from '../lib/events';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
 import { isWeb } from '../lib/platform';
+import GameChangeAlert, { GameChangeAlertData } from '../components/GameChangeAlert';
 
 type NotificationContextType = {
   pushToken: string | null;
@@ -24,6 +25,17 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const { myGames } = useSchedule();
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [scheduledNotifications, setScheduledNotifications] = useState<string[]>([]);
+  // Game changes that arrived while the app was open, shown one at a time.
+  const [alertQueue, setAlertQueue] = useState<GameChangeAlertData[]>([]);
+
+  const dismissAlert = useCallback(() => {
+    setAlertQueue(queue => queue.slice(1));
+  }, []);
+
+  const viewCrew = useCallback((gameId: string) => {
+    setAlertQueue(queue => queue.slice(1));
+    router.push(`/(protected)/game/${gameId}`);
+  }, []);
 
   useEffect(() => {
     // The web build has no push token and no local notification scheduling;
@@ -53,6 +65,23 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       const data = notification.request.content.data;
       console.log('📱 Notification data:', data);
       
+      // The OS banner is suppressed for these while the app is open (see the
+      // handler in notificationService); show the blocking pop-up instead.
+      if (data?.type === 'game_change' && data?.gameId) {
+        const { title, body } = notification.request.content;
+        const next: GameChangeAlertData = {
+          title: title ?? 'Game Change',
+          body: body ?? '',
+          gameId: String(data.gameId),
+        };
+        // The same change can be pushed more than once (the syncing device
+        // and every open crew member's realtime listener both send it), so
+        // don't stack identical pop-ups.
+        setAlertQueue(queue =>
+          queue.some(a => a.gameId === next.gameId && a.body === next.body) ? queue : [...queue, next]
+        );
+      }
+
       // Check if this is a game change notification
       if (data?.type === 'game_change' || data?.gameId) {
         console.log('🔄 Game change notification received, triggering sync...');
@@ -80,9 +109,6 @@ export function NotificationProvider({ children }: PropsWithChildren) {
         }
       }
       
-      // The notification will automatically show as a banner
-      // On iOS: User can pull down to expand and see full message
-      // On Android: User can tap to expand and see full message (BigTextStyle)
     });
 
     // Handle notification response (when user taps notification)
@@ -152,6 +178,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   return (
     <NotificationContext.Provider value={{ pushToken, scheduledNotifications }}>
       {children}
+      <GameChangeAlert alert={alertQueue[0] ?? null} onDismiss={dismissAlert} onViewCrew={viewCrew} />
     </NotificationContext.Provider>
   );
 }

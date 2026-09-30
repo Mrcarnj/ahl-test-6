@@ -48,3 +48,6 @@ app-example
 cloudflare-worker/.dev.vars
 cloudflare-worker/node_modules
 cloudflare-worker/.wrangler
+
+# Python bytecode from the fetch_*.py scripts
+__pycache__/

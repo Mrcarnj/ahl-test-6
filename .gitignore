@@ -51,3 +51,6 @@ cloudflare-worker/.wrangler
 
 # Python bytecode from the fetch_*.py scripts
 __pycache__/
+
+# graphify knowledge graph — regenerated locally by `graphify update .`
+graphify-out/

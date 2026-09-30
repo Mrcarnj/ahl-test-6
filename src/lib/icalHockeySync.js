@@ -786,6 +786,8 @@ async function upsertGamesToDatabase(games) {
       }
       
       if (existing) {
+        alignOfficialsToExisting(game, existing);
+
         // Compare fields to see if anything actually changed
         const hasChanges = compareGameFields(game, existing);
         
@@ -840,6 +842,35 @@ async function upsertGamesToDatabase(games) {
   
   console.log(`📊 Sync Summary: ${newCount} new, ${updateCount} updated, ${skippedCount} skipped`);
   return { newCount, updateCount, skippedCount };
+}
+
+// HorizonWebRef lists a game's referees (and linespeople) in a different order
+// on every fetch, so slot 1/slot 2 from the feed is meaningless. Without this,
+// a reshuffled crew compared slot-by-slot as two changed officials: every sync
+// "updated" every game and fired change notifications.
+//
+// Keep each official already on the row in the slot they hold, and put anyone
+// new into whichever slot was vacated. A real swap then reads as one slot
+// changing, which is also what the notification's "replaced" logic expects.
+function alignOfficialsToExisting(game, existing) {
+  const roles = [
+    ['referee1', 'referee2'],
+    ['linesperson1', 'linesperson2'],
+  ];
+
+  for (const slots of roles) {
+    const incoming = slots.map(slot => game[slot] ?? null);
+    const aligned = slots.map(slot => {
+      const current = existing[slot] ?? null;
+      const idx = current === null ? -1 : incoming.indexOf(current);
+      if (idx === -1) return undefined;
+      incoming.splice(idx, 1);
+      return current;
+    });
+    slots.forEach((slot, i) => {
+      game[slot] = aligned[i] !== undefined ? aligned[i] : incoming.shift() ?? null;
+    });
+  }
 }
 
 // Field comparison utilities

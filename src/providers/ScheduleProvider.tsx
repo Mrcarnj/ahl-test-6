@@ -13,7 +13,6 @@ import {
     syncTeamStandings,
 } from "../lib/playerStatsSync";
 import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
-import { sendGameChangeNotification } from "../lib/notificationService";
 import { fetchAllRegularSeasonTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
@@ -475,68 +474,10 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     if (isRelevantToUser(newData) || isRelevantToUser(oldData)) {
                         console.log('🔄 Change affects current user, processing...');
                         
-                        // Detect what changed and send notification if needed
-                        if (oldData && newData && payload.eventType === 'UPDATE') {
-                            // Helper function to normalize field values for comparison
-                            const normalizeValue = (value: any): string | null => {
-                                if (value === null || value === undefined) return null;
-                                let normalized = String(value).trim();
-                                // Normalize timezone formats
-                                normalized = normalized.replace(/([+-]\d{2}):(\d{2})$/, '$1');
-                                return normalized;
-                            };
-                            
-                            // Fields that trigger notifications
-                            const notificationFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2', 'gametime'];
-                            const changedFields: string[] = [];
-                            
-                            for (const field of notificationFields) {
-                                const oldValue = normalizeValue(oldData[field as keyof Schedule]);
-                                const newValue = normalizeValue(newData[field as keyof Schedule]);
-                                
-                                if (oldValue !== newValue) {
-                                    changedFields.push(`${field}: "${oldValue}" → "${newValue}"`);
-                                }
-                            }
-                            
-                            // Send notification if there are notification-worthy changes
-                            if (changedFields.length > 0) {
-                                console.log(`📱 Real-time change detected: ${changedFields.join(', ')}`);
-                                
-                                // Determine who was replaced (if any)
-                                let replacedPerson: string | undefined = undefined;
-                                const officialFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2'];
-                                for (const change of changedFields) {
-                                    if (officialFields.some(field => change.startsWith(field))) {
-                                        const oldValueBeforeMatch = change.match(/"([^"]+)" →/);
-                                        if (oldValueBeforeMatch && oldValueBeforeMatch[1] !== 'null') {
-                                            replacedPerson = oldValueBeforeMatch[1];
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                // Send notification
-                                try {
-                                    await sendGameChangeNotification(
-                                        newData.gameid,
-                                        newData.season,
-                                        {
-                                            awayteam: newData.awayteam,
-                                            hometeam: newData.hometeam,
-                                            gamedate: newData.gamedate,
-                                            gametime: newData.gametime,
-                                        },
-                                        changedFields,
-                                        replacedPerson
-                                    );
-                                    console.log('✅ Notification sent for real-time change');
-                                } catch (error) {
-                                    console.error('❌ Error sending notification for real-time change:', error);
-                                }
-                            }
-                        }
-                        
+                        // Notifications are sent by the device whose iCal sync wrote the change
+                        // (icalHockeySync). Sending again here meant every crew member with the
+                        // app open re-broadcast the same change to the whole crew.
+
                         // Refresh the schedule to update the UI
                         console.log('🔄 Refreshing schedule...');
                         await fetchScheduleRef.current();

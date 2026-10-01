@@ -19,6 +19,5 @@ Disallow: /admin
 Disallow: /changepassword
 Disallow: /tos
 Disallow: /ical-setup
-Disallow: /turnstile.html
 
 Sitemap: https://ahl-officials.expo.app/sitemap.xml

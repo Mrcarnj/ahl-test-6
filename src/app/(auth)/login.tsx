@@ -6,11 +6,9 @@ import { supabase } from '../../lib/supabase'
 import { router } from 'expo-router'
 import { FORM_MAX_WIDTH } from '@/src/lib/platform'
 import { fetchMyIcalUrl } from '@/src/lib/rosterColumns'
-import Turnstile from '@/src/components/Turnstile'
-import { TURNSTILE_SITE_KEY, type TurnstileHandle } from '@/src/lib/turnstile'
 
 // Client-side backoff after repeated failures. The real limits are server-side
-// (Supabase Auth rate limits + Turnstile); this just stops a person or script
+// (Supabase Auth's per-IP rate limits); this just stops a person or script
 // on this page from hammering the button.
 const FREE_ATTEMPTS = 3;
 const lockoutMs = (failures: number) =>
@@ -32,8 +30,6 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
-  const turnstileRef = useRef<TurnstileHandle>(null)
   const failures = useRef(0)
   const lockedUntil = useRef(0)
   const validateEmail = (email: string): boolean => {
@@ -52,14 +48,8 @@ export default function Auth() {
       Alert.alert('Too many attempts', `Please wait ${Math.ceil(waitMs / 1000)} seconds and try again.`);
       return;
     }
-    if (TURNSTILE_SITE_KEY && !captchaToken) {
-      Alert.alert('Please wait', 'Security check is still loading. Try again in a moment.');
-      return;
-    }
 
     setLoading(true);
-    let tokenSpent = false;
-    let signedIn = false;
     try {
       // Validate inputs before sending
       if (!validateEmail(email)) {
@@ -74,11 +64,9 @@ export default function Auth() {
 
       const sanitizedEmail = email.trim().toLowerCase();
 
-      tokenSpent = true;
       const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: sanitizedEmail,
         password: password,
-        options: captchaToken ? { captchaToken } : undefined,
       });
 
       if (error) {
@@ -91,7 +79,6 @@ export default function Auth() {
         );
         return;
       }
-      signedIn = true;
       failures.current = 0;
 
       // Use the ID from the sign in response instead of the context
@@ -126,8 +113,6 @@ export default function Auth() {
       }
     } finally {
       setLoading(false);
-      // Turnstile tokens are single-use: get a fresh one for any retry.
-      if (tokenSpent && !signedIn) turnstileRef.current?.reset();
     }
   }
 
@@ -172,8 +157,6 @@ export default function Auth() {
           blurOnSubmit={true}              // Add this
           enablesReturnKeyAutomatically     // Add this
         />
-
-        <Turnstile ref={turnstileRef} onToken={setCaptchaToken} />
 
         <TouchableOpacity
           disabled={loading}

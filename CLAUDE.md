@@ -232,10 +232,11 @@ until you add grants + policies** for it.
 - The Python scripts and `logoupload.py` need `SUPABASE_SERVICE_ROLE_KEY` in the
   environment — the anon key is blocked. Never commit that key.
 
-**Login** is protected by Cloudflare Turnstile (`components/Turnstile*.tsx`,
-`public/turnstile.html` for the native WebView), verified by Supabase Auth's
-CAPTCHA setting, plus client backoff. Sign-ups are disabled; accounts are
-created by an admin.
+**Login** relies on Supabase Auth's per-IP rate limits plus a client backoff
+after repeated failures, with one generic error for a bad email or password.
+There is deliberately no CAPTCHA: Supabase's CAPTCHA setting is project-wide
+and would put a challenge on the iOS login too. Sign-ups are disabled;
+accounts are created by an admin.
 
 **Web shell** lives in `public/` (copied to the export root): `index.html`
 template (meta/OG tags, https guard), favicons, `og-image.png`, `robots.txt`,

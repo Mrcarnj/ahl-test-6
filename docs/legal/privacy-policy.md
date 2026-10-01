@@ -40,14 +40,14 @@ These providers process data only to run the App:
 
 - **Supabase** — database, sign-in and file storage (United States).
 - **Expo (650 Industries)** — web hosting and delivery of push notifications.
-- **Cloudflare** — Turnstile bot protection on the sign-in form, and the proxy that fetches your calendar feed on the web. Turnstile may examine browser and device signals to tell people from bots.
+- **Cloudflare** — the proxy that fetches your calendar feed on the web.
 - **HorizonWebRef** — your calendar feed is fetched from HorizonWebRef using the link you provide.
 - **HockeyTech** — public league statistics and standings are downloaded from HockeyTech; none of your information is sent to it.
 - **Google Maps** — arena maps on the web are embedded from Google Maps, which is subject to Google's privacy policy.
 
 ## Cookies
 
-The App itself does not set cookies. Your sign-in session is kept in your browser's local storage, which is needed for the App to work. Cloudflare Turnstile and the embedded Google Map may set their own cookies when they load.
+The App itself does not set cookies. Your sign-in session is kept in your browser's local storage, which is needed for the App to work. The embedded Google Map may set its own cookies when it loads.
 
 ## Retention and deletion
 
@@ -59,7 +59,7 @@ You can view and update your calendar link in the App, turn notifications off in
 
 ## Security
 
-All traffic is encrypted (HTTPS). Data is protected by row-level access rules in the database, so each request only returns what that signed-in official is allowed to see. Sign-in is protected by bot detection and rate limiting. No system is perfectly secure, but we take reasonable steps to protect your information.
+All traffic is encrypted (HTTPS). Data is protected by row-level access rules in the database, so each request only returns what that signed-in official is allowed to see. Sign-in is protected by rate limiting. No system is perfectly secure, but we take reasonable steps to protect your information.
 
 ## Changes to this policy
 

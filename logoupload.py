@@ -3,7 +3,7 @@ from supabase import create_client, Client
 
 # Initialize Supabase client
 supabase_url = "https://zxjzdtepjpnunjkqrsjy.supabase.co"  # replace with your Supabase URL
-supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"  # replace with your Supabase API key
+supabase_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]  # RLS blocks the anon key; never commit this key
 supabase: Client = create_client(supabase_url, supabase_key)
 
 # Bucket and folder settings

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Verification</title>
+<style>html,body{margin:0;background:#000;display:flex;justify-content:center}</style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer onload="start()"></script>
+</head>
+<body>
+<div id="w"></div>
+<script>
+  // Hosts the login CAPTCHA for the native app's WebView (src/components/Turnstile.tsx).
+  function post(msg) {
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+  }
+  function start() {
+    var q = new URLSearchParams(location.search);
+    var key = q.get('sitekey');
+    if (!key) return post({ type: 'error' });
+    turnstile.render('#w', {
+      sitekey: key,
+      action: q.get('action') || 'login',
+      theme: 'dark',
+      callback: function (t) { post({ type: 'token', token: t }); },
+      'expired-callback': function () { post({ type: 'expired' }); },
+      'error-callback': function () { post({ type: 'error' }); }
+    });
+  }
+</script>
+</body>
+</html>

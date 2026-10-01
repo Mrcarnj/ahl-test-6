@@ -3,6 +3,7 @@ import { createContext, PropsWithChildren, useCallback, useContext, useEffect, u
 import { safeAsyncStorage } from '../lib/asyncStorageWrapper';
 import { withTimeout } from '../lib/withTimeout';
 import { supabase } from "../lib/supabase";
+import { fetchMyIcalUrl, ROSTER_COLUMNS } from '../lib/rosterColumns';
 import { useAuth } from "./AuthProvider"; // Adjust import path as needed
 
 // Define the Roster type based on your table structure
@@ -107,33 +108,38 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             setLoading(true);
             setError(null);
 
-            const { data: userRosterData, error: userRosterError } = await withTimeout(
-                supabase
-                    .from('roster')
-                    .select('*')
-                    .eq('auth_id', user.id)
-                    .single(),
+            const [{ data: userRosterRow, error: userRosterError }, icalUrl] = await withTimeout(
+                Promise.all([
+                    supabase
+                        .from('roster')
+                        .select(ROSTER_COLUMNS)
+                        .eq('auth_id', user.id)
+                        .single(),
+                    fetchMyIcalUrl(),
+                ]),
                 12000,
                 'Roster fetch'
             );
 
             if (userRosterError) throw userRosterError;
+            const userRosterData = { ...(userRosterRow as unknown as Roster), ical_url: icalUrl };
 
             const { data: allRostersData, error: allRostersError } = await withTimeout(
                 supabase
                     .from('roster')
-                    .select('*'),
+                    .select(ROSTER_COLUMNS),
                 15000,
                 'All rosters fetch'
             );
 
             if (allRostersError) throw allRostersError;
+            const allRostersList = (allRostersData || []) as unknown as Roster[];
 
             setRoster(userRosterData);
-            setAllRosters(allRostersData || []);
+            setAllRosters(allRostersList);
             lastFetchRef.current = new Date();
 
-            await saveToCache(userRosterData, allRostersData || []);
+            await saveToCache(userRosterData, allRostersList);
 
             return { success: true };
         } catch (e) {

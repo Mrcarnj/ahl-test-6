@@ -15,7 +15,7 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb } from '@/src/lib/platform';
 
 /**
- * Vertical space the calendar screen needs around the six-week grid: the two
+ * Vertical space the calendar screen needs around the grid: the two
  * hint lines, the month header and weekday row that react-native-calendars
  * draws itself, and the last-sync line underneath.
  */
@@ -101,7 +101,8 @@ export default function CalendarScreen() {
     // On web the column is far wider than a phone, so that same formula produces
     // ~200px rows and a month that runs well off the bottom. Derive the row
     // height from the height actually available instead, so the whole month fits
-    // without scrolling.
+    // without scrolling. Six is the worst case a month can span, so a five-week
+    // month simply leaves the last row's worth of space empty.
     const dayHeight = isWeb
       ? Math.min(
           MAX_DAY_HEIGHT,
@@ -186,7 +187,6 @@ export default function CalendarScreen() {
             enableSwipeMonths={true}
             hideExtraDays={false}
             firstDay={0}
-            showSixWeeks={true}
             style={[styles.calendar, dynamicStyles.calendar]}
             markingType={'custom'}
             markedDates={markedDates}
@@ -207,15 +207,16 @@ export default function CalendarScreen() {
                 >
                   <Text style={[
                     styles.dayText,
-                    isDisabled && styles.disabledDayText
+                    isDisabled && styles.disabledDayText,
+                    marking?.selected && styles.onAccentText
                   ]}>
                     {date?.day}
                   </Text>
                   {marking?.text && (
                     <>
-                      <Text style={styles.gameInfo}>{marking.text}</Text>
+                      <Text style={[styles.gameInfo, marking?.selected && styles.onAccentText]}>{marking.text}</Text>
                       {marking.gameTime && (
-                        <Text style={styles.gameTime}>{marking.gameTime}</Text>
+                        <Text style={[styles.gameTime, marking?.selected && styles.onAccentText]}>{marking.gameTime}</Text>
                       )}
                     </>
                   )}
@@ -258,6 +259,10 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#333333',
     padding: 2,
+  },
+  // Text on the orange selected day: black is 7.2:1, white only 2.9:1.
+  onAccentText: {
+    color: '#000',
   },
   selectedDayContainer: {
     backgroundColor: '#ff6600',
@@ -320,7 +325,7 @@ const calendarTheme = {
   calendarBackground: '#000000',
   textSectionTitleColor: '#ffffff',
   selectedDayBackgroundColor: '#ff6600',
-  selectedDayTextColor: '#ffffff',
+  selectedDayTextColor: '#000000',
   todayTextColor: '#ff6600',
   dayTextColor: '#ffffff',
   textDisabledColor: '#444444',

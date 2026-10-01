@@ -1,0 +1,24 @@
+# AHL Officials -- only the sign-in and legal pages are public. Everything else needs an
+# official's account, so there is nothing for crawlers there.
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /privacy.html
+Allow: /terms.html
+Disallow: /home
+Disallow: /calendar
+Disallow: /roster
+Disallow: /profile
+Disallow: /playoffs
+Disallow: /rulebook
+Disallow: /situation-book
+Disallow: /game/
+Disallow: /arena/
+Disallow: /official/
+Disallow: /admin
+Disallow: /changepassword
+Disallow: /tos
+Disallow: /ical-setup
+Disallow: /turnstile.html
+
+Sitemap: https://ahl-officials.expo.app/sitemap.xml

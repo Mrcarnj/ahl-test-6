@@ -62,7 +62,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             }
             setLastForegroundSyncAt(now);
 
-            DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'foreground', blocking: true });
+            DeviceEventEmitter.emit(APP_REFRESH_EVENT, { source: 'foreground' });
         });
 
         return () => sub.remove();

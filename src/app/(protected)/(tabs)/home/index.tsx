@@ -6,7 +6,7 @@ import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDays, isToday as checkIsToday, differenceInDays, format, parse } from 'date-fns';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
-import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
@@ -27,7 +27,7 @@ const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, playoffBracket } = useSchedule();
+    const { myGames, playoffBracket, scheduleLoaded } = useSchedule();
     const { roster } = useRoster();
     const { syncStatus } = useHockeySync();
 
@@ -392,7 +392,7 @@ const TestScheduleScreen = () => {
                             <Text style={styles.dateRangeText}>
                                 Games on Report: {gamesOnExpenseReport.length > 0
                                     ? gamesOnExpenseReport.join(', ')
-                                    : 'No games in this period'}
+                                    : scheduleLoaded ? 'No games in this period' : '…'}
                             </Text>
                         </>
                     )}
@@ -422,8 +422,11 @@ const TestScheduleScreen = () => {
                                 <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                             </TouchableOpacity>
                         ))
-                    ) : (
+                    ) : scheduleLoaded ? (
                         <Text style={styles.noGamesText}>No upcoming games</Text>
+                    ) : (
+                        // First load of the schedule from the DB is still in flight.
+                        <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
                     )}
                     <TouchableOpacity
                         style={styles.gameCard}
@@ -583,12 +586,15 @@ const styles = StyleSheet.create({
         color: '#ffa500',
     },
     dateRangeText: {
-        color: '#888',
+        color: '#aaa',
         fontSize: 14,
         marginTop: 10,
     },
+    gamesLoading: {
+        marginVertical: 12,
+    },
     noGamesText: {
-        color: '#666',
+        color: '#999',
         fontSize: 16,
         fontStyle: 'italic',
         textAlign: 'center',
@@ -609,7 +615,7 @@ const styles = StyleSheet.create({
     },
     link: {
         fontSize: 15,
-        color: '#fff',
+        color: '#000',
         fontWeight: 'bold',
     },
     linkTitleContainer: {

@@ -7,6 +7,7 @@ import { sendGameChangeNotification } from './notificationService';
 import { supabase } from './supabase';
 import { buildIcalRequest } from './icalFeed';
 import { seasonLabelForGameDate } from './season';
+import { fetchMyIcalUrl } from './rosterColumns';
 
 // Exact parsing code based on HorizonWebRef iCal format
 export async function fetchAndParseHockeySchedule(testMode = false, userId = null) {
@@ -21,22 +22,15 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
       userId = user.id;
     }
 
+    // userId only matters for the session check above: the feed link is
+    // read for the signed-in official, never through the roster table.
     console.log(`🔍 Fetching iCal URL for user: ${userId}`);
-    const { data: rosterData, error: rosterError } = await supabase
-      .from('roster')
-      .select('ical_url')
-      .eq('auth_id', userId)
-      .single();
+    const icalUrl = await fetchMyIcalUrl();
 
-    if (rosterError || !rosterData) {
-      throw new Error(`Could not find roster data for user: ${rosterError?.message || 'User not found'}`);
-    }
-
-    if (!rosterData.ical_url) {
+    if (!icalUrl) {
       throw new Error('User has not set up their iCal URL yet');
     }
 
-    const icalUrl = rosterData.ical_url;
     console.log(`🌐 Using user's iCal URL: ${icalUrl}`);
     
     console.log('🌐 Fetching iCal data from HorizonWebRef...');
@@ -792,18 +786,33 @@ async function upsertGamesToDatabase(games) {
         const hasChanges = compareGameFields(game, existing);
         
         if (hasChanges) {
-          // Only update if there are actual changes
-          const { error: updateError } = await supabase
+          // Only update if there are actual changes. The update is conditional
+          // on the row still holding what we just read, so when several crew
+          // members sync the same change at once only one write lands -- and
+          // only that device goes on to send the notification.
+          let updateQuery = supabase
             .from('schedule')
             .update(game)
             .eq('gameid', game.gameid)
             .eq('season', game.season);
-            
+          for (const field of GAME_COMPARE_FIELDS) {
+            updateQuery = existing[field] === null || existing[field] === undefined
+              ? updateQuery.is(field, null)
+              : updateQuery.eq(field, existing[field]);
+          }
+          const { data: updatedRows, error: updateError } = await updateQuery.select('gameid');
+
           if (updateError) {
             console.error(`Update error for game ${game.gameid}:`, updateError);
             continue;
           }
-          
+
+          if (!updatedRows || updatedRows.length === 0) {
+            skippedCount++;
+            console.log(`⏭️ Skipped game ${game.gameid}: another device already applied this change`);
+            continue;
+          }
+
           updateCount++;
           const changedFields = getChangedFields(game, existing);
           console.log(`🔄 Updated game ${game.gameid}: ${changedFields.join(', ')}`);
@@ -874,21 +883,23 @@ function alignOfficialsToExisting(game, existing) {
 }
 
 // Field comparison utilities
+
+// The synced columns (everything but auto-generated ones). Used both to decide
+// whether a game changed and to guard the update against concurrent syncs.
+const GAME_COMPARE_FIELDS = [
+  'awayteam',
+  'hometeam',
+  'gamedate',
+  'gametime',
+  'linesperson1',
+  'linesperson2',
+  'referee1',
+  'referee2',
+  'gamecode'
+];
+
 function compareGameFields(newGame, existingGame) {
-  // Define the fields we want to compare (excluding auto-generated fields)
-  const fieldsToCompare = [
-    'awayteam',
-    'hometeam', 
-    'gamedate',
-    'gametime',
-    'linesperson1',
-    'linesperson2',
-    'referee1',
-    'referee2',
-    'gamecode'
-  ];
-  
-  for (const field of fieldsToCompare) {
+  for (const field of GAME_COMPARE_FIELDS) {
     const newValue = normalizeFieldValue(newGame[field]);
     const existingValue = normalizeFieldValue(existingGame[field]);
     
@@ -901,21 +912,9 @@ function compareGameFields(newGame, existingGame) {
 }
 
 function getChangedFields(newGame, existingGame) {
-  const fieldsToCompare = [
-    'awayteam',
-    'hometeam',
-    'gamedate', 
-    'gametime',
-    'linesperson1',
-    'linesperson2',
-    'referee1',
-    'referee2',
-    'gamecode'
-  ];
-  
   const changedFields = [];
   
-  for (const field of fieldsToCompare) {
+  for (const field of GAME_COMPARE_FIELDS) {
     const newValue = normalizeFieldValue(newGame[field]);
     const existingValue = normalizeFieldValue(existingGame[field]);
     

@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
  },
  subtitle: {
    fontSize: 16,
-   color: '#666',
+   color: '#999',
    marginBottom: 30,
    textAlign: 'center',
  },
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
    opacity: 0.7,
  },
  buttonText: {
-   color: '#fff',
+   color: '#000',
    fontSize: 16,
    fontWeight: 'bold',
  },

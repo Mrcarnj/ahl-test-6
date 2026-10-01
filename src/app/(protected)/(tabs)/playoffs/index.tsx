@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tbdText: {
-    color: '#888',
+    color: '#aaa',
     fontSize: 8,
     fontWeight: 'bold',
   },
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   emptyText: {
-    color: '#666',
+    color: '#999',
     fontSize: 15,
     textAlign: 'center',
     marginTop: 24,

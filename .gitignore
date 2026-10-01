@@ -54,3 +54,6 @@ __pycache__/
 
 # graphify knowledge graph — regenerated locally by `graphify update .`
 graphify-out/
+
+# Supabase CLI link state (supabase link)
+supabase/.temp/

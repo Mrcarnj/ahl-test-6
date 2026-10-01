@@ -5,7 +5,8 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -284,7 +285,7 @@ const Profile = () => {
                                         onPress={saveIcalUrl}
                                         disabled={savingIcalUrl}
                                     >
-                                        <Text style={styles.editButtonText}>
+                                        <Text style={[styles.editButtonText, styles.saveButtonText]}>
                                             {savingIcalUrl ? 'Saving...' : 'Save'}
                                         </Text>
                                     </TouchableOpacity>
@@ -320,6 +321,30 @@ const Profile = () => {
                     >
                         <Text style={styles.notificationButtonText}>🔔 Enable Notifications</Text>
                     </TouchableOpacity>
+
+                    {/* Legal */}
+                    <View style={styles.legalSection}>
+                        <Text style={styles.legalHeading}>Legal</Text>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
+                            accessibilityRole="link"
+                            style={styles.legalRow}
+                        >
+                            <Text style={styles.legalLink}>Terms of Service</Text>
+                            {roster?.tos_accepted_at ? (
+                                <Text style={styles.legalMeta}>
+                                    Accepted {new Date(roster.tos_accepted_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </Text>
+                            ) : null}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+                            accessibilityRole="link"
+                            style={styles.legalRow}
+                        >
+                            <Text style={styles.legalLink}>Privacy Policy</Text>
+                        </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity 
                         style={styles.linkButton} 
@@ -391,7 +416,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     notificationButtonText: {
-        color: '#fff',
+        color: '#000',
         fontSize: 16,
         fontWeight: 'bold',
     },
@@ -506,6 +531,40 @@ const styles = StyleSheet.create({
     cancelButton: {
         backgroundColor: '#666',
     },
+    legalSection: {
+        marginHorizontal: 20,
+        marginBottom: 20,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: '#333',
+        paddingTop: 12,
+    },
+    legalHeading: {
+        color: '#aaa',
+        fontSize: 13,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 4,
+    },
+    legalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        minHeight: 44,
+    },
+    legalLink: {
+        color: '#ff8533',
+        fontSize: 16,
+        textDecorationLine: 'underline',
+    },
+    legalMeta: {
+        color: '#aaa',
+        fontSize: 13,
+    },
+    saveButtonText: {
+        color: '#000',
+    },
     editButtonText: {
         color: '#fff',
         fontWeight: 'bold',
@@ -558,7 +617,7 @@ const styles = StyleSheet.create({
     },
     link: {
         fontSize: 18,
-        color: '#fff',
+        color: '#000',
         fontWeight: 'bold',
     },
     loadingText: {

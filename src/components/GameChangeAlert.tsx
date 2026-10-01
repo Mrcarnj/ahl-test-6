@@ -3,7 +3,8 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 export type GameChangeAlertData = {
   title: string;
   body: string;
-  gameId: string;
+  /** Omitted for summaries of several games; hides the "View Crew" button. */
+  gameId?: string;
 };
 
 type Props = {
@@ -13,7 +14,8 @@ type Props = {
 };
 
 /**
- * Blocking pop-up for a game change that arrives while the app is open.
+ * Blocking pop-up for a game change that arrives while the app is open, or
+ * that a background schedule sync found.
  * There is deliberately no backdrop-tap dismissal: the official has to
  * acknowledge it with "Okay" or jump to the game with "View Crew".
  */
@@ -38,12 +40,14 @@ export default function GameChangeAlert({ alert, onDismiss, onViewCrew }: Props)
             <Text style={styles.primaryText}>Okay</Text>
           </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
-            onPress={() => alert && onViewCrew(alert.gameId)}
-          >
-            <Text style={styles.secondaryText}>View Crew</Text>
-          </Pressable>
+          {alert?.gameId ? (
+            <Pressable
+              style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
+              onPress={() => alert.gameId && onViewCrew(alert.gameId)}
+            >
+              <Text style={styles.secondaryText}>View Crew</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>

@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
     },
     noGamesText: {
-        color: '#666',
+        color: '#999',
         fontSize: 16,
         fontStyle: 'italic',
         textAlign: 'center',

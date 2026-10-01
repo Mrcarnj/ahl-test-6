@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   brandSubtitle: {
-    color: '#888',
+    color: '#aaa',
     fontSize: 13,
     marginTop: 2,
   },
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   lastSync: {
-    color: '#666',
+    color: '#999',
     fontSize: 11,
     paddingHorizontal: 14,
   },

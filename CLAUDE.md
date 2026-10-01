@@ -75,9 +75,11 @@ AuthProvider
 
 ### Data sync pipeline
 
-On each startup/foreground event, **ScheduleProvider** runs:
+Nothing in the sync blocks the UI. On startup **ScheduleProvider** first loads
+the official's games straight from the DB so the app is usable immediately,
+and runs the sync behind it (on foreground-return it just runs the sync):
 1. **iCal sync** (`icalHockeySync.js`) — fetches the official's HorizonWebRef iCal URL, parses games, upserts to `schedule` table.
-2. **Schedule fetch** — reads `schedule` + joined `teams` from Supabase filtered to this official.
+2. **Schedule fetch** — reads `schedule` + joined `teams` from Supabase filtered to this official. Team rosters load separately in the background and are never awaited.
 3. **Background syncs** (gated to once per 24 h via AsyncStorage timestamps):
    - `syncPlayerStats` — HockeyTech API → `teamRosters` table (season 94).
    - `syncPlayerRoster` — HockeyTech team rosters → `teamRosters` table (season 94).
@@ -85,6 +87,15 @@ On each startup/foreground event, **ScheduleProvider** runs:
    - `syncPlayoffBracketToDb` — disabled while playoffs are hidden.
 
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.
+
+**Change pop-ups.** Every applied schedule load is diffed against the last
+schedule the official saw (`src/lib/scheduleChanges.ts`, persisted per user in
+AsyncStorage as `scheduleSnapshot_v1_<auth_id>`). Upcoming games added,
+updated or removed are emitted as `SCHEDULE_CHANGES_EVENT` and shown by
+NotificationProvider through `GameChangeAlert`. Loads during a running sync
+skip the diff and the sync checks once at the end, so a big import is one
+pop-up. The first load on a device only records a baseline. A change already
+shown as a game-change push isn't shown again (matched per field, 5 min).
 
 All of this data comes from the **HockeyTech API** and is written by the app
 itself — nothing syncs it server-side. Stats go stale only until the next time
@@ -200,6 +211,36 @@ Games are stored with a `timetz` column. `formatGameTime` in `ScheduleProvider` 
 ### Naming convention
 
 Officials are matched by `roster.lastfirstfullname` (e.g., `"Dietrich, Mike"`). This field is used as the FK in `schedule` columns `referee1`, `referee2`, `linesperson1`, `linesperson2`.
+
+## Security
+
+**RLS is on for every table** (`sql/2026-10-01_enable_rls.sql`, rollback beside
+it). anon gets nothing; a signed-in user sees data only if they have a `roster`
+row (`private.is_official()`). Officials can read everything the app shows and
+insert/update what the client-side syncs write; nothing grants DELETE except an
+official's own push tokens. Grants are explicit — a **new table gets no access
+until you add grants + policies** for it.
+
+- `roster`: officials update only their own row, and only the onboarding
+  columns (`ical_url`, `changedpassword`, `accepted_tos`, `tos_accepted_at`,
+  `ical_entered`). Admin flags are not client-writable.
+- `roster.ical_url` is personal. Read your own with `fetchMyIcalUrl()`
+  (`src/lib/rosterColumns.ts`, RPC `get_my_ical_url`) and select roster with
+  `ROSTER_COLUMNS`, never `select('*')`. Phase 2
+  (`sql/2026-10-01_hide_ical_url.sql`) makes the DB enforce this; run it only
+  once officials are on a native build containing this change.
+- The Python scripts and `logoupload.py` need `SUPABASE_SERVICE_ROLE_KEY` in the
+  environment — the anon key is blocked. Never commit that key.
+
+**Login** is protected by Cloudflare Turnstile (`components/Turnstile*.tsx`,
+`public/turnstile.html` for the native WebView), verified by Supabase Auth's
+CAPTCHA setting, plus client backoff. Sign-ups are disabled; accounts are
+created by an admin.
+
+**Web shell** lives in `public/` (copied to the export root): `index.html`
+template (meta/OG tags, https guard), favicons, `og-image.png`, `robots.txt`,
+`sitemap.xml`, and the legal pages `privacy.html` / `terms.html`, whose text is
+kept in `docs/legal/*.md`. `src/lib/legal.ts` holds the legal URLs.
 
 ## Theme
 

@@ -1,6 +1,6 @@
 // src/screens/RulebookScreen.tsx
 import AntDesign from "@expo/vector-icons/AntDesign";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -14,7 +14,15 @@ import {
     View,
 } from "react-native";
 import PdfViewer from "@/src/components/PdfViewer";
-import ruleBookText from "@/src/lib/RuleBookPdfText_2025_26.json";
+
+type BookPage = { page: number; text: string };
+
+// ~860 KB of extracted text: loaded when the screen opens rather than bundled
+// into the app's first download (it was ~20% of the web bundle).
+const loadRuleBookText = () =>
+  import("@/src/lib/RuleBookPdfText_2025_26.json").then(
+    (m) => ((m as { default?: unknown }).default ?? m) as BookPage[],
+  );
 
 const RULEBOOK_URL =
   "https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2025-26_AHLRuleBook.pdf";
@@ -206,19 +214,34 @@ export default function Rulebook() {
   const rulebookUri = selectedPage
     ? `${RULEBOOK_URL}#page=${selectedPage}`
     : RULEBOOK_URL;
-  const sectionByPage = ruleBookText.reduce<Record<number, string>>(
-    (acc, page) => {
-      const detectedSection = getSectionTitle(page.text);
-      const previousSection = acc[page.page - 1];
-      acc[page.page] = detectedSection ?? previousSection ?? `Page ${page.page}`;
-      return acc;
-    },
-    {},
+  const [ruleBookText, setRuleBookText] = useState<BookPage[]>([]);
+  useEffect(() => {
+    let alive = true;
+    loadRuleBookText()
+      .then((pages) => alive && setRuleBookText(pages))
+      .catch((e) => console.warn("Rulebook search text failed to load", e));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const sectionByPage = useMemo(
+    () =>
+      ruleBookText.reduce<Record<number, string>>((acc, page) => {
+        const detectedSection = getSectionTitle(page.text);
+        const previousSection = acc[page.page - 1];
+        acc[page.page] = detectedSection ?? previousSection ?? `Page ${page.page}`;
+        return acc;
+      }, {}),
+    [ruleBookText],
   );
 
   const handleSearch = () => {
     const trimmedTerm = searchTerm.trim();
     if (!trimmedTerm) return;
+    if (ruleBookText.length === 0) {
+      alert("Search is still loading. Try again in a moment.");
+      return;
+    }
 
     const results: SearchHit[] = ruleBookText
       .filter((page) => matchesFuzzy(page.text, trimmedTerm))

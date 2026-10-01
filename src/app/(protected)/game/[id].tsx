@@ -1003,13 +1003,13 @@ const styles = StyleSheet.create({
   },
   teamStats: {
     fontSize: 12,
-    color: "#666666",
+    color: '#999',
     textAlign: "center",
     marginBottom: 4,
   },
   teamRank: {
     fontSize: 12,
-    color: "#666666",
+    color: '#999',
     textAlign: "center",
   },
   atSymbol: {
@@ -1035,14 +1035,14 @@ const styles = StyleSheet.create({
   },
   arena: {
     fontSize: 13,
-    color: "#666666",
+    color: '#999',
     textAlign: "center",
     textDecorationLine: "underline",
     fontStyle: "italic",
   },
   gameID: {
     fontSize: 16,
-    color: "#666666",
+    color: '#999',
     textAlign: "center",
     marginBottom: 10,
   },

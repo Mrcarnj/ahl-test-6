@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 6,
   },
-  tbdText: { color: '#888', fontSize: 10, fontWeight: '700' },
+  tbdText: { color: '#aaa', fontSize: 10, fontWeight: '700' },
   summaryAbbrev: { color: '#fff', fontSize: 16, fontWeight: '700' },
   summaryCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
   roundText: { color: '#ff6600', fontSize: 12, fontWeight: '700', marginBottom: 4 },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   noGamesText: { color: '#ddd', fontSize: 14, marginBottom: 4 },
-  noGamesSubText: { color: '#888', fontSize: 12 },
+  noGamesSubText: { color: '#aaa', fontSize: 12 },
   gameCard: {
     backgroundColor: '#121212',
     borderColor: '#2a2a2a',
@@ -321,6 +321,6 @@ const styles = StyleSheet.create({
   gameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   gameTeam: { color: '#fff', fontSize: 22, fontWeight: '700' },
   gameScore: { color: '#fff', fontSize: 26, fontWeight: '800' },
-  atText: { color: '#888', fontSize: 14 },
+  atText: { color: '#aaa', fontSize: 14 },
   gameMeta: { color: '#aaa', fontSize: 12, marginTop: 8 },
 });

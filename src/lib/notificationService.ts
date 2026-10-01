@@ -40,6 +40,8 @@ Notifications.setNotificationHandler({
 
 // Set up notification categories for iOS and channels for Android
 async function setupNotificationCategories() {
+  // Categories/channels are native-only; on web the call just throws.
+  if (Platform.OS === 'web') return;
   try {
     // Define notification category for game changes (iOS)
     await Notifications.setNotificationCategoryAsync('GAME_CHANGE', [

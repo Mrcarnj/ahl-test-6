@@ -9,6 +9,7 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { READING_MAX_WIDTH } from '@/src/lib/platform';
+import { fetchMyIcalUrl } from '@/src/lib/rosterColumns';
 
 export default function TermsOfService() {
   const { user } = useAuth();
@@ -79,7 +80,7 @@ export default function TermsOfService() {
           tos_accepted_at: new Date().toISOString()
         })
         .eq('auth_id', user.id)
-        .select();
+        .select('accepted_tos, tos_accepted_at');
 
       if (error) {
         console.error('❌ TOS acceptance update failed:', error);
@@ -103,7 +104,7 @@ export default function TermsOfService() {
       try {
         const { data: verifyData, error: verifyError } = await supabase
           .from('roster')
-          .select('accepted_tos, tos_accepted_at, ical_url')
+          .select('accepted_tos, tos_accepted_at')
           .eq('auth_id', user.id)
           .single();
         
@@ -111,6 +112,7 @@ export default function TermsOfService() {
           console.error('❌ Verification failed:', verifyError);
         } else {
           console.log('✅ Verification result:', verifyData);
+          const icalUrl = await fetchMyIcalUrl();
           
           // Reset loading state before navigation
           setLoading(false);
@@ -118,7 +120,7 @@ export default function TermsOfService() {
           // Navigate based on iCal URL status
           console.log('🔄 Checking iCal URL status...');
           setTimeout(() => {
-            if (!verifyData.ical_url) {
+            if (!icalUrl) {
               console.log('🔄 Navigating to iCal setup...');
               router.replace('/(loginflow)/ical-setup');
             } else {
@@ -214,7 +216,7 @@ export default function TermsOfService() {
 
         <Text style={styles.sectionTitle}>8. Updates to the App</Text>
         <Text style={styles.text}>
-          {`The App is provided "as is" and may be updated or modified at any time without notice. Dan Flynn is not obligated to maintain or support the App.`}
+          {`The App is provided "as is" and may be updated or modified at any time without notice. The developer is not obligated to maintain or support the App.`}
         </Text>
 
         <Text style={styles.sectionTitle}>9. Termination</Text>
@@ -252,7 +254,7 @@ export default function TermsOfService() {
           onPress={handleAcceptTOS}
           disabled={!hasReachedBottom || loading}
         >
-          <Text style={styles.buttonText}>
+          <Text style={[styles.buttonText, styles.acceptButtonText]}>
             {loading ? 'Accepting...' : 'I Accept'}
           </Text>
         </TouchableOpacity>
@@ -345,6 +347,9 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
     backgroundColor: '#666',
+  },
+  acceptButtonText: {
+    color: '#000',
   },
   buttonText: {
     color: '#fff',

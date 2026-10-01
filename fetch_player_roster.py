@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 Fetch AHL Player Roster Data (jersey numbers, rookie status, veteran status)
@@ -11,7 +12,7 @@ from typing import Dict, List, Optional
 
 # Supabase configuration
 SUPABASE_URL = "https://zxjzdtepjpnunjkqrsjy.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4anpkdGVwanBudW5qa3Fyc2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk2MzI0NzEsImV4cCI6MjA0NTIwODQ3MX0.Q38eMfnthqid-0eo3yyLSFhRWMIv85yhWDmVXmxNwDw"
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]  # RLS blocks the anon key; never commit this key
 
 # API base URL (team_id will be inserted)
 API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=94&key=ccb91f29d6744675&client_code=ahl&fmt=json"
@@ -41,7 +42,7 @@ TEAM_IDS = [
 ]
 
 # Initialize Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
 def build_team_id_to_abbrev() -> Dict[int, str]:

@@ -27,7 +27,7 @@ export default function TabsLayout() {
               borderTopWidth: 0,
             },
         tabBarActiveTintColor: '#ff6600',
-        tabBarInactiveTintColor: '#666',
+        tabBarInactiveTintColor: '#999',
         sceneStyle: { backgroundColor: '#000000' },
       }}
     >

@@ -10,4 +10,4 @@ compatibility_date = "2026-09-29"
 # http://localhost:8081 and http://localhost:19006 are always allowed, so this
 # only needs the deployed web app. An entry like `https://*.expo.app` matches
 # any subdomain, which is what you want for EAS Hosting preview URLs.
-ICAL_ALLOWED_ORIGINS = ""
+ICAL_ALLOWED_ORIGINS = "https://*.expo.app"

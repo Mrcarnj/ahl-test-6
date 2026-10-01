@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   lastSyncText: {
     fontSize: 12,
-    color: '#666',
+    color: '#999',
     marginTop: 4,
     textAlign: 'center',
   },

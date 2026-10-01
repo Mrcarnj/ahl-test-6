@@ -79,7 +79,7 @@ export default function ArenaDetailsScreen() {
             style={styles.directionsButton}
             onPress={handleDirectionsPress}
           >
-            <FontAwesome5 name="directions" size={20} color="#fff" />
+            <FontAwesome5 name="directions" size={20} color="#000" />
             <Text style={styles.directionsText}>Get Directions</Text>
           </TouchableOpacity>
         </View>
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   directionsText: {
-    color: '#fff',
+    color: '#000',
     marginLeft: 8,
     fontWeight: 'bold',
   },

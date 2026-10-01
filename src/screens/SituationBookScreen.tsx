@@ -1,6 +1,6 @@
 // src/screens/SituationBookScreen.tsx
 import AntDesign from '@expo/vector-icons/AntDesign';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -12,7 +12,15 @@ import {
     View,
 } from 'react-native';
 import PdfViewer from '@/src/components/PdfViewer';
-import ruleBookText from '@/src/lib/SituationBookPdfText.json';
+
+type BookPage = { page: number; text: string };
+
+// ~450 KB of extracted text: loaded when the screen opens rather than bundled
+// into the app's first download.
+const loadSituationBookText = () =>
+    import('@/src/lib/SituationBookPdfText.json').then(
+        (m) => ((m as { default?: unknown }).default ?? m) as BookPage[],
+    );
 
 const SITUATION_BOOK_URL =
     'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI0LTI1IE5ITCBTaXR1YXRpb24gSGFuZGJvb2sgKENPTkZJREVOVElBTCkucGRmIiwiaWF0IjoxNzc3MjUzNjg5LCJleHAiOjE5MzQ5MzM2ODl9.M5pvM1xCRUE3R7M8cJjtCWYytv-0uHSI9dK_8QHIgyU';
@@ -24,7 +32,22 @@ export default function SituationBook() {
     const [searchResults, setSearchResults] = useState<number[]>([]);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
 
+    const [ruleBookText, setRuleBookText] = useState<BookPage[]>([]);
+    useEffect(() => {
+        let alive = true;
+        loadSituationBookText()
+            .then((pages) => alive && setRuleBookText(pages))
+            .catch((e) => console.warn('Situation Book search text failed to load', e));
+        return () => {
+            alive = false;
+        };
+    }, []);
+
     const handleSearch = () => {
+        if (ruleBookText.length === 0) {
+            alert('Search is still loading. Try again in a moment.');
+            return;
+        }
         const results = ruleBookText
             .filter(page => page.text.toLowerCase().includes(searchTerm.toLowerCase()))
             .map(page => page.page);
@@ -152,7 +175,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     errorHint: {
-        color: '#888',
+        color: '#aaa',
         fontSize: 14,
         textAlign: 'center',
     },

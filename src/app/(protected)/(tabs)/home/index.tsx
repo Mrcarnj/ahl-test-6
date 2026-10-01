@@ -615,7 +615,7 @@ const styles = StyleSheet.create({
     },
     link: {
         fontSize: 15,
-        color: '#000',
+        color: '#fff',
         fontWeight: 'bold',
     },
     linkTitleContainer: {

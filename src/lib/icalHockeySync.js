@@ -45,7 +45,14 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     console.log(`📄 iCal data received: ${icalText.length} characters`);
     console.log('🔄 Parsing iCal events and converting timezones...');
     
-    const games = await parseIcalToGames(icalText);
+    // Team timezones and official names come from two small tables. Load
+    // them once here instead of querying per event: the per-event version
+    // made hundreds of sequential round-trips per sync, which kept the JS
+    // thread busy enough to make the app stutter while it ran. If either
+    // load fails the sync stops here, before anything is written.
+    const lookups = await loadSyncLookups();
+
+    const games = await parseIcalToGames(icalText, lookups);
     
     if (testMode) {
       console.log('🏒 Hockey Schedule Parsing Complete!');
@@ -101,24 +108,14 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     // Process only the filtered games for database
     const processedGames = [];
     for (const game of filteredGames) {
-      const dbGame = await convertToDbFormat(game);
+      const dbGame = await convertToDbFormat(game, lookups);
       if (dbGame) {
         processedGames.push(dbGame);
       }
     }
     
-    // Debug: Show all processed games
-    console.log('📊 === PROCESSED GAMES FOR DATABASE ===');
-    processedGames.forEach((game, index) => {
-      console.log(`Game ${index + 1}:`);
-      console.log(`  Game ID: ${game.gameid}`);
-      console.log(`  Teams: ${game.awayteam} @ ${game.hometeam}`);
-      console.log(`  Date: ${game.gamedate}`);
-      console.log(`  Time: ${game.gametime}`);
-      console.log('---');
-    });
-    console.log('📊 === END PROCESSED GAMES ===');
-    
+    console.log(`📊 ${processedGames.length} games ready for the database`);
+
     // Upload to database
     const results = await upsertGamesToDatabase(processedGames);
     
@@ -142,14 +139,33 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
   }
 }
 
-async function parseIcalToGames(icalText) {
+async function loadSyncLookups() {
+  const [teamsRes, rosterRes] = await Promise.all([
+    supabase.from('teams').select('timezone, city'),
+    supabase.from('roster').select('firstname, lastname, lastfirstfullname, firstlast'),
+  ]);
+  if (teamsRes.error) throw new Error(`Could not load teams: ${teamsRes.error.message}`);
+  if (rosterRes.error) throw new Error(`Could not load roster: ${rosterRes.error.message}`);
+  return {
+    teams: teamsRes.data || [],
+    roster: rosterRes.data || [],
+    officialNames: new Map(), // "First Last" -> resolved lastfirstfullname (or null)
+  };
+}
+
+// Mirrors `.single()`: a lookup only counts when exactly one row matches.
+function onlyMatch(rows) {
+  return rows.length === 1 ? rows[0] : null;
+}
+
+async function parseIcalToGames(icalText, lookups) {
   const games = [];
   const events = icalText.split('BEGIN:VEVENT');
   
   // Skip first element (before first event)
   for (let i = 1; i < events.length; i++) {
     const eventText = events[i];
-    const game = await parseEvent(eventText);
+    const game = await parseEvent(eventText, lookups);
     if (game) {
       games.push(game);
     }
@@ -158,7 +174,7 @@ async function parseIcalToGames(icalText) {
   return games;
 }
 
-async function parseEvent(eventText) {
+async function parseEvent(eventText, lookups) {
   try {
     // Debug: Show raw ORGANIZER lines
     const organizerLines = eventText.match(/ORGANIZER.*$/gm);
@@ -198,8 +214,8 @@ async function parseEvent(eventText) {
     const gameDetails = parseDescription(description);
     
     // Convert times to home team's timezone
-    const startTime = await convertIcalTimeToTeamTimezone(dtstart, gameDetails.homeTeam);
-    const endTime = await convertIcalTimeToTeamTimezone(dtend, gameDetails.homeTeam);
+    const startTime = await convertIcalTimeToTeamTimezone(dtstart, gameDetails.homeTeam, lookups);
+    const endTime = await convertIcalTimeToTeamTimezone(dtend, gameDetails.homeTeam, lookups);
     
     return {
       uid: uid,
@@ -330,7 +346,7 @@ function parseDescription(description) {
   };
 }
 
-async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
+async function convertIcalTimeToTeamTimezone(icalTime, homeTeam, lookups) {
   // Input format: "20251004T200000Z" (UTC)
   // Convert to team's local timezone dynamically
   
@@ -349,22 +365,17 @@ async function convertIcalTimeToTeamTimezone(icalTime, homeTeam) {
     let teamData = null;
     
     // Strategy 1: Try exact match with city
-    const { data: cityMatch } = await supabase
-      .from('teams')
-      .select('timezone, city')
-      .eq('city', homeTeam)
-      .single();
+    const cityMatch = onlyMatch(lookups.teams.filter((t) => t.city === homeTeam));
     
     if (cityMatch) {
       teamData = cityMatch;
       console.log(`✅ Found exact city match: "${cityMatch.city}"`);
     } else {
       // Strategy 2: Try partial match (e.g., "Bakersfield" might match "Bakersfield Condors")
-      const { data: partialMatch } = await supabase
-        .from('teams')
-        .select('timezone, city')
-        .ilike('city', `%${homeTeam}%`)
-        .single();
+      const needle = homeTeam.toLowerCase();
+      const partialMatch = onlyMatch(
+        lookups.teams.filter((t) => (t.city || '').toLowerCase().includes(needle))
+      );
       
       if (partialMatch) {
         teamData = partialMatch;
@@ -638,7 +649,7 @@ function getSecondSundayOfMonth(year, month) {
   return firstSunday + 7;
 }
 
-async function convertToDbFormat(game) {
+async function convertToDbFormat(game, lookups) {
   // Validate that startTime exists before processing
   if (!game.startTime) {
     console.error('🚨 ========== MISSING STARTTIME IN convertToDbFormat ==========');
@@ -660,10 +671,10 @@ async function convertToDbFormat(game) {
   }
   
   // Convert official names from "First Last" to "Last, First" format
-  const referee1 = await convertOfficialName(game.referees[0]);
-  const referee2 = await convertOfficialName(game.referees[1]);
-  const linesperson1 = await convertOfficialName(game.linespeople[0]);
-  const linesperson2 = await convertOfficialName(game.linespeople[1]);
+  const referee1 = convertOfficialName(game.referees[0], lookups);
+  const referee2 = convertOfficialName(game.referees[1], lookups);
+  const linesperson1 = convertOfficialName(game.linespeople[0], lookups);
+  const linesperson2 = convertOfficialName(game.linespeople[1], lookups);
   
   const gameDate = game.startTime.split('T')[0];
   const gameTime = game.startTime.split('T')[1];
@@ -683,80 +694,45 @@ async function convertToDbFormat(game) {
   };
 }
 
-async function convertOfficialName(firstLastName) {
+function convertOfficialName(firstLastName, lookups) {
   if (!firstLastName) return null;
-  
-  console.log(`🔍 Converting official name: "${firstLastName}"`);
-  
-  try {
-    // Strategy 1: Try exact match with firstlast column
-    const { data: exactMatch } = await supabase
-      .from('roster')
-      .select('lastfirstfullname')
-      .eq('firstlast', firstLastName)
-      .single();
-      
-    if (exactMatch) {
-      console.log(`✅ Exact match found: "${firstLastName}" -> "${exactMatch.lastfirstfullname}"`);
-      return exactMatch.lastfirstfullname;
-    }
-    
-    // Strategy 2: Normalized matching
-    const normalizedInput = firstLastName.replace(/\s+/g, '').toLowerCase();
-    console.log(`🔍 Trying normalized match: "${normalizedInput}"`);
-    
-    const { data: allRoster } = await supabase
-      .from('roster')
-      .select('firstname, lastname, lastfirstfullname');
-    
-    if (allRoster) {
-      for (const person of allRoster) {
-        const normalizedRoster = `${person.firstname}${person.lastname}`.replace(/\s+/g, '').toLowerCase();
-        if (normalizedRoster === normalizedInput) {
-          console.log(`✅ Normalized match found: "${firstLastName}" -> "${person.lastfirstfullname}"`);
-          return person.lastfirstfullname;
-        }
-      }
-    }
-    
-    // Strategy 3: Simple split
-    const [firstName, ...lastNameParts] = firstLastName.split(' ');
-    const lastName = lastNameParts.join(' ');
-    console.log(`🔍 Trying split match: firstName="${firstName}", lastName="${lastName}"`);
-    
-    const { data: splitMatch } = await supabase
-      .from('roster')
-      .select('lastfirstfullname')
-      .ilike('firstname', firstName)
-      .ilike('lastname', lastName)
-      .single();
-      
-    if (splitMatch) {
-      console.log(`✅ Split match found: "${firstLastName}" -> "${splitMatch.lastfirstfullname}"`);
-      return splitMatch.lastfirstfullname;
-    }
-    
-    // Strategy 4: Try partial last name match (for hyphenated names)
-    console.log(`🔍 Trying partial last name match for: "${lastName}"`);
-    const { data: partialMatch } = await supabase
-      .from('roster')
-      .select('lastfirstfullname')
-      .ilike('firstname', firstName)
-      .ilike('lastname', `%${lastName}%`)
-      .single();
-      
-    if (partialMatch) {
-      console.log(`✅ Partial match found: "${firstLastName}" -> "${partialMatch.lastfirstfullname}"`);
-      return partialMatch.lastfirstfullname;
-    }
-    
-    console.warn(`❌ Official not found in roster: "${firstLastName}"`);
-    return null;
-    
-  } catch (error) {
-    console.error(`Error converting official name "${firstLastName}":`, error);
-    return null;
+  if (lookups.officialNames.has(firstLastName)) {
+    return lookups.officialNames.get(firstLastName);
   }
+  const resolved = resolveOfficialName(firstLastName, lookups.roster);
+  lookups.officialNames.set(firstLastName, resolved);
+  return resolved;
+}
+
+// Same strategies, in the same order, as the per-name queries this replaced.
+function resolveOfficialName(firstLastName, roster) {
+  // Strategy 1: exact match on the firstlast column
+  const exactMatch = onlyMatch(roster.filter((p) => p.firstlast === firstLastName));
+  if (exactMatch) return exactMatch.lastfirstfullname;
+
+  // Strategy 2: names compared with whitespace removed, case-insensitive
+  const normalizedInput = firstLastName.replace(/\s+/g, '').toLowerCase();
+  for (const person of roster) {
+    const normalizedRoster = `${person.firstname}${person.lastname}`.replace(/\s+/g, '').toLowerCase();
+    if (normalizedRoster === normalizedInput) return person.lastfirstfullname;
+  }
+
+  // Strategy 3: first word = first name, the rest = last name (case-insensitive)
+  const [firstName, ...lastNameParts] = firstLastName.split(' ');
+  const lastName = lastNameParts.join(' ');
+  const first = firstName.toLowerCase();
+  const last = lastName.toLowerCase();
+  const sameFirst = roster.filter((p) => (p.firstname || '').toLowerCase() === first);
+
+  const splitMatch = onlyMatch(sameFirst.filter((p) => (p.lastname || '').toLowerCase() === last));
+  if (splitMatch) return splitMatch.lastfirstfullname;
+
+  // Strategy 4: last name contained in the roster's (hyphenated names)
+  const partialMatch = onlyMatch(sameFirst.filter((p) => (p.lastname || '').toLowerCase().includes(last)));
+  if (partialMatch) return partialMatch.lastfirstfullname;
+
+  console.warn(`❌ Official not found in roster: "${firstLastName}"`);
+  return null;
 }
 
 async function upsertGamesToDatabase(games) {
@@ -764,20 +740,27 @@ async function upsertGamesToDatabase(games) {
   let updateCount = 0;
   let skippedCount = 0;
   
+  // Read every existing row for these games up front (in chunks to keep the
+  // URL short) rather than one query per game. A failed read stops the sync
+  // before anything is written.
+  const existingByKey = new Map();
+  const gameIds = [...new Set(games.map((g) => g.gameid).filter(Boolean))];
+  for (let i = 0; i < gameIds.length; i += 100) {
+    const { data: rows, error: fetchError } = await supabase
+      .from('schedule')
+      .select('*')
+      .in('gameid', gameIds.slice(i, i + 100));
+    if (fetchError) {
+      throw new Error(`Could not read existing games: ${fetchError.message}`);
+    }
+    for (const row of rows || []) {
+      existingByKey.set(`${row.gameid}|${row.season}`, row);
+    }
+  }
+
   for (const game of games) {
     try {
-      // Get existing game data for comparison
-      const { data: existing, error: fetchError } = await supabase
-        .from('schedule')
-        .select('*')
-        .eq('gameid', game.gameid)
-        .eq('season', game.season)
-        .maybeSingle(); // Use maybeSingle() instead of single() to avoid errors
-      
-      if (fetchError) {
-        console.error(`Error fetching existing game ${game.gameid}:`, fetchError);
-        continue;
-      }
+      const existing = existingByKey.get(`${game.gameid}|${game.season}`) ?? null;
       
       if (existing) {
         alignOfficialsToExisting(game, existing);

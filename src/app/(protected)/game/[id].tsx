@@ -113,16 +113,12 @@ function formatRosterPlayerName(
 /**
  * Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`.
  *
- * Renders nothing when the club has no skaters for the active season. Before
- * opening night HockeyTech serves the new season's roster feed with coaches
- * only, and we never fall back to the preseason rows, so an empty roster is
- * normal and should look empty rather than showing bare table headers.
+ * Always rendered, even before a club has published its roster: the sections
+ * then show their headers and a "No players listed yet" row, and fill in as
+ * the daily roster/stats sync picks players up. Stats read "–" until a player
+ * has games.
  */
 function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
-  if (teamRoster.length === 0) {
-    return null;
-  }
-
   const pointsLeaders = [...teamRoster]
     .sort((a, b) => {
       if (rosterNum(b.points) !== rosterNum(a.points)) {
@@ -189,6 +185,7 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </Text>
           </View>
         ))}
+        {pointsLeaders.length === 0 && <EmptyRosterRow />}
       </View>
 
       <View style={styles.rosterContainer}>
@@ -219,6 +216,7 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </Text>
           </View>
         ))}
+        {pimLeaders.length === 0 && <EmptyRosterRow />}
       </View>
 
       <View style={styles.rosterContainer}>
@@ -284,8 +282,17 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </View>
           );
         })}
+        {teamRoster.length === 0 && <EmptyRosterRow />}
       </View>
     </>
+  );
+}
+
+function EmptyRosterRow() {
+  return (
+    <View style={styles.playerRow}>
+      <Text style={styles.playerText}>No players listed yet</Text>
+    </View>
   );
 }
 
@@ -703,9 +710,7 @@ const GameDetails = () => {
           </View>
         </View>
 
-        {regularSeasonRoster.length > 0 && (
-          <View style={styles.separator} />
-        )}
+        <View style={styles.separator} />
 
         <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
@@ -784,9 +789,7 @@ const GameDetails = () => {
           </View>
         </View>
 
-        {regularSeasonRoster.length > 0 && (
-          <View style={styles.separator} />
-        )}
+        <View style={styles.separator} />
 
         <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
@@ -1003,13 +1006,13 @@ const styles = StyleSheet.create({
   },
   teamStats: {
     fontSize: 12,
-    color: '#999',
+    color: "#666666",
     textAlign: "center",
     marginBottom: 4,
   },
   teamRank: {
     fontSize: 12,
-    color: '#999',
+    color: "#666666",
     textAlign: "center",
   },
   atSymbol: {
@@ -1035,14 +1038,14 @@ const styles = StyleSheet.create({
   },
   arena: {
     fontSize: 13,
-    color: '#999',
+    color: "#666666",
     textAlign: "center",
     textDecorationLine: "underline",
     fontStyle: "italic",
   },
   gameID: {
     fontSize: 16,
-    color: '#999',
+    color: "#666666",
     textAlign: "center",
     marginBottom: 10,
   },

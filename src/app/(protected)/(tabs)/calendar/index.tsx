@@ -207,16 +207,15 @@ export default function CalendarScreen() {
                 >
                   <Text style={[
                     styles.dayText,
-                    isDisabled && styles.disabledDayText,
-                    marking?.selected && styles.onAccentText
+                    isDisabled && styles.disabledDayText
                   ]}>
                     {date?.day}
                   </Text>
                   {marking?.text && (
                     <>
-                      <Text style={[styles.gameInfo, marking?.selected && styles.onAccentText]}>{marking.text}</Text>
+                      <Text style={styles.gameInfo}>{marking.text}</Text>
                       {marking.gameTime && (
-                        <Text style={[styles.gameTime, marking?.selected && styles.onAccentText]}>{marking.gameTime}</Text>
+                        <Text style={styles.gameTime}>{marking.gameTime}</Text>
                       )}
                     </>
                   )}
@@ -259,10 +258,6 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#333333',
     padding: 2,
-  },
-  // Text on the orange selected day: black is 7.2:1, white only 2.9:1.
-  onAccentText: {
-    color: '#000',
   },
   selectedDayContainer: {
     backgroundColor: '#ff6600',
@@ -325,7 +320,7 @@ const calendarTheme = {
   calendarBackground: '#000000',
   textSectionTitleColor: '#ffffff',
   selectedDayBackgroundColor: '#ff6600',
-  selectedDayTextColor: '#000000',
+  selectedDayTextColor: '#ffffff',
   todayTextColor: '#ff6600',
   dayTextColor: '#ffffff',
   textDisabledColor: '#444444',

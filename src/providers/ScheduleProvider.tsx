@@ -557,6 +557,27 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     };
     syncScheduleFromIcalRef.current = syncScheduleFromIcal;
 
+    /**
+     * Realtime fires once per changed row, and an iCal sync that touches 20
+     * games echoes 20 events back. Reloading on each one meant 20 back-to-back
+     * schedule fetches and full re-renders, which is what made the app feel
+     * locked while a sync ran. Coalesce them into one trailing reload, and
+     * hold it while this device's own sync runs (that sync reloads at its end).
+     */
+    const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scheduleRealtimeRefresh = useCallback(() => {
+        const fire = () => {
+            if (syncInFlightRef.current) {
+                realtimeRefreshTimerRef.current = setTimeout(fire, 1500);
+                return;
+            }
+            realtimeRefreshTimerRef.current = null;
+            void fetchScheduleRef.current();
+        };
+        if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = setTimeout(fire, 1500);
+    }, []);
+
     // Setup real-time subscription to schedule table
     useEffect(() => {
         if (!roster?.lastfirstfullname) return;
@@ -579,7 +600,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     schema: 'public',
                     table: 'schedule',
                 }, async (payload) => {
-                    console.log('🔄 Real-time update received:', payload);
+                    console.log(`🔄 Real-time ${payload.eventType} on schedule`);
                     
                     // Check if the change is relevant to the current user
                     const newData = payload.new as Schedule;
@@ -601,9 +622,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                         // (icalHockeySync). Sending again here meant every crew member with the
                         // app open re-broadcast the same change to the whole crew.
 
-                        // Refresh the schedule to update the UI
-                        console.log('🔄 Refreshing schedule...');
-                        await fetchScheduleRef.current();
+                        // Refresh the schedule to update the UI (coalesced)
+                        scheduleRealtimeRefresh();
                     } else {
                         console.log('ℹ️ Change does not affect current user, skipping refresh');
                     }
@@ -624,13 +644,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         // Cleanup subscription when component unmounts or roster changes
         return () => {
             console.log('🧹 Cleaning up schedule subscription...');
+            if (realtimeRefreshTimerRef.current) {
+                clearTimeout(realtimeRefreshTimerRef.current);
+                realtimeRefreshTimerRef.current = null;
+            }
             if (subscriptionRef.current) {
                 subscriptionRef.current.unsubscribe();
                 subscriptionRef.current = null;
             }
             setRealtimeEnabled(false);
         };
-    }, [roster?.lastfirstfullname]);
+    }, [roster?.lastfirstfullname, scheduleRealtimeRefresh]);
 
     // Fetch schedule when roster data changes
     useEffect(() => {

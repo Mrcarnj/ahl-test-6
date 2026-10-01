@@ -1,10 +1,11 @@
-# AHL Officials -- only the sign-in and legal pages are public. Everything else needs an
+# AHL Officials -- only the sign-in, support and legal pages are public. Everything else needs an
 # official's account, so there is nothing for crawlers there.
 User-agent: *
 Allow: /$
 Allow: /login
 Allow: /privacy.html
 Allow: /terms.html
+Allow: /support.html
 Disallow: /home
 Disallow: /calendar
 Disallow: /roster

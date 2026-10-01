@@ -240,8 +240,9 @@ accounts are created by an admin.
 
 **Web shell** lives in `public/` (copied to the export root): `index.html`
 template (meta/OG tags, https guard), favicons, `og-image.png`, `robots.txt`,
-`sitemap.xml`, and the legal pages `privacy.html` / `terms.html`, whose text is
-kept in `docs/legal/*.md`. `src/lib/legal.ts` holds the legal URLs.
+`sitemap.xml`, the support page `support.html` (the App Store Support URL), and
+the legal pages `privacy.html` / `terms.html`, whose text is
+kept in `docs/legal/*.md`. `src/lib/legal.ts` holds the legal and support URLs.
 
 ## Theme
 

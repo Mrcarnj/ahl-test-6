@@ -6,7 +6,7 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
+import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -324,7 +324,7 @@ const Profile = () => {
 
                     {/* Legal */}
                     <View style={styles.legalSection}>
-                        <Text style={styles.legalHeading}>Legal</Text>
+                        <Text style={styles.legalHeading}>Help & Legal</Text>
                         <TouchableOpacity
                             onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
                             accessibilityRole="link"
@@ -343,6 +343,13 @@ const Profile = () => {
                             style={styles.legalRow}
                         >
                             <Text style={styles.legalLink}>Privacy Policy</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL(SUPPORT_URL)}
+                            accessibilityRole="link"
+                            style={styles.legalRow}
+                        >
+                            <Text style={styles.legalLink}>Support</Text>
                         </TouchableOpacity>
                     </View>
 

@@ -20,4 +20,4 @@ Disallow: /changepassword
 Disallow: /tos
 Disallow: /ical-setup
 
-Sitemap: https://ahl-officials.expo.app/sitemap.xml
+Sitemap: https://ahl-test-6.expo.app/sitemap.xml

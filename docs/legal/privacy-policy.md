@@ -2,7 +2,7 @@
 
 **AHL Officials** · Effective October 1, 2026
 
-AHL Officials ("the App") is an app for American Hockey League officials, available on iOS, Android and the web at ahl-officials.expo.app. It is run by Mike Dietrich ("we", "us"). This policy explains what information the App handles, why, and what you can do about it.
+AHL Officials ("the App") is an app for American Hockey League officials, available on iOS, Android and the web at ahl-test-6.expo.app. It is run by Mike Dietrich ("we", "us"). This policy explains what information the App handles, why, and what you can do about it.
 
 ## Who can use the App
 

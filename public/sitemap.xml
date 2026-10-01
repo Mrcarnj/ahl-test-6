@@ -2,19 +2,19 @@
 <!-- Only the sign-in page and the legal pages are public; see robots.txt. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ahl-officials.expo.app/</loc>
+    <loc>https://ahl-test-6.expo.app/</loc>
     <lastmod>2026-10-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://ahl-officials.expo.app/privacy.html</loc>
+    <loc>https://ahl-test-6.expo.app/privacy.html</loc>
     <lastmod>2026-10-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://ahl-officials.expo.app/terms.html</loc>
+    <loc>https://ahl-test-6.expo.app/terms.html</loc>
     <lastmod>2026-10-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>

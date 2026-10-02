@@ -1,5 +1,6 @@
 // app/(protected)/(tabs)/home/_layout.tsx
 import { Stack } from "expo-router";
+import HeaderBackButton from '@/src/components/HeaderBackButton';
 
 export default function HomeLayout() {
   return (
@@ -16,12 +17,18 @@ export default function HomeLayout() {
             headerTintColor: '#ffffff',
           }}
         />
+        {/*
+          Draws its own headerLeft instead of setting `headerBackTitle`: the
+          native back item is dead in a stack whose other screens are
+          headerless. See HeaderBackButton for the details.
+        */}
         <Stack.Screen 
           name="AllGames/index"  // This handles the AllGames route
           options={{
             headerTitle: "All Games",
-            headerBackTitle: "Home",  // This is the correct property
             headerShown: true,
+            headerBackVisible: false,
+            headerLeft: () => <HeaderBackButton label="Home" />,
             headerStyle: {
               backgroundColor: '#000000',
             },

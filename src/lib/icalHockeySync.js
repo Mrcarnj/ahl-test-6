@@ -36,7 +36,13 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
     console.log('🌐 Fetching iCal data from HorizonWebRef...');
     // On web this routes through the Cloudflare Worker proxy; native fetches direct.
     const icalRequest = buildIcalRequest(icalUrl);
-    const response = await fetch(icalRequest.url, { headers: icalRequest.headers });
+    // no-store: iOS's URL cache will otherwise hand back an earlier copy of
+    // the feed (HorizonWebRef sends no cache headers), so a sync right after a
+    // new assignment can parse the old feed and report nothing new.
+    const response = await fetch(icalRequest.url, {
+      headers: { ...icalRequest.headers, 'Cache-Control': 'no-cache' },
+      cache: 'no-store',
+    });
     if (!response.ok) {
       throw new Error(`iCal fetch failed with status ${response.status}`);
     }
@@ -104,6 +110,7 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
         console.log(`⏭️ Skipping game ${game.gameId || 'unknown'} - organizer: ${game.organizer || 'not found'}`);
       }
     }
+    console.log(`📋 Feed had ${games.length} games; ${filteredGames.length} from a recognised organizer`);
     
     // Process only the filtered games for database
     const processedGames = [];
@@ -118,7 +125,19 @@ export async function fetchAndParseHockeySchedule(testMode = false, userId = nul
 
     // Upload to database
     const results = await upsertGamesToDatabase(processedGames);
-    
+
+    // A game that could not be written used to drop out of every count, so
+    // the sync reported "0 new" as a success. Surface it instead.
+    if (results.failedCount > 0) {
+      return {
+        success: false,
+        error: `${results.failedCount} game(s) could not be saved: ${results.firstError}`,
+        newGames: results.newCount,
+        updatedGames: results.updateCount,
+        skippedGames: results.skippedCount,
+      };
+    }
+
     return {
       success: true,
       gamesProcessed: processedGames.length,
@@ -739,6 +758,13 @@ async function upsertGamesToDatabase(games) {
   let newCount = 0;
   let updateCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
+  let firstError = null;
+  const fail = (gameid, what, error) => {
+    console.error(`${what} error for game ${gameid}:`, error);
+    failedCount++;
+    firstError ??= error?.message || String(error);
+  };
   
   // Read every existing row for these games up front (in chunks to keep the
   // URL short) rather than one query per game. A failed read stops the sync
@@ -786,7 +812,7 @@ async function upsertGamesToDatabase(games) {
           const { data: updatedRows, error: updateError } = await updateQuery.select('gameid');
 
           if (updateError) {
-            console.error(`Update error for game ${game.gameid}:`, updateError);
+            fail(game.gameid, 'Update', updateError);
             continue;
           }
 
@@ -818,7 +844,7 @@ async function upsertGamesToDatabase(games) {
             console.warn(`⚠️ Duplicate key error for game ${game.gameid} - this suggests a race condition or logic error`);
             skippedCount++;
           } else {
-            console.error(`Insert error for game ${game.gameid}:`, insertError);
+            fail(game.gameid, 'Insert', insertError);
           }
           continue;
         }
@@ -828,12 +854,12 @@ async function upsertGamesToDatabase(games) {
       }
       
     } catch (error) {
-      console.error(`Unexpected error processing game ${game.gameid}:`, error);
+      fail(game.gameid, 'Unexpected', error);
     }
   }
   
-  console.log(`📊 Sync Summary: ${newCount} new, ${updateCount} updated, ${skippedCount} skipped`);
-  return { newCount, updateCount, skippedCount };
+  console.log(`📊 Sync Summary: ${newCount} new, ${updateCount} updated, ${skippedCount} skipped, ${failedCount} failed`);
+  return { newCount, updateCount, skippedCount, failedCount, firstError };
 }
 
 // HorizonWebRef lists a game's referees (and linespeople) in a different order

@@ -85,7 +85,31 @@ interface Official {
   email?: string | null;
 }
 
-function buildReportUrl(form: ReportForm, game: Schedule, official: Official): string {
+/** What the incident report builder picked out of the game summary. */
+export interface IncidentDetails {
+  playerNumber?: string | null;
+  playerName?: string | null;
+  period?: string | null; // one of the form's radio labels: 1st / 2nd / 3rd / Overtime
+  clock?: string | null; // time left on the clock, e.g. "6:43"
+  score?: string | null; // visitor-home
+  reason?: string | null;
+}
+
+const INCIDENT_FIELDS = {
+  playerNumber: 'field153048112',
+  playerName: 'field153048113',
+  period: 'field150820631',
+  clock: 'field150820643',
+  score: 'field150821662',
+  reason: 'field150820688',
+};
+
+function buildReportUrl(
+  form: ReportForm,
+  game: Schedule,
+  official: Official,
+  extra: [string, string | null | undefined][] = [],
+): string {
   const f = form.fields;
   const params: [string, string | null | undefined][] = [
     [`${f.name}-first`, official.firstName],
@@ -95,6 +119,7 @@ function buildReportUrl(form: ReportForm, game: Schedule, official: Official): s
     [f.gameDate, game.gamedate],
     [f.homeTeam, FORM_TEAM_NAMES[game.homeTeamData?.abbreviation ?? '']],
     [f.visitingTeam, FORM_TEAM_NAMES[game.awayTeamData?.abbreviation ?? '']],
+    ...extra,
   ];
   const query = params
     .filter((p): p is [string, string] => !!p[1])
@@ -104,8 +129,19 @@ function buildReportUrl(form: ReportForm, game: Schedule, official: Official): s
 }
 
 /** Incident report URL with everything the app knows already filled in. */
-export function buildIncidentReportUrl(game: Schedule, official: Official): string {
-  return buildReportUrl(INCIDENT_REPORT, game, official);
+export function buildIncidentReportUrl(
+  game: Schedule,
+  official: Official,
+  incident: IncidentDetails = {},
+): string {
+  return buildReportUrl(INCIDENT_REPORT, game, official, [
+    [INCIDENT_FIELDS.playerNumber, incident.playerNumber],
+    [INCIDENT_FIELDS.playerName, incident.playerName],
+    [INCIDENT_FIELDS.period, incident.period],
+    [INCIDENT_FIELDS.clock, incident.clock],
+    [INCIDENT_FIELDS.score, incident.score],
+    [INCIDENT_FIELDS.reason, incident.reason],
+  ]);
 }
 
 /** Video review report URL with everything the app knows already filled in. */

@@ -57,6 +57,24 @@ export default function ProtectedLayout() {
                 };
               }}
             />
+            <Stack.Screen
+              name="incident-report/[id]"
+              options={{
+                headerTitle: "Incident Report",
+                headerShown: true,
+                headerBackVisible: false,
+                headerLeft: () => (
+                  <HeaderBackButton
+                    label="Game"
+                    fallback="/(protected)/(tabs)/home"
+                  />
+                ),
+                headerStyle: {
+                  backgroundColor: '#000000',
+                },
+                headerTintColor: '#ffffff',
+              }}
+            />
             <Stack.Screen 
               name="official/[rosterId]" 
               options={({ route }) => {

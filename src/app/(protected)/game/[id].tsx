@@ -1,8 +1,5 @@
 // app/(protected)/game/[id].tsx
-import {
-  buildIncidentReportUrl,
-  buildVideoReviewUrl,
-} from "@/src/lib/reportForms";
+import { buildVideoReviewUrl } from "@/src/lib/reportForms";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useRoster } from "@/src/providers/RosterProvider";
 import {
@@ -928,7 +925,10 @@ const GameDetails = () => {
           <TouchableOpacity
             style={styles.floatingButtonSmall}
             onPress={() =>
-              Linking.openURL(buildIncidentReportUrl(game, reportOfficial))
+              router.push({
+                pathname: "/(protected)/incident-report/[id]",
+                params: { id: game.gameid },
+              })
             }
           >
             <View style={styles.iconContainerSmall}>

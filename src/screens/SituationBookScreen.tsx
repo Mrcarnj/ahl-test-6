@@ -23,7 +23,7 @@ const loadSituationBookText = () =>
     );
 
 const SITUATION_BOOK_URL =
-    'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/sign/rules/2024-25%20NHL%20Situation%20Handbook%20(CONFIDENTIAL).pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDg3NmJiYS03YjlmLTRlYWItYjk3MS1kZDNhZGEyNTgyZWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJydWxlcy8yMDI0LTI1IE5ITCBTaXR1YXRpb24gSGFuZGJvb2sgKENPTkZJREVOVElBTCkucGRmIiwiaWF0IjoxNzc3MjUzNjg5LCJleHAiOjE5MzQ5MzM2ODl9.M5pvM1xCRUE3R7M8cJjtCWYytv-0uHSI9dK_8QHIgyU';
+    'https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2026-27%20NHL%20Situation%20Handbook.pdf';
 
 export default function SituationBook() {
     const [loading, setLoading] = useState(true);

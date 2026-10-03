@@ -30,6 +30,9 @@ export default function PdfViewer({
       onLoadStart={onLoadStart}
       onLoad={onLoad}
       onError={onError}
+      // A 4xx/5xx (e.g. an expired storage link) still "loads" as an error
+      // page; surface it as a failure instead.
+      onHttpError={onError}
     />
   );
 }

@@ -25,7 +25,7 @@ const loadRuleBookText = () =>
   );
 
 const RULEBOOK_URL =
-  "https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2025-26_AHLRuleBook.pdf";
+  "https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2026-27%20AHL%20Rule%20Book.pdf";
 
 type SearchHit = {
   page: number;

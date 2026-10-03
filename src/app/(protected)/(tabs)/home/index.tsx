@@ -36,7 +36,7 @@ const TestScheduleScreen = () => {
         { title: 'Situation Book', screenName: "/(protected)/(tabs)/situation-book" },
         { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
         { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
-        { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
+        { title: 'AHL Google Drive', url: 'https://drive.google.com/drive/folders/1AIzYzQHyOxXqt1kHhKYbsHEORgjS9lVz' },
     ];
 
     const openLink = useCallback(async (link: typeof externalLinks[number]) => {

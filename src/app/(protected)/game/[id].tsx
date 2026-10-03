@@ -1,4 +1,9 @@
 // app/(protected)/game/[id].tsx
+import {
+  buildIncidentReportUrl,
+  buildVideoReviewUrl,
+} from "@/src/lib/reportForms";
+import { useAuth } from "@/src/providers/AuthProvider";
 import { useRoster } from "@/src/providers/RosterProvider";
 import {
     formatGameDate2,
@@ -15,6 +20,7 @@ import {
     FontAwesome,
     FontAwesome5,
     Ionicons,
+    MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
@@ -306,7 +312,8 @@ function EmptyRosterRow() {
 const GameDetails = () => {
   const { id } = useLocalSearchParams<{ id: string; source: string }>();
   const { myGames } = useSchedule();
-  const { allRosters } = useRoster();
+  const { allRosters, roster } = useRoster();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("crew");
 
   // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
@@ -322,7 +329,7 @@ const GameDetails = () => {
   }
 
   const generateUrl = (gameId: any, isGamesheet = false) => {
-    const baseNumericID = 1027774;
+    const baseNumericID = 1029071;
     const numericID = baseNumericID + parseInt(gameId) - 1;
 
     if (isGamesheet) {
@@ -816,6 +823,13 @@ const GameDetails = () => {
     }
   };
 
+  // Pre-fills the official's details on the league's report forms.
+  const reportOfficial = {
+    firstName: roster?.firstname,
+    lastName: roster?.lastname,
+    email: user?.email ?? roster?.email,
+  };
+
   const awayStandings = teamStandings(game.awayTeamData);
   const homeStandings = teamStandings(game.homeTeamData);
 
@@ -871,7 +885,10 @@ const GameDetails = () => {
             {formatGameTime(game.gametime, game.gamedate)}
           </Text>
           <View style={styles.arenaContainer}>
-            <TouchableOpacity onPress={() => handleArenaPress(game)}>
+            <TouchableOpacity
+              style={styles.arenaNameButton}
+              onPress={() => handleArenaPress(game)}
+            >
               <Text style={styles.arena}>
                 {game.homeTeamData?.arenaname || "Arena not specified"}
               </Text>
@@ -904,6 +921,35 @@ const GameDetails = () => {
               <Ionicons name="newspaper-outline" size={24} color="#ffffff" />
             </View>
             <Text style={styles.buttonText}>Gamesheet</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.floatingButtonsContainerBottom}>
+          <TouchableOpacity
+            style={styles.floatingButtonSmall}
+            onPress={() =>
+              Linking.openURL(buildIncidentReportUrl(game, reportOfficial))
+            }
+          >
+            <View style={styles.iconContainerSmall}>
+              <MaterialCommunityIcons
+                name="file-document-edit-outline"
+                size={18}
+                color="#ffffff"
+              />
+            </View>
+            <Text style={styles.buttonTextSmall}>Incident Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.floatingButtonSmall}
+            onPress={() =>
+              Linking.openURL(buildVideoReviewUrl(game, reportOfficial))
+            }
+          >
+            <View style={styles.iconContainerSmall}>
+              <Ionicons name="videocam-outline" size={17} color="#ffffff" />
+            </View>
+            <Text style={styles.buttonTextSmall}>Video Review</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1151,11 +1197,37 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
   },
+  floatingButtonsContainerBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    position: "absolute",
+    bottom: 14,
+    left: 10,
+    right: 10,
+  },
   floatingButton: {
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     borderRadius: 10,
     padding: 10,
+  },
+  floatingButtonSmall: {
+    alignItems: "center",
+    padding: 2,
+  },
+  iconContainerSmall: {
+    backgroundColor: "#ff6600",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 3,
+  },
+  buttonTextSmall: {
+    color: "#000000",
+    fontSize: 10,
+    textAlign: "center",
   },
   iconContainer: {
     backgroundColor: "#ff6600",
@@ -1375,6 +1447,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    // Keeps the row clear of the Incident Report / Video Review buttons in
+    // the card's bottom corners; long arena names wrap instead.
+    paddingHorizontal: 65,
+  },
+  arenaNameButton: {
+    flexShrink: 1,
   },
   divider: {
     color: "#666666",

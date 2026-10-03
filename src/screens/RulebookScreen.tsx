@@ -20,7 +20,7 @@ type BookPage = { page: number; text: string };
 // ~860 KB of extracted text: loaded when the screen opens rather than bundled
 // into the app's first download (it was ~20% of the web bundle).
 const loadRuleBookText = () =>
-  import("@/src/lib/RuleBookPdfText_2025_26.json").then(
+  import("@/src/lib/RuleBookPdfText_2026_27.json").then(
     (m) => ((m as { default?: unknown }).default ?? m) as BookPage[],
   );
 
@@ -143,11 +143,12 @@ const getSectionTitle = (pageText: string) => {
     ? Number.parseInt(printedPageMatch[0], 10)
     : null;
 
-  // Index continuation pages often omit the "INDEX" header in extracted text.
+  // The "INDEX" heading is a side label mid-page, so go by printed page
+  // (2026-27 book: index 236–285, glossary 286–288, schedule from 289).
   if (
     printedPageNumber !== null &&
-    printedPageNumber >= 233 &&
-    printedPageNumber <= 288
+    printedPageNumber >= 236 &&
+    printedPageNumber <= 285
   ) {
     return "Index";
   }
@@ -164,6 +165,14 @@ const getSectionTitle = (pageText: string) => {
 
     if (/^index$/i.test(line)) {
       return "Index";
+    }
+
+    if (/^glossary of terms$/i.test(line)) {
+      return "Glossary of Terms";
+    }
+
+    if (/^\d{4}-\d{2} AHL SCHEDULE$/i.test(line)) {
+      return "AHL Schedule";
     }
 
     const sectionMatch = line.match(

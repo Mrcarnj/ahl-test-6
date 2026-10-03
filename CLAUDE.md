@@ -201,7 +201,7 @@ BRI (Bridgeport) left the league after 2025-26 and HAM (Hamilton Hammers, Hockey
 ### Storage / assets
 
 - **Supabase Storage buckets**: `logos` (team logos as `{ABBREV}.png`), `headshots` (`roster/{lastfirstfullname}.png`, `headCoaches/{ABBREV}.png`).
-- **Local JSON**: `src/lib/RuleBookPdfText.json` and `src/lib/SituationBookPdfText.json` are embedded rule/situation book PDFs pre-extracted as text.
+- **Local JSON**: `src/lib/RuleBookPdfText_2026_27.json` and `src/lib/SituationBookPdfText.json` are the rule/situation book PDFs pre-extracted as per-page search text (`page` = physical PDF page, which the viewer's `#page=` jumps to). Regenerate them with `extract_pdf_text.py` when a new book is posted, stripping the running header (see its docstring). `RulebookScreen.getSectionTitle` hardcodes the index's printed page range — check it against the new book.
 - **Assets**: `assets/rules/` contains PDF files for the in-app viewer.
 
 ### Timezone handling

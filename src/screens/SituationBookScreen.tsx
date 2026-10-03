@@ -13,7 +13,14 @@ import {
 } from 'react-native';
 import PdfViewer from '@/src/components/PdfViewer';
 
+// `page` is the physical PDF page (what `#page=` jumps to); each page's text
+// starts with the number printed on it, which is 4 lower in the 2026-27 book.
 type BookPage = { page: number; text: string };
+
+const printedPageNumber = (page: BookPage) => {
+    const first = page.text.split('\n', 1)[0].trim();
+    return /^\d{1,3}$/.test(first) ? Number(first) : page.page;
+};
 
 // ~450 KB of extracted text: loaded when the screen opens rather than bundled
 // into the app's first download.
@@ -29,8 +36,12 @@ export default function SituationBook() {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [searchResults, setSearchResults] = useState<number[]>([]);
+    const [searchResults, setSearchResults] = useState<BookPage[]>([]);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
+    const [selectedPage, setSelectedPage] = useState<number | null>(null);
+    const situationBookUri = selectedPage
+        ? `${SITUATION_BOOK_URL}#page=${selectedPage}`
+        : SITUATION_BOOK_URL;
 
     const [ruleBookText, setRuleBookText] = useState<BookPage[]>([]);
     useEffect(() => {
@@ -48,12 +59,13 @@ export default function SituationBook() {
             alert('Search is still loading. Try again in a moment.');
             return;
         }
-        const results = ruleBookText
-            .filter(page => page.text.toLowerCase().includes(searchTerm.toLowerCase()))
-            .map(page => page.page);
+        const results = ruleBookText.filter(page =>
+            page.text.toLowerCase().includes(searchTerm.toLowerCase()),
+        );
 
         setSearchResults(results);
         setCurrentResultIndex(0);
+        setSelectedPage(results[0]?.page ?? null);
         if (results.length === 0) {
             alert('No results found.');
         }
@@ -61,15 +73,18 @@ export default function SituationBook() {
 
     const goToNextResult = () => {
         if (searchResults.length > 0) {
-            setCurrentResultIndex((currentResultIndex + 1) % searchResults.length);
+            const nextIndex = (currentResultIndex + 1) % searchResults.length;
+            setCurrentResultIndex(nextIndex);
+            setSelectedPage(searchResults[nextIndex].page);
         }
     };
 
     const goToPreviousResult = () => {
         if (searchResults.length > 0) {
-            setCurrentResultIndex(
-                (currentResultIndex - 1 + searchResults.length) % searchResults.length,
-            );
+            const prevIndex =
+                (currentResultIndex - 1 + searchResults.length) % searchResults.length;
+            setCurrentResultIndex(prevIndex);
+            setSelectedPage(searchResults[prevIndex].page);
         }
     };
 
@@ -88,7 +103,7 @@ export default function SituationBook() {
 
             {!loadError && (
                 <PdfViewer
-                    uri={SITUATION_BOOK_URL}
+                    uri={situationBookUri}
                     style={styles.webview}
                     onLoadStart={() => setLoading(true)}
                     onLoad={() => setLoading(false)}
@@ -116,7 +131,7 @@ export default function SituationBook() {
                 />
                 {searchTerm.length > 0 && (
                     <TouchableOpacity
-                        onPress={() => { setSearchTerm(''); setSearchResults([]); }}
+                        onPress={() => { setSearchTerm(''); setSearchResults([]); setSelectedPage(null); }}
                         style={styles.clearButton}
                     >
                         <AntDesign name="close-circle" size={16} color="#666" />
@@ -130,7 +145,7 @@ export default function SituationBook() {
                         <AntDesign name="up" size={24} color="#ff6600" />
                     </TouchableOpacity>
                     <Text style={styles.resultInfo}>
-                        Page {searchResults[currentResultIndex]} ({currentResultIndex + 1} of {searchResults.length})
+                        Page {printedPageNumber(searchResults[currentResultIndex])} ({currentResultIndex + 1} of {searchResults.length})
                     </Text>
                     <TouchableOpacity onPress={goToNextResult}>
                         <AntDesign name="down" size={24} color="#ff6600" />

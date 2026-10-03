@@ -5,6 +5,22 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
 import { router } from 'expo-router';
+
+// Display order for the AHL Front Office section, by email. Anyone with
+// ahlAdmin who isn't listed falls to the end, alphabetically.
+const FRONT_OFFICE_ORDER = [
+    'sthompson@theahl.com',
+    'ryerkovich@theahl.com',
+    'kdanahy@theahl.com',
+    'jjordan@theahl.com',
+    'mdemarin@theahl.com',
+];
+
+const frontOfficeRank = (roster: Roster): number => {
+    const i = FRONT_OFFICE_ORDER.indexOf(roster.email?.toLowerCase());
+    return i === -1 ? FRONT_OFFICE_ORDER.length : i;
+};
+
 const RosterItem = memo(function RosterItem({ item, onPress }: {
     item: { id: number; lastfirstfullname: string },
     onPress: (id: number) => void
@@ -40,7 +56,8 @@ const RosterScreen = () => {
     useEffect(() => {
         const sortedAdminRosters = allRosters
             .filter(roster => roster.ahlAdmin)
-            .sort((b, a) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
+            .sort((a, b) => frontOfficeRank(a) - frontOfficeRank(b)
+                || a.lastfirstfullname.localeCompare(b.lastfirstfullname));
         setAdminRosters(sortedAdminRosters);
      
         const sanitizedQuery = sanitizeSearchQuery(searchQuery);

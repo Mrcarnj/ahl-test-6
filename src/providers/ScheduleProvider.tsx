@@ -3,7 +3,7 @@ import { format, parse } from "date-fns";
 import { enUS } from "date-fns/locale/en-US";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { DeviceEventEmitter } from "react-native";
+import { AppState, DeviceEventEmitter } from "react-native";
 import {
     shouldSyncPlayerRoster,
     shouldSyncPlayerStats,
@@ -12,7 +12,7 @@ import {
     syncPlayerStats,
     syncTeamStandings,
 } from "../lib/playerStatsSync";
-import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
+import { fetchAndParseHockeySchedule, setLastSyncTime } from "../lib/icalHockeySync";
 import { fetchAllRegularSeasonTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
@@ -129,6 +129,12 @@ type FetchScheduleOptions = {
     detectChanges?: boolean;
 };
 
+export type StatsSyncStatus = {
+    status: 'idle' | 'running' | 'success' | 'error';
+    error?: string;
+    finishedAt?: number;
+};
+
 type ScheduleContextType = {
     allGames: Schedule[];
     myGames: Schedule[];
@@ -160,6 +166,8 @@ type ScheduleContextType = {
         error?: string;
         finishedAt?: number;
     };
+    /** Last stats/rosters/standings run, for the sync banner. */
+    statsSyncStatus: StatsSyncStatus;
     error: string | null;
     refreshSchedule: () => Promise<{ success: boolean; error?: string }>;
     syncScheduleFromIcal: (options?: { source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }) => Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }>;
@@ -182,6 +190,7 @@ const ScheduleContext = createContext<ScheduleContextType>({
     syncingPlayoffBracket: false,
     refreshPlayoffBracket: async () => {},
     scheduleSyncStatus: { status: 'idle', source: 'other', showInBanner: false },
+    statsSyncStatus: { status: 'idle' },
     error: null,
     refreshSchedule: async () => ({ success: false }),
     syncScheduleFromIcal: async () => ({ success: false }),
@@ -196,6 +205,8 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const [scheduleLoaded, setScheduleLoaded] = useState(false);
     const [syncingStats, setSyncingStats] = useState(false);
     const [syncingStandings, setSyncingStandings] = useState(false);
+    const [statsSyncStatus, setStatsSyncStatus] = useState<StatsSyncStatus>({ status: 'idle' });
+    const statsSyncInFlightRef = useRef(false);
     // Playoffs hidden for 2026-27 — these stay at their empty values. Restore the
     // useState versions along with `refreshPlayoffBracket` below.
     const playoffBracket: PlayoffBracketData | null = null;
@@ -437,12 +448,32 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     }, []);
     */
 
+    /**
+     * Stats, rosters and standings from HockeyTech, once a day: each runs only
+     * if nobody has synced it since the last 5 AM Eastern cutoff, so the first
+     * official to open the app after that does it for everyone.
+     */
     const runBackgroundSyncs = async () => {
+        if (statsSyncInFlightRef.current) {
+            console.log('⏭️ SYNC: Stats/standings sync already running');
+            return;
+        }
+        statsSyncInFlightRef.current = true;
+        let started = false;
+        const failures: string[] = [];
         try {
-            const shouldStats = await shouldSyncPlayerStats();
-            const shouldRoster = await shouldSyncPlayerRoster();
-            const shouldStandings = await shouldSyncTeamStandings();
+            const [shouldStats, shouldRoster, shouldStandings] = await Promise.all([
+                shouldSyncPlayerStats(),
+                shouldSyncPlayerRoster(),
+                shouldSyncTeamStandings(),
+            ]);
 
+            if (!shouldStats && !shouldRoster && !shouldStandings) {
+                console.log('⏭️ SYNC: Stats, rosters and standings already synced since the nightly cutoff');
+                return;
+            }
+            started = true;
+            setStatsSyncStatus({ status: 'running' });
             if (shouldStats || shouldRoster) {
                 setSyncingStats(true);
             }
@@ -452,35 +483,45 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
             if (shouldStats) {
                 console.log('🔄 PLAYER SYNC: Running player stats sync...');
-                await syncPlayerStats();
-            } else {
-                console.log('⏭️ PLAYER SYNC: Player stats sync not needed (recent sync found)');
+                const res = await syncPlayerStats();
+                if (!res.success) failures.push(`stats: ${res.error ?? 'failed'}`);
             }
 
             if (shouldRoster) {
                 console.log('🔄 PLAYER SYNC: Running player roster sync...');
-                await syncPlayerRoster();
-            } else {
-                console.log('⏭️ PLAYER SYNC: Player roster sync not needed (recent sync found)');
+                const res = await syncPlayerRoster();
+                if (!res.success) failures.push(`rosters: ${res.error ?? 'failed'}`);
             }
+            setSyncingStats(false);
 
             if (shouldStandings) {
                 console.log('🔄 TEAM SYNC: Running team standings sync...');
-                await syncTeamStandings();
+                const res = await syncTeamStandings();
+                if (!res.success) failures.push(`standings: ${res.error ?? 'failed'}`);
                 // Playoff bracket sync is off while playoffs are hidden.
-            } else {
-                console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
             }
 
             // Player syncs write to `teamRosters` in the DB; refresh in-memory rows so game tabs show everyone.
             if (shouldStats || shouldRoster) {
                 await loadTeamRosters();
             }
+            // Standings live on `teams`, which arrive joined onto the games.
+            if (shouldStandings) {
+                await fetchScheduleRef.current();
+            }
         } catch (e) {
             console.error('❌ SYNC: Error performing background syncs:', e);
+            failures.push(e instanceof Error ? e.message : 'Unknown error');
         } finally {
+            statsSyncInFlightRef.current = false;
             setSyncingStats(false);
             setSyncingStandings(false);
+            if (started || failures.length > 0) {
+                if (failures.length > 0) console.error('❌ SYNC:', failures.join(' | '));
+                setStatsSyncStatus(failures.length > 0
+                    ? { status: 'error', error: failures.join(' · '), finishedAt: Date.now() }
+                    : { status: 'success', finishedAt: Date.now() });
+            }
         }
     };
 
@@ -496,13 +537,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
 
         // If already syncing, don't start another
+        const source = options?.source ?? 'other';
+        const showInBanner = options?.showInBanner ?? false;
+        // Stats don't depend on the schedule, so they run (once a day) whether
+        // or not the iCal sync succeeds. They used to run only after a
+        // successful one, so a failed or timed-out iCal fetch skipped them.
+        void runBackgroundSyncs();
+
         if (syncInFlightRef.current) {
             return { success: false, error: 'Schedule sync already in progress' };
         }
         syncInFlightRef.current = true;
-
-        const source = options?.source ?? 'other';
-        const showInBanner = options?.showInBanner ?? false;
 
         setScheduleSyncStatus({ status: 'running', source, showInBanner });
 
@@ -533,9 +578,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 finishedAt: Date.now(),
             };
             setScheduleSyncStatus(summary);
-
-            // 3) Stats/standings sync (24h gated), non-blocking
-            void runBackgroundSyncs();
+            void setLastSyncTime();
 
             return { success: true, ...summary };
         } catch (e) {
@@ -556,6 +599,21 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         }
     };
     syncScheduleFromIcalRef.current = syncScheduleFromIcal;
+    const runBackgroundSyncsRef = useRef(runBackgroundSyncs);
+    runBackgroundSyncsRef.current = runBackgroundSyncs;
+
+    // Check the daily stats sync on every return to the app. The foreground
+    // schedule sync (APP_REFRESH_EVENT) only fires after 10+ minutes in the
+    // background and is skipped while a load runs, so an official who opened
+    // the app at 4:58 and again at 5:05 would otherwise miss the morning sync.
+    // The check is three one-row queries; the sync itself runs once a day.
+    useEffect(() => {
+        if (!roster?.auth_id) return;
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') void runBackgroundSyncsRef.current();
+        });
+        return () => sub.remove();
+    }, [roster?.auth_id]);
 
     /**
      * Realtime fires once per changed row, and an iCal sync that touches 20
@@ -744,7 +802,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 
             console.log('✅ SCHEDULE: Manual refresh complete');
 
-            // After schedule refresh, run stats/standings syncs (24h gated).
+            // After schedule refresh, run stats/standings syncs (nightly gated).
             // Do NOT block the UI on these; they can take time.
             if (result?.success) {
                 void runBackgroundSyncs();
@@ -778,6 +836,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             syncingPlayoffBracket,
             refreshPlayoffBracket,
             scheduleSyncStatus,
+            statsSyncStatus,
             error,
             refreshSchedule,
             syncScheduleFromIcal,

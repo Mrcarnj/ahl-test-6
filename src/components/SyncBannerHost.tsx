@@ -3,8 +3,19 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 
 export default function SyncBannerHost() {
-  const { syncingSchedule, syncingStats, syncingStandings, scheduleSyncStatus } = useSchedule();
+  const { syncingSchedule, syncingStats, syncingStandings, scheduleSyncStatus, statsSyncStatus } = useSchedule();
   const [showResult, setShowResult] = useState(false);
+  const [showStatsResult, setShowStatsResult] = useState(false);
+
+  useEffect(() => {
+    if (statsSyncStatus.status === 'success' || statsSyncStatus.status === 'error') {
+      setShowStatsResult(true);
+      const t = setTimeout(() => setShowStatsResult(false), statsSyncStatus.status === 'error' ? 8000 : 4000);
+      return () => clearTimeout(t);
+    }
+    setShowStatsResult(false);
+    return;
+  }, [statsSyncStatus.status, statsSyncStatus.finishedAt]);
 
   useEffect(() => {
     if (scheduleSyncStatus.status === 'success' || scheduleSyncStatus.status === 'error') {
@@ -18,33 +29,42 @@ export default function SyncBannerHost() {
   }, [scheduleSyncStatus.status, scheduleSyncStatus.finishedAt]);
 
   const banner = useMemo(() => {
-    // Only show the banner when the last sync explicitly opted into showing it
-    // (manual pull-to-refresh on calendar).
-    if (!scheduleSyncStatus.showInBanner) return null;
-
-    // Schedule has priority because it's the key user-facing data.
-    if (scheduleSyncStatus.status === 'running' || syncingSchedule) {
-      return { tone: 'info' as const, text: 'Schedule Sync in progress…' };
-    }
-
-    if (showResult && (scheduleSyncStatus.status === 'success' || scheduleSyncStatus.status === 'error')) {
-      if (scheduleSyncStatus.status === 'success') {
-        const n = scheduleSyncStatus.newGames ?? 0;
-        const u = scheduleSyncStatus.updatedGames ?? 0;
-        return { tone: 'success' as const, text: `Schedule Sync complete — New: ${n}, Updated: ${u}` };
+    // Schedule status only shows when the sync opted in (manual refresh), and
+    // has priority because it's the key user-facing data.
+    if (scheduleSyncStatus.showInBanner) {
+      if (scheduleSyncStatus.status === 'running' || syncingSchedule) {
+        return { tone: 'info' as const, text: 'Schedule Sync in progress…' };
       }
-      return { tone: 'error' as const, text: `Schedule Sync failed — ${scheduleSyncStatus.error || 'Unknown error'}` };
+
+      if (showResult && (scheduleSyncStatus.status === 'success' || scheduleSyncStatus.status === 'error')) {
+        if (scheduleSyncStatus.status === 'success') {
+          const n = scheduleSyncStatus.newGames ?? 0;
+          const u = scheduleSyncStatus.updatedGames ?? 0;
+          return { tone: 'success' as const, text: `Schedule Sync complete — New: ${n}, Updated: ${u}` };
+        }
+        return { tone: 'error' as const, text: `Schedule Sync failed — ${scheduleSyncStatus.error || 'Unknown error'}` };
+      }
     }
 
+    // Stats/standings show on every run, including the nightly one in the
+    // background, and clear themselves shortly after finishing.
     if (syncingStats) {
-      return { tone: 'info' as const, text: 'Stats Sync in progress…' };
+      return { tone: 'info' as const, text: 'Updating player stats & rosters…' };
     }
     if (syncingStandings) {
-      return { tone: 'info' as const, text: 'Standings Sync in progress…' };
+      return { tone: 'info' as const, text: 'Updating standings…' };
+    }
+    if (showStatsResult) {
+      if (statsSyncStatus.status === 'success') {
+        return { tone: 'success' as const, text: 'Stats & standings updated' };
+      }
+      if (statsSyncStatus.status === 'error') {
+        return { tone: 'error' as const, text: `Stats update failed — ${statsSyncStatus.error || 'Unknown error'}` };
+      }
     }
 
     return null;
-  }, [scheduleSyncStatus, syncingSchedule, syncingStats, syncingStandings, showResult]);
+  }, [scheduleSyncStatus, statsSyncStatus, syncingSchedule, syncingStats, syncingStandings, showResult, showStatsResult]);
 
   if (!banner) return null;
 

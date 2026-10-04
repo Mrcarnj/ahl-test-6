@@ -5,7 +5,7 @@ import { formatGameTime, useSchedule } from '@/src/providers/ScheduleProvider';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDays, isToday as checkIsToday, differenceInDays, format, parse } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
@@ -27,9 +27,16 @@ const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames, playoffBracket, scheduleLoaded } = useSchedule();
+    const { myGames, playoffBracket, scheduleLoaded, scheduleSyncStatus } = useSchedule();
     const { roster } = useRoster();
-    const { syncStatus } = useHockeySync();
+    const { syncStatus, refreshSyncStatus } = useHockeySync();
+
+    // "Last refresh" is read from storage once on mount; re-read it whenever a
+    // schedule sync finishes so it reflects pull-to-refresh and foreground syncs.
+    useEffect(() => {
+        if (scheduleSyncStatus.status === 'success') void refreshSyncStatus();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scheduleSyncStatus.finishedAt]);
 
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/(tabs)/rulebook" },
@@ -328,17 +335,16 @@ const TestScheduleScreen = () => {
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
-    // Banner is now global (SyncBannerHost in protected layout)
-
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
+            {/* Outside the ScrollView so it stays pinned while a sync runs. */}
+            <SyncBannerHost />
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.contentContainer}
                 refreshControl={<AppRefreshControl />}
             >
-                <SyncBannerHost />
                 <View style={styles.header}>
                     <Image
                         source={require('../../../../../assets/images/ahlLogo.png')}

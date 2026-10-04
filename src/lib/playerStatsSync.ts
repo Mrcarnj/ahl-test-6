@@ -3,9 +3,37 @@
 
 import { fetchAllTeamRosterRows } from './fetchAllTeamRosterRows';
 import { PLAYER_ROSTER_STATS_TABLE, PLAYER_ROSTER_SYNC_SEASON_ID } from './rosterStatsTable';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { supabase } from './supabase';
 
-const SYNC_INTERVAL_HOURS = 24; // Sync once per day
+// Stats, rosters and standings refresh once a night. A sync is due when the last
+// one ran before the most recent 5:00 AM Eastern, by which point every game from
+// the night before (Pacific puck drops included) is final in HockeyTech.
+//
+// This replaced a rolling 24 h window, which drifted: the clock restarted at
+// whatever time someone opened the app, so a sync at 11 PM blocked the next one
+// until 11 PM the following day, and a 4 PM sync missed that night's games until
+// 4 PM the day after. The timestamp is shared by every official through the DB.
+const NIGHTLY_SYNC_TIMEZONE = 'America/New_York';
+const NIGHTLY_SYNC_HOUR = 5;
+
+/** The most recent nightly cutoff at or before `now`. */
+function mostRecentNightlyCutoff(now: Date = new Date()): Date {
+  const cutoffOn = (day: Date) => {
+    const ymd = formatInTimeZone(day, NIGHTLY_SYNC_TIMEZONE, 'yyyy-MM-dd');
+    const hh = String(NIGHTLY_SYNC_HOUR).padStart(2, '0');
+    return fromZonedTime(`${ymd}T${hh}:00:00`, NIGHTLY_SYNC_TIMEZONE);
+  };
+  const today = cutoffOn(now);
+  return today <= now ? today : cutoffOn(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+}
+
+/** True when `lastSynced` predates the most recent nightly cutoff. */
+function isDueForNightlySync(lastSynced: string): boolean {
+  const last = new Date(lastSynced);
+  if (Number.isNaN(last.getTime())) return true;
+  return last < mostRecentNightlyCutoff();
+}
 
 // Coaching staff (teams.headcoachname / assistantcoach1 / assistantcoach2) comes
 // out of the same roster feed, but it only changes at the season rollover — so it
@@ -67,7 +95,7 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 }
 
 /**
- * Check if player stats sync is needed (24 hours since last sync)
+ * Check if player stats sync is needed (not yet synced since the last nightly cutoff)
  *
  * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
  * row of the season we are about to write. An unscoped check reads the newest
@@ -93,11 +121,7 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player stats sync status:', error);
     return true; // On error, sync to be safe
@@ -105,7 +129,7 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
 }
 
 /**
- * Check if player roster sync is needed (24 hours since last sync)
+ * Check if player roster sync is needed (not yet synced since the last nightly cutoff)
  *
  * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
  * row of the season we are about to write. An unscoped check reads the newest
@@ -131,11 +155,7 @@ export async function shouldSyncPlayerRoster(): Promise<boolean> {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player roster sync status:', error);
     return true; // On error, sync to be safe
@@ -825,7 +845,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
 }
 
 /**
- * Check if team standings sync is needed (24 hours since last sync)
+ * Check if team standings sync is needed (not yet synced since the last nightly cutoff)
  * Checks the lastSynced column in teams table
  */
 export async function shouldSyncTeamStandings(): Promise<boolean> {
@@ -845,11 +865,7 @@ export async function shouldSyncTeamStandings(): Promise<boolean> {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking team standings sync status:', error);
     return true; // On error, sync to be safe

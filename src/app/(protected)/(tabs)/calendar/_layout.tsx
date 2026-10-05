@@ -1,7 +1,7 @@
 // app/(protected)/(tabs)/calendar/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import { shareImage } from '@/src/lib/shareImage';
 
 declare global {
@@ -35,7 +35,16 @@ export default function HomeLayout() {
             headerTitle: "Calendar",
             headerShown: true,
             headerRight: () => (
-              <TouchableOpacity onPress={shareCalendar} style={{ marginRight: 15 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Share calendar"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                onPress={shareCalendar}
+                style={styles.shareButton}
+              >
+                {/* iOS 26 draws its own circular glass behind header items, so
+                    this is a bare glyph in a fixed, centered square (a margin
+                    here pushed it off-center inside that circle). */}
                 <Ionicons name="share-outline" size={24} color="#ff6600" />
               </TouchableOpacity>
             ),
@@ -48,3 +57,12 @@ export default function HomeLayout() {
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  shareButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

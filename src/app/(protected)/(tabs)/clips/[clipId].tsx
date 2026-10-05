@@ -138,7 +138,8 @@ export default function ClipScreen() {
   }
 
   const isMine = clip.uploaded_by === roster?.auth_id;
-  const canDelete = isMine || isAdmin;
+  // Same rule the DB enforces for both (uploader or admin).
+  const canManage = isMine || isAdmin;
   const duration = formatClipDuration(clip.duration_seconds);
   const uploaded = new Date(clip.created_at).toLocaleString('en-US', {
     month: 'short',
@@ -217,17 +218,32 @@ export default function ClipScreen() {
 
         {clip.notes ? <Text style={styles.notes}>{clip.notes}</Text> : null}
 
-        {canDelete ? (
-          <Pressable style={styles.deleteBtn} onPress={confirmDelete} disabled={deleting}>
-            {deleting ? (
-              <ActivityIndicator color="#ef4444" />
-            ) : (
-              <>
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                <Text style={styles.deleteText}>Delete clip</Text>
-              </>
-            )}
-          </Pressable>
+        {canManage ? (
+          <View style={styles.actions}>
+            <Pressable
+              style={[styles.actionBtn, styles.editBtn]}
+              onPress={() =>
+                router.push({
+                  pathname: '/(protected)/(tabs)/clips/edit/[clipId]',
+                  params: { clipId: clip.id },
+                })
+              }
+              disabled={deleting}
+            >
+              <Ionicons name="create-outline" size={16} color="#ff6600" />
+              <Text style={styles.editText}>Edit clip</Text>
+            </Pressable>
+            <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={confirmDelete} disabled={deleting}>
+              {deleting ? (
+                <ActivityIndicator color="#ef4444" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                  <Text style={styles.deleteText}>Delete clip</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
         ) : null}
       </View>
     </ScrollView>
@@ -337,16 +353,31 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
   },
-  deleteBtn: {
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 28,
+  },
+  actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 28,
     borderWidth: 1,
-    borderColor: '#5c1a1a',
     borderRadius: 10,
     paddingVertical: 11,
+  },
+  editBtn: {
+    borderColor: '#663000',
+  },
+  editText: {
+    color: '#ff6600',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  deleteBtn: {
+    borderColor: '#5c1a1a',
   },
   deleteText: {
     color: '#ef4444',

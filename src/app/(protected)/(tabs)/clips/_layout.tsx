@@ -4,6 +4,7 @@
 // game/[scheduleId] one game's clips (where the "New Clip" alert lands)
 // [clipId]         the player
 // upload           pick a video, a game, a title and tags
+// edit/[clipId]    change a clip's title, notes and tags (uploader or admin)
 //
 // Sub-screens draw their own back button; see HeaderBackButton for why.
 
@@ -64,6 +65,10 @@ export default function ClipsLayout() {
       <Stack.Screen
         name="upload"
         options={{ ...header, headerTitle: 'Upload Clip', headerLeft: back('Cancel') }}
+      />
+      <Stack.Screen
+        name="edit/[clipId]"
+        options={{ ...header, headerTitle: 'Edit Clip', headerLeft: back('Cancel') }}
       />
     </Stack>
   );

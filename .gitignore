@@ -57,3 +57,6 @@ graphify-out/
 
 # Supabase CLI link state (supabase link)
 supabase/.temp/
+
+# /brag launch-video output (brag-output/ and timestamped brag-output-*/)
+brag-output*/

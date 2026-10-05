@@ -129,7 +129,9 @@ crew sees it in their Clips tab. Schema, RLS and bucket are in
   (thumbnail, made on device). The first path segment is what the storage
   policies check.
 - **Access:** view = the game's crew (live from `schedule`) + admins
-  (`isAdmin`/`ahlAdmin`); upload = crew only; delete = uploader or admin.
+  (`isAdmin`/`ahlAdmin`); upload = crew only; edit and delete = uploader or
+  admin. Edits can change only `title`, `notes` and `tags` (column-level
+  grant, `sql/2026-10-05_clips_edit.sql`; screen `clips/edit/[clipId]`).
   `uploaded_by`/`uploader_name` are set by a trigger, never by the client.
 - **Speed:** lists load rows + batch-signed thumbnail URLs only (cached in
   memory, images disk-cached by expo-image under the storage path). The video

@@ -62,10 +62,13 @@ export default function ClipsScreen() {
   const [scope, setScope] = useState<Scope>('all');
   const [tags, setTags] = useState<string[]>([]);
 
-  // Offer only tags that some clip actually has, in the preset order.
+  // Offer only tags that some clip actually has, in the preset order, then
+  // any retired tags still on older clips.
   const usedTags = useMemo(() => {
     const used = new Set(clips.flatMap((c) => c.tags));
-    return CLIP_TAGS.filter((t) => used.has(t));
+    const preset = CLIP_TAGS.filter((t) => used.has(t));
+    const retired = [...used].filter((t) => !(CLIP_TAGS as readonly string[]).includes(t)).sort();
+    return [...preset, ...retired];
   }, [clips]);
 
   const filtered = useMemo(

@@ -4,7 +4,7 @@
 // admins), kept fresh three ways:
 //   * a cached copy in AsyncStorage, so the Clips tab renders instantly;
 //   * a fetch on startup and on each return to the app (APP_REFRESH_EVENT);
-//   * a Realtime subscription for clips added or deleted while open.
+//   * a Realtime subscription for clips added, edited or deleted while open.
 //
 // Each load is also compared with the newest clip the official has already
 // been told about (persisted per user). Clips another crew member added to one
@@ -30,6 +30,8 @@ type ClipsContextType = {
   refresh: () => Promise<void>;
   /** Put a just-uploaded clip in the list without waiting for a refetch. */
   addClip: (clip: Clip) => void;
+  /** Swap in an edited clip, keeping its place in the list. */
+  replaceClip: (clip: Clip) => void;
   removeClip: (id: string) => void;
 };
 
@@ -41,6 +43,7 @@ const ClipsContext = createContext<ClipsContextType>({
   isAdmin: false,
   refresh: async () => {},
   addClip: () => {},
+  replaceClip: () => {},
   removeClip: () => {},
 });
 
@@ -178,6 +181,17 @@ export default function ClipsProvider({ children }: PropsWithChildren) {
           console.warn('⚠️ CLIPS: Realtime insert fetch failed:', e);
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clips' }, async (payload) => {
+        const id = (payload.new as { id?: string })?.id;
+        if (!id) return;
+        try {
+          // An edit isn't a new clip, so no announcement; just refresh the row.
+          const clip = await fetchClip(id);
+          if (clip) setClips((prev) => prev.map((c) => (c.id === clip.id ? clip : c)));
+        } catch (e) {
+          console.warn('⚠️ CLIPS: Realtime update fetch failed:', e);
+        }
+      })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clips' }, (payload) => {
         const id = (payload.old as { id?: string })?.id;
         if (id) setClips((prev) => prev.filter((c) => c.id !== id));
@@ -198,13 +212,17 @@ export default function ClipsProvider({ children }: PropsWithChildren) {
     setClips((prev) => (prev.some((c) => c.id === clip.id) ? prev : [clip, ...prev].sort(byNewest)));
   }, []);
 
+  const replaceClip = useCallback((clip: Clip) => {
+    setClips((prev) => prev.map((c) => (c.id === clip.id ? clip : c)));
+  }, []);
+
   const removeClip = useCallback((id: string) => {
     setClips((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
   const value = useMemo(
-    () => ({ clips, loaded, refreshing, error, isAdmin, refresh, addClip, removeClip }),
-    [clips, loaded, refreshing, error, isAdmin, refresh, addClip, removeClip],
+    () => ({ clips, loaded, refreshing, error, isAdmin, refresh, addClip, replaceClip, removeClip }),
+    [clips, loaded, refreshing, error, isAdmin, refresh, addClip, replaceClip, removeClip],
   );
 
   return <ClipsContext.Provider value={value}>{children}</ClipsContext.Provider>;

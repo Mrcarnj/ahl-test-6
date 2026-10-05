@@ -32,7 +32,7 @@ import {
   type UploadHandle,
 } from '@/src/lib/clipUpload';
 import {
-  CLIP_TAGS,
+  CLIP_TAG_CATEGORIES,
   CLIPS_BUCKET,
   formatClipDuration,
   insertClip,
@@ -326,7 +326,7 @@ export default function UploadClipScreen() {
 
         {/* 4. Tags */}
         <Text style={styles.label}>Tags {tags.length > 0 ? `(${tags.length})` : ''}</Text>
-        <TagPicker tags={CLIP_TAGS} selected={tags} onToggle={uploading ? () => {} : toggleTag} />
+        <TagPicker categories={CLIP_TAG_CATEGORIES} selected={tags} onToggle={uploading ? () => {} : toggleTag} />
 
         {uploading ? (
           <View style={styles.progressBox}>

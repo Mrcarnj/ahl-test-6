@@ -10,42 +10,73 @@ import { supabase } from './supabase';
 export const CLIPS_BUCKET = 'clips';
 
 /**
- * The only tags a clip can carry. Edit this list to change what officials can
- * pick; existing clips keep whatever tags they were saved with.
+ * The only tags a clip can carry, grouped for the upload and edit forms.
+ * Each category is alphabetical. Edit these lists to change what officials
+ * can pick; existing clips keep whatever tags they were saved with (a retired
+ * tag still shows on its clips, in the filter bar and on the edit screen).
+ *
+ * Penalty names follow the rulebook (Rules 39-75, plus the Major, Match and
+ * Game Misconduct penalty types), except where a tag already
+ * existed under a shorter name (Head Contact, Goaltender Interference, Too
+ * Many Men, Delay of Game, Unsportsmanlike) - renaming it would detach it
+ * from the clips already carrying it.
  */
-export const CLIP_TAGS = [
-  'Goal Review',
-  'Goaltender Interference',
-  'Offside',
-  'Icing',
-  'Too Many Men',
-  'Hand Pass',
-  'High Stick (Puck)',
-  'Boarding',
-  'Charging',
-  'Checking from Behind',
-  'Cross-Checking',
-  'Elbowing',
-  'Fighting',
-  'Head Contact',
-  'High-Sticking',
-  'Holding',
-  'Hooking',
-  'Interference',
-  'Roughing',
-  'Slashing',
-  'Tripping',
-  'Delay of Game',
-  'Unsportsmanlike',
-  'Abuse of Officials',
-  'Faceoff',
-  'Positioning',
-  'Good Call',
-  'Missed Call',
-  'Training',
+export const CLIP_TAG_CATEGORIES = [
+  {
+    name: 'Penalty',
+    tags: [
+      'Abuse of Officials',
+      'Boarding',
+      'Butt-Ending',
+      'Charging',
+      'Checking from Behind',
+      'Clipping',
+      'Cross-Checking',
+      'Delay of Game',
+      'Diving/Embellishment',
+      'Elbowing',
+      'Fighting',
+      'Game Misconduct',
+      'Goaltender Interference',
+      'Handling the Puck',
+      'Head Contact',
+      'Head-Butting',
+      'High-Sticking',
+      'Holding',
+      'Hooking',
+      'Interference',
+      'Kicking',
+      'Kneeing',
+      'Leaving the Bench',
+      'Major',
+      'Match',
+      'Physical Abuse of Officials',
+      'Roughing',
+      'Slashing',
+      'Slew-Footing',
+      'Spearing',
+      'Throwing Equipment',
+      'Too Many Men',
+      'Tripping',
+      'Unsportsmanlike',
+    ],
+  },
+  {
+    name: 'Gameplay',
+    tags: ['Challenge', 'Faceoff', 'Goal', 'Icing', 'No Goal', 'Offside', 'Review'],
+  },
+  {
+    name: 'Miscellaneous',
+    tags: ['Dangerous', 'Missed Call', 'Positioning', 'Weird Play', 'Wrong Call'],
+  },
 ] as const;
 
-export type ClipTag = (typeof CLIP_TAGS)[number];
+export type ClipTagCategory = { name: string; tags: readonly string[] };
+
+/** Every pickable tag, in category order. */
+export const CLIP_TAGS = CLIP_TAG_CATEGORIES.flatMap((c) => c.tags);
+
+export type ClipTag = (typeof CLIP_TAG_CATEGORIES)[number]['tags'][number];
 
 export type ClipGame = {
   id: number;
@@ -74,6 +105,19 @@ export type Clip = {
   game: ClipGame | null;
 };
 
+/**
+ * Supabase hands back query errors as plain objects, not `Error`s, so the
+ * screens' `e instanceof Error ? e.message : 'Please try again.'` hid the
+ * real reason. Wrap them so the message gets through.
+ */
+function toError(error: { message?: string; code?: string }): Error {
+  // PGRST116: `.single()` matched no row - for an update, RLS refused it.
+  if (error.code === 'PGRST116') {
+    return new Error('This clip was deleted, or you don’t have permission to change it.');
+  }
+  return new Error(error.message || 'Something went wrong.');
+}
+
 const CLIP_SELECT =
   'id, schedule_id, uploaded_by, uploader_name, title, notes, tags, video_path, ' +
   'thumbnail_path, duration_seconds, size_bytes, created_at, ' +
@@ -89,7 +133,7 @@ export async function fetchClips(): Promise<Clip[]> {
     .select(CLIP_SELECT)
     .order('created_at', { ascending: false })
     .limit(CLIP_LIST_LIMIT);
-  if (error) throw error;
+  if (error) throw toError(error);
   return (data ?? []) as unknown as Clip[];
 }
 
@@ -99,7 +143,7 @@ export async function fetchClip(id: string): Promise<Clip | null> {
     .select(CLIP_SELECT)
     .eq('id', id)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toError(error);
   return (data as unknown as Clip | null) ?? null;
 }
 
@@ -121,7 +165,30 @@ export async function insertClip(clip: NewClip): Promise<Clip> {
     .insert(clip)
     .select(CLIP_SELECT)
     .single();
-  if (error) throw error;
+  if (error) throw toError(error);
+  return data as unknown as Clip;
+}
+
+/** The fields an edit may change (the DB grants UPDATE on only these). */
+export type ClipEdit = {
+  title: string;
+  notes: string | null;
+  tags: string[];
+};
+
+/**
+ * Saves an edit by the uploader or an admin (sql/2026-10-05_clips_edit.sql).
+ * RLS hides the row from anyone else, so their update matches nothing and
+ * `.single()` throws rather than silently "succeeding".
+ */
+export async function updateClip(id: string, changes: ClipEdit): Promise<Clip> {
+  const { data, error } = await supabase
+    .from('clips')
+    .update(changes)
+    .eq('id', id)
+    .select(CLIP_SELECT)
+    .single();
+  if (error) throw toError(error);
   return data as unknown as Clip;
 }
 
@@ -131,7 +198,7 @@ export async function deleteClip(clip: Pick<Clip, 'id' | 'video_path' | 'thumbna
   const { error: storageError } = await supabase.storage.from(CLIPS_BUCKET).remove(paths);
   if (storageError) console.warn('⚠️ CLIPS: Could not remove clip files:', storageError);
   const { error } = await supabase.from('clips').delete().eq('id', clip.id);
-  if (error) throw error;
+  if (error) throw toError(error);
   forgetSignedUrls(paths);
 }
 
@@ -166,7 +233,7 @@ export async function getSignedUrls(paths: string[]): Promise<Record<string, str
     const { data, error } = await supabase.storage
       .from(CLIPS_BUCKET)
       .createSignedUrls(missing.slice(i, i + SIGN_BATCH_SIZE), SIGNED_URL_TTL_SECONDS);
-    if (error) throw error;
+    if (error) throw toError(error);
     const expiresAt = Date.now() + SIGNED_URL_TTL_SECONDS * 1000;
     for (const item of data ?? []) {
       if (item.path && item.signedUrl) {

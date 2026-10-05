@@ -46,8 +46,6 @@ const TestScheduleScreen = () => {
     const externalLinks = [
         { title: 'Rulebook', screenName: "/(protected)/(tabs)/rulebook" },
         { title: 'Situation Book', screenName: "/(protected)/(tabs)/situation-book" },
-        { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
-        { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
         { title: 'AHL Google Drive', url: 'https://drive.google.com/drive/folders/1AIzYzQHyOxXqt1kHhKYbsHEORgjS9lVz' },
     ];
 

@@ -1,7 +1,6 @@
 // app/(protected)/game/[id].tsx
 import { buildVideoReviewUrl } from "@/src/lib/reportForms";
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useClips } from "@/src/providers/ClipsProvider";
 import { useRoster } from "@/src/providers/RosterProvider";
 import {
     formatGameDate2,
@@ -312,7 +311,6 @@ const GameDetails = () => {
   const { myGames } = useSchedule();
   const { allRosters, roster } = useRoster();
   const { user } = useAuth();
-  const { clips } = useClips();
   const [activeTab, setActiveTab] = useState("crew");
 
   // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
@@ -326,8 +324,6 @@ const GameDetails = () => {
   if (!game) {
     return <Text>Game not found</Text>;
   }
-
-  const gameClipCount = clips.filter((c) => c.schedule_id === game.id).length;
 
   const generateUrl = (gameId: any, isGamesheet = false) => {
     const baseNumericID = 1029071;
@@ -947,22 +943,6 @@ const GameDetails = () => {
           <TouchableOpacity
             style={styles.floatingButtonSmall}
             onPress={() =>
-              router.push({
-                pathname: "/(protected)/(tabs)/clips/game/[scheduleId]",
-                params: { scheduleId: String(game.id) },
-              })
-            }
-          >
-            <View style={styles.iconContainerSmall}>
-              <Ionicons name="film-outline" size={17} color="#ffffff" />
-            </View>
-            <Text style={styles.buttonTextSmall}>
-              {gameClipCount > 0 ? `Clips (${gameClipCount})` : "Clips"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.floatingButtonSmall}
-            onPress={() =>
               Linking.openURL(buildVideoReviewUrl(game, reportOfficial))
             }
           >
@@ -1010,6 +990,14 @@ const GameDetails = () => {
   );
 };
 
+// The Incident Report / Video Review buttons sit absolutely in the card's
+// bottom corners, so the arena row is padded from these to stay clear of them.
+const CARD_PADDING = 20;
+const BOTTOM_BUTTON_INSET = 10;
+const BOTTOM_BUTTON_WIDTH = 80;
+const ARENA_ROW_INSET =
+  BOTTOM_BUTTON_INSET + BOTTOM_BUTTON_WIDTH + 8 - CARD_PADDING;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1036,7 +1024,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 10,
-    padding: 20,
+    padding: CARD_PADDING,
     marginBottom: 10,
     shadowColor: "#ffffff",
     shadowOffset: {
@@ -1222,8 +1210,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     position: "absolute",
     bottom: 14,
-    left: 10,
-    right: 10,
+    left: BOTTOM_BUTTON_INSET,
+    right: BOTTOM_BUTTON_INSET,
   },
   floatingButton: {
     alignItems: "center",
@@ -1234,6 +1222,7 @@ const styles = StyleSheet.create({
   floatingButtonSmall: {
     alignItems: "center",
     padding: 2,
+    width: BOTTOM_BUTTON_WIDTH,
   },
   iconContainerSmall: {
     backgroundColor: "#ff6600",
@@ -1469,7 +1458,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     // Keeps the row clear of the Incident Report / Video Review buttons in
     // the card's bottom corners; long arena names wrap instead.
-    paddingHorizontal: 65,
+    paddingHorizontal: ARENA_ROW_INSET,
   },
   arenaNameButton: {
     flexShrink: 1,

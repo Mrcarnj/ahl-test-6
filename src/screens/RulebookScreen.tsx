@@ -13,9 +13,14 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PdfViewer from "@/src/components/PdfViewer";
-
-type BookPage = { page: number; text: string };
+import {
+  buildRuleRefs,
+  formatRuleRef,
+  ruleRefAt,
+  type BookPage,
+} from "@/src/lib/rulebookRefs";
 
 // ~860 KB of extracted text: loaded when the screen opens rather than bundled
 // into the app's first download (it was ~20% of the web bundle).
@@ -31,8 +36,12 @@ type SearchHit = {
   page: number;
   sectionTitle: string;
   ruleTitle: string | null;
+  /** Where on the page the hit is, e.g. "75.4 (iii)". */
+  ruleRef: string | null;
   snippet: string;
   isInfractionSection: boolean;
+  /** Only a typo-tolerant match ("incident" for "incite"); listed last. */
+  isFuzzy: boolean;
 };
 
 const normalizeWord = (value: string) =>
@@ -68,12 +77,22 @@ const levenshteinDistance = (a: string, b: string) => {
   return dp[a.length][b.length];
 };
 
-const matchesFuzzy = (pageText: string, searchTerm: string) => {
+type TextMatch = { index: number; length: number; fuzzy: boolean };
+
+const allMatches = (text: string, pattern: RegExp, fuzzy = false): TextMatch[] =>
+  Array.from(text.matchAll(pattern), (m) => ({
+    index: m.index ?? 0,
+    length: m[0].length,
+    fuzzy,
+  }));
+
+// Every place the term matches in the text, by the first rule below that finds
+// anything (so a typo-tolerant match is only used when nothing exact is there).
+const findMatches = (pageText: string, searchTerm: string): TextMatch[] => {
   const rawTerm = searchTerm.toLowerCase().trim();
   const normalizedTerm = normalizeWord(rawTerm);
-  if (!normalizedTerm) return false;
+  if (!normalizedTerm) return [];
 
-  const lowerText = pageText.toLowerCase();
   const termParts = rawTerm.split(/[^a-z0-9]+/).filter(Boolean);
 
   if (termParts.length > 1) {
@@ -81,19 +100,24 @@ const matchesFuzzy = (pageText: string, searchTerm: string) => {
     const joinedPattern = `\\b${termParts
       .map(escapeRegex)
       .join("[\\s-]*")}[a-z0-9-]*\\b`;
-    if (new RegExp(joinedPattern, "i").test(lowerText)) return true;
+    const joined = allMatches(pageText, new RegExp(joinedPattern, "gi"));
+    if (joined.length > 0) return joined;
   }
 
   // Prefer token boundary matching so "rough" matches "roughing" but not "through".
-  const stemRegex = new RegExp(`\\b${escapeRegex(rawTerm)}[a-z0-9]*\\b`, "i");
-  if (stemRegex.test(lowerText)) return true;
+  // A final "e" is dropped so "incite" also finds "inciting" and "incitement"
+  // here rather than only as a fuzzy match.
+  const stem =
+    termParts.length === 1 && rawTerm.length >= 4 && rawTerm.endsWith("e")
+      ? rawTerm.slice(0, -1)
+      : rawTerm;
+  const stemRegex = new RegExp(`\\b${escapeRegex(stem)}[a-z0-9]*\\b`, "gi");
+  const stems = allMatches(pageText, stemRegex);
+  if (stems.length > 0) return stems;
 
-  const words = pageText
-    .split(/\s+/)
-    .map(normalizeWord)
-    .filter((word) => word.length >= 3);
-
-  return words.some((word) => {
+  return allMatches(pageText, /\S+/g, true).filter(({ index, length }) => {
+    const word = normalizeWord(pageText.slice(index, index + length));
+    if (word.length < 3) return false;
     if (word === normalizedTerm) return true;
     if (word.startsWith(normalizedTerm)) return true;
     if (normalizedTerm.length >= 5 && normalizedTerm.startsWith(word)) {
@@ -109,6 +133,9 @@ const matchesFuzzy = (pageText: string, searchTerm: string) => {
     return levenshteinDistance(compareChunk, normalizedTerm) <= maxDistance;
   });
 };
+
+const matchesFuzzy = (pageText: string, searchTerm: string) =>
+  findMatches(pageText, searchTerm).length > 0;
 
 const toTitleCase = (raw: string) =>
   raw
@@ -186,33 +213,28 @@ const getSectionTitle = (pageText: string) => {
   return null;
 };
 
-const getSnippet = (pageText: string, term: string) => {
-  const normalized = pageText.replace(/\s+/g, " ");
-  const lower = normalized.toLowerCase();
-  const lowerTerm = term.toLowerCase().trim();
-  const idx = lower.indexOf(lowerTerm);
-  if (idx === -1) {
-    const words = normalized.split(" ");
-    const matchedWord = words.find((word) =>
-      matchesFuzzy(word, lowerTerm),
-    );
-    if (!matchedWord) return normalized.slice(0, 140).trim();
-    const fuzzyIndex = lower.indexOf(matchedWord.toLowerCase());
-    if (fuzzyIndex === -1) return normalized.slice(0, 140).trim();
-    const start = Math.max(0, fuzzyIndex - 45);
-    const end = Math.min(normalized.length, fuzzyIndex + matchedWord.length + 75);
-    const prefix = start > 0 ? "..." : "";
-    const suffix = end < normalized.length ? "..." : "";
-    return `${prefix}${normalized.slice(start, end).trim()}${suffix}`;
-  }
-  const start = Math.max(0, idx - 45);
-  const end = Math.min(normalized.length, idx + lowerTerm.length + 75);
+const getSnippet = (pageText: string, { index, length }: TextMatch) => {
+  const start = Math.max(0, index - 45);
+  const end = Math.min(pageText.length, index + length + 75);
   const prefix = start > 0 ? "..." : "";
-  const suffix = end < normalized.length ? "..." : "";
-  return `${prefix}${normalized.slice(start, end).trim()}${suffix}`;
+  const suffix = end < pageText.length ? "..." : "";
+  return `${prefix}${pageText.slice(start, end).replace(/\s+/g, " ").trim()}${suffix}`;
 };
 
+// Pages that aren't rule text. Their own numbered lists ("(i) Butt-ending")
+// must not read as items of whichever rule came last.
+const NON_RULE_SECTIONS = new Set([
+  "Table of Contents",
+  "Reference Tables",
+  "Index",
+  "Glossary of Terms",
+  "AHL Schedule",
+]);
+
 export default function Rulebook() {
+  // No header above this screen, so keep the PDF out from under the status
+  // bar / Dynamic Island ourselves.
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -243,6 +265,14 @@ export default function Rulebook() {
       }, {}),
     [ruleBookText],
   );
+  const ruleRefs = useMemo(
+    () =>
+      buildRuleRefs(
+        ruleBookText,
+        (page) => !NON_RULE_SECTIONS.has(sectionByPage[page] ?? ""),
+      ),
+    [ruleBookText, sectionByPage],
+  );
 
   const handleSearch = () => {
     const trimmedTerm = searchTerm.trim();
@@ -252,21 +282,33 @@ export default function Rulebook() {
       return;
     }
 
+    // One result per rule a page's hits fall under, so two hits in 75.3 make
+    // one row but a hit in 75.3 and one in 75.4 make two.
     const results: SearchHit[] = ruleBookText
-      .filter((page) => matchesFuzzy(page.text, trimmedTerm))
-      .map((page) => {
-        const ruleTitle = getRuleTitle(page.text, trimmedTerm);
-        return {
-          page: page.page,
-          sectionTitle: sectionByPage[page.page] ?? `Page ${page.page}`,
-          ruleTitle,
-          snippet: getSnippet(page.text, trimmedTerm),
-          isInfractionSection: /infraction(s)?/i.test(
-            sectionByPage[page.page] ?? "",
-          ),
-        };
+      .flatMap((page) => {
+        const sectionTitle = sectionByPage[page.page] ?? `Page ${page.page}`;
+        const hits = new Map<string, SearchHit>();
+        for (const match of findMatches(page.text, trimmedTerm)) {
+          const ref = ruleRefAt(ruleRefs, page.page, match.index);
+          const ruleRef = ref ? formatRuleRef(ref) : null;
+          const key = ruleRef ?? "";
+          if (hits.has(key)) continue;
+          hits.set(key, {
+            page: page.page,
+            sectionTitle,
+            ruleTitle: ref
+              ? `Rule ${ref.rule} - ${toTitleCase(ref.ruleName)}`
+              : getRuleTitle(page.text, trimmedTerm),
+            ruleRef,
+            snippet: getSnippet(page.text, match),
+            isInfractionSection: /infraction(s)?/i.test(sectionTitle),
+            isFuzzy: match.fuzzy,
+          });
+        }
+        return Array.from(hits.values());
       })
       .sort((a, b) => {
+        if (a.isFuzzy !== b.isFuzzy) return a.isFuzzy ? 1 : -1;
         if (a.isInfractionSection !== b.isInfractionSection) {
           return a.isInfractionSection ? -1 : 1;
         }
@@ -310,7 +352,7 @@ export default function Rulebook() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       keyboardVerticalOffset={90}
     >
       {loadError && (
@@ -369,6 +411,9 @@ export default function Rulebook() {
             <AntDesign name="up" size={24} color="#ff6600" />
           </TouchableOpacity>
           <Text style={styles.resultInfo}>
+            {searchResults[currentResultIndex].ruleRef
+              ? `${searchResults[currentResultIndex].ruleRef} · `
+              : ""}
             Page {searchResults[currentResultIndex].page} ({currentResultIndex + 1} of {searchResults.length})
           </Text>
           <TouchableOpacity onPress={() => setResultsVisible(true)}>
@@ -398,21 +443,29 @@ export default function Rulebook() {
             </View>
             <ScrollView showsVerticalScrollIndicator>
               {searchResults.map((result, index) => (
+                <React.Fragment key={`${result.page}-${index}`}>
+                {result.isFuzzy && !searchResults[index - 1]?.isFuzzy && (
+                  <Text style={styles.resultDivider}>Similar matches</Text>
+                )}
                 <TouchableOpacity
-                  key={`${result.page}-${index}`}
                   style={[
                     styles.resultRow,
                     index === currentResultIndex && styles.resultRowActive,
                   ]}
                   onPress={() => goToResult(index)}
                 >
-                  <Text style={styles.resultTitle}>{result.sectionTitle}</Text>
+                  <Text style={styles.resultTitle}>
+                    {result.ruleRef
+                      ? `${result.sectionTitle} - ${result.ruleRef}`
+                      : result.sectionTitle}
+                  </Text>
                   <Text style={styles.resultMeta}>
                     {result.ruleTitle ? `${result.ruleTitle} - ` : ""}
                     Page {result.page}
                   </Text>
                   <Text style={styles.resultSnippet}>{result.snippet}</Text>
                 </TouchableOpacity>
+                </React.Fragment>
               ))}
             </ScrollView>
           </View>
@@ -539,6 +592,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  resultDivider: {
+    color: "#888",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 8,
   },
   resultMeta: {
     color: "#ff6600",

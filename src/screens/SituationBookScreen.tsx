@@ -1,4 +1,5 @@
 // src/screens/SituationBookScreen.tsx
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PdfViewer from "@/src/components/PdfViewer";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import React, { useEffect, useState } from "react";
@@ -33,6 +34,9 @@ const SITUATION_BOOK_URL =
   "https://zxjzdtepjpnunjkqrsjy.supabase.co/storage/v1/object/public/rules/2026-27%20NHL%20Situation%20Handbook.pdf";
 
 export default function SituationBook() {
+  // No header above this screen, so keep the PDF out from under the status
+  // bar / Dynamic Island ourselves.
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -93,7 +97,7 @@ export default function SituationBook() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       keyboardVerticalOffset={90}
     >
       {loadError && (

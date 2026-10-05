@@ -1,6 +1,7 @@
 // app/(protected)/game/[id].tsx
 import { buildVideoReviewUrl } from "@/src/lib/reportForms";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useClips } from "@/src/providers/ClipsProvider";
 import { useRoster } from "@/src/providers/RosterProvider";
 import {
     formatGameDate2,
@@ -311,6 +312,7 @@ const GameDetails = () => {
   const { myGames } = useSchedule();
   const { allRosters, roster } = useRoster();
   const { user } = useAuth();
+  const { clips } = useClips();
   const [activeTab, setActiveTab] = useState("crew");
 
   // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
@@ -324,6 +326,8 @@ const GameDetails = () => {
   if (!game) {
     return <Text>Game not found</Text>;
   }
+
+  const gameClipCount = clips.filter((c) => c.schedule_id === game.id).length;
 
   const generateUrl = (gameId: any, isGamesheet = false) => {
     const baseNumericID = 1029071;
@@ -939,6 +943,22 @@ const GameDetails = () => {
               />
             </View>
             <Text style={styles.buttonTextSmall}>Incident Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.floatingButtonSmall}
+            onPress={() =>
+              router.push({
+                pathname: "/(protected)/(tabs)/clips/game/[scheduleId]",
+                params: { scheduleId: String(game.id) },
+              })
+            }
+          >
+            <View style={styles.iconContainerSmall}>
+              <Ionicons name="film-outline" size={17} color="#ffffff" />
+            </View>
+            <Text style={styles.buttonTextSmall}>
+              {gameClipCount > 0 ? `Clips (${gameClipCount})` : "Clips"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.floatingButtonSmall}

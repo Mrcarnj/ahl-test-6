@@ -9,7 +9,7 @@
 // suffix — such a file would register as a route, not as the layout.)
 
 import { Tabs } from "expo-router";
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { isWeb } from "@/src/lib/platform";
 import WebShell from "@/src/components/nav/WebShell";
 
@@ -60,6 +60,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="clips"
+        options={{
+          tabBarLabel: "Clips",
+          // Same icon as the game page's Video Review button.
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="videocam-outline" size={26} color={color} />
+          ),
+        }}
+      />
       {/*
         Playoffs are hidden for the 2026-27 regular season. The routes still
         exist; `href: null` just drops the tab from the bar. Restore by putting
@@ -73,8 +83,8 @@ export default function TabsLayout() {
       />
       {/*
         Rulebook and Situation Book are top-level routes so the web sidebar can
-        link to them directly. The native tab bar only has room for four, so
-        there they stay hidden and are reached from the home screen instead.
+        link to them directly. The native tab bar is full, so there they stay
+        hidden and are reached from the home screen instead.
       */}
       <Tabs.Screen name="rulebook" options={{ href: null }} />
       <Tabs.Screen name="situation-book" options={{ href: null }} />

@@ -5,8 +5,8 @@ import { formatGameTime, useSchedule } from '@/src/providers/ScheduleProvider';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDays, isToday as checkIsToday, differenceInDays, format, parse } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, AppState, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
@@ -20,8 +20,13 @@ import { isWeb } from '@/src/lib/platform';
  * Officials' `myGames` still contains last season's games (including its
  * playoffs), so without this bound they leak onto the current season's first
  * reports. Bump both when the season rolls over.
+ *
+ * START must be a MONDAY: reports are due on Mondays, and every due date is a
+ * whole number of 14-day steps from it. 2025-26 used Sept 22, a Monday that
+ * year; carried over unchanged to 2026-27 it fell on a Tuesday, and every
+ * report showed as due a day late.
  */
-const EXPENSE_SEASON_START = new Date(2026, 8, 22); // September 22, 2026
+const EXPENSE_SEASON_START = new Date(2026, 8, 21); // Monday, September 21, 2026
 const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
 
 
@@ -102,10 +107,21 @@ const TestScheduleScreen = () => {
         return format(date, 'EEEE, MMMM d, yyyy');
     };
 
+    // Today's date, refreshed on every return to the app, so the due date
+    // rolls over ("TOMORROW" -> "TODAY") without a restart. The home tab stays
+    // mounted for the life of the app, so computing it once on mount went stale
+    // overnight.
+    const [todayKey, setTodayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') setTodayKey(format(new Date(), 'yyyy-MM-dd'));
+        });
+        return () => sub.remove();
+    }, []);
+
     const expenseReportData = useMemo(() => {
         const endDate = EXPENSE_SEASON_END;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);  // Set to start of day for accurate comparison
+        const today = parse(todayKey, 'yyyy-MM-dd', new Date()); // local midnight
         // Copy, so the loop below can never advance the shared constant.
         let nextDueDate = new Date(EXPENSE_SEASON_START);
     
@@ -171,7 +187,7 @@ const TestScheduleScreen = () => {
             rangeStartDate: null, 
             rangeEndDate: null 
         };
-    }, []);
+    }, [todayKey]);
 
     const gamesOnExpenseReport = useMemo(() => {
         const { rangeStartDate, rangeEndDate } = expenseReportData;

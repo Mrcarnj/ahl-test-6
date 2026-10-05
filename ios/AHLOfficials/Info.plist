@@ -60,6 +60,8 @@
     </dict>
     <key>NSContactsUsageDescription</key>
     <string>Allow AHL Officials to access your contacts to add officials' contact information.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Allow AHL Officials to access your videos so you can upload game clips for your crew.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

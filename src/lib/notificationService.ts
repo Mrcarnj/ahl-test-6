@@ -1,5 +1,6 @@
 import { parse } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { enUS } from 'date-fns/locale/en-US';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -27,7 +28,8 @@ Notifications.setNotificationHandler({
     // in-app pop-up (NotificationProvider), so skip the OS banner for it.
     // When the app is closed or backgrounded this handler is not consulted and
     // the OS shows its normal banner; tapping it opens the game.
-    const isGameChange = data?.type === 'game_change';
+    // Same for a crew member's new clip.
+    const isGameChange = data?.type === 'game_change' || data?.type === 'clip_uploaded';
     return {
       shouldPlaySound: true,
       shouldSetBadge: true,
@@ -145,6 +147,25 @@ export async function registerForPushNotificationsAsync(authId: string) {
   }
 }
 
+/**
+ * "7:00 PM CDT" in the home arena's time zone. `gametime` carries a numeric
+ * offset (`19:00:00-05`), which alone can't tell CDT from EST, so resolve the
+ * real start instant and name the zone from `teams.timezone`.
+ */
+function formatGameDayTime(game: Schedule): string {
+  const m = game.gametime?.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?([+-]\d{2})(?::?(\d{2}))?$/);
+  if (!m) return game.gametime;
+  const [, h, min, sec = '00', offH, offM = '00'] = m;
+  const start = new Date(`${game.gamedate}T${h.padStart(2, '0')}:${min}:${sec}${offH}:${offM}`);
+  if (Number.isNaN(start.getTime())) return game.gametime;
+  const zone = game.homeTeamData?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try {
+    return formatInTimeZone(start, zone, 'h:mm a zzz', { locale: enUS });
+  } catch {
+    return game.gametime;
+  }
+}
+
 export async function scheduleGameDayNotification(game: Schedule) {
   try {
     // Parse game date and time
@@ -164,8 +185,14 @@ export async function scheduleGameDayNotification(game: Schedule) {
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "🏒 IT'S GAMEDAY! 🏒",
-        body: `${game.gametime} \n${game.awayTeamData?.city} @ ${game.homeTeamData?.city}\n${game.homeTeamData?.arenaname}`,
-        data: { gameId: game.gameid },
+        body: [
+          formatGameDayTime(game),
+          `${game.awayTeamData?.city ?? game.awayteam} @ ${game.homeTeamData?.city ?? game.hometeam}`,
+          game.homeTeamData?.arenaname,
+        ].filter(Boolean).join('\n'),
+        // `type` keeps NotificationProvider from treating it as a game change
+        // (which would kick off an iCal sync); tapping still opens the game.
+        data: { gameId: game.gameid, type: 'game_day' },
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: localNotificationDate },
     });

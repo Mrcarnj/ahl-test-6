@@ -44,9 +44,17 @@ export const NAV_ITEMS: NavItem[] = [
     native: true,
     web: true,
   },
+  {
+    name: 'clips',
+    label: 'Clips',
+    icon: 'video-camera',
+    href: '/(protected)/(tabs)/clips',
+    native: true,
+    web: true,
+  },
   // Rulebook and Situation Book are sidebar links on web. On native they stay
   // reachable as buttons on the home screen, so they are hidden from the tab
-  // bar (which only has room for four) but the routes are identical.
+  // bar (which is full) but the routes are identical.
   {
     name: 'rulebook',
     label: 'Rulebook',

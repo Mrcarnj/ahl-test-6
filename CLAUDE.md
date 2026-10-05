@@ -49,7 +49,7 @@ File-based routing via expo-router. Route groups:
 |---|---|
 | `(auth)/` | Login screen — unauthenticated only |
 | `(loginflow)/` | One-time onboarding: password change, TOS, iCal setup |
-| `(protected)/(tabs)/` | Main app tabs: home, calendar, roster, profile (playoffs route exists but is hidden) |
+| `(protected)/(tabs)/` | Main app tabs: home, calendar, roster, clips, profile (playoffs route exists but is hidden) |
 | `(protected)/game/[id]` | Game detail (team rosters, arena, coaches) |
 | `(protected)/arena/[teamId]` | Arena map/info |
 | `(protected)/official/[rosterId]` | Official profile |
@@ -62,16 +62,19 @@ File-based routing via expo-router. Route groups:
 Providers wrap the entire app in this order (outermost first):
 
 ```
-AuthProvider
-  └── RosterProvider
-        └── ScheduleProvider
+RosterProvider
+  └── ScheduleProvider
+        └── ClipsProvider
               └── NotificationProvider
 ```
+
+(AuthProvider wraps all of it from the root layout.)
 
 - **AuthProvider** — Supabase session, persists to AsyncStorage, emits `APP_REFRESH_EVENT` on startup and foreground-return (debounced: 5 min gap, 10 min min-background).
 - **RosterProvider** — fetches the current official's row from `roster` table + all officials; 5-min AsyncStorage cache keyed by `rosterCache_<userId>`.
 - **ScheduleProvider** — the central data hub. Listens for `APP_REFRESH_EVENT` and orchestrates the full sync pipeline (see below). Exposes `allGames`, `myGames`, `teamRostersRegularSeason`, sync status flags. (`teamRosters` and `playoffBracket` are still on the context but stay empty/null while playoffs are hidden.)
-- **NotificationProvider** — registers push token, manages permissions.
+- **ClipsProvider** — every clip the official can see; AsyncStorage cache, refetch on `APP_REFRESH_EVENT`, Realtime on `clips`. Emits `CLIPS_UPLOADED_EVENT` for new crew clips (see Clips below).
+- **NotificationProvider** — registers push token, manages permissions, schedules the 8 AM game-day reminders from `myGames`, and shows the `GameChangeAlert` pop-ups (game changes and new clips). It must stay innermost: it reads `useSchedule()`, and when it wrapped the others that returned the empty default context, so no reminder was ever scheduled.
 
 ### Data sync pipeline
 
@@ -87,6 +90,13 @@ and runs the sync behind it (on foreground-return it just runs the sync):
    - `syncPlayoffBracketToDb` — disabled while playoffs are hidden.
 
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.
+
+Stats and standings reach other officials' open apps the same way: Realtime on
+`teamRosters` and `teams` (`sql/2026-10-05_realtime_rosters_standings.sql`)
+reloads them once a burst of changes settles, and every return to the app
+(at most once a minute) and every pull-to-refresh re-reads both from the DB.
+Before this, rosters loaded only at startup, so only a full restart showed
+another official's nightly sync.
 
 **Change pop-ups.** Every applied schedule load is diffed against the last
 schedule the official saw (`src/lib/scheduleChanges.ts`, persisted per user in
@@ -107,6 +117,40 @@ credentials, touches no database and runs on no schedule. (It previously also
 scraped theahl.com on a cron into `teamRosters`; that duplicated
 `playerStatsSync.ts` and was removed — the scrapers are in git history.)
 
+### Clips
+
+Officials upload game video to a game from their schedule (today or earlier),
+tag it from a preset list (`CLIP_TAGS` in `src/lib/clips.ts`), and the game's
+crew sees it in their Clips tab. Schema, RLS and bucket are in
+`sql/2026-10-04_clips.sql` (rollback beside it).
+
+- **Data:** `clips` table + private `clips` bucket. Files live at
+  `{schedule_id}/{clip_id}.{ext}` and `{schedule_id}/{clip_id}.jpg`
+  (thumbnail, made on device). The first path segment is what the storage
+  policies check.
+- **Access:** view = the game's crew (live from `schedule`) + admins
+  (`isAdmin`/`ahlAdmin`); upload = crew only; delete = uploader or admin.
+  `uploaded_by`/`uploader_name` are set by a trigger, never by the client.
+- **Speed:** lists load rows + batch-signed thumbnail URLs only (cached in
+  memory, images disk-cached by expo-image under the storage path). The video
+  URL is signed when the player opens. Search/filter run on the loaded list.
+- **Upload** (`src/lib/clipUpload.ts`, web sibling `.web.ts`): PUT to a signed
+  upload URL with RN's XHR and a `{ uri }` body (read natively, real
+  `upload.onprogress`; expo-file-system's upload task never reported
+  progress), files first, then the
+  row, so nobody is alerted to a clip whose video isn't there yet. iOS
+  transcodes to H.264 640x480 (iPhone HEVC won't play on Android/web); it
+  needs both `videoExportPreset` and `videoQuality`, since trimming
+  (`allowsEditing`) ignores the preset.
+- **Alerts:** the uploader's device pushes `type: 'clip_uploaded'` to the
+  crew. While the app is open, ClipsProvider's Realtime + a per-user
+  "newest clip seen" watermark (`clipsSeenAt_v1_<auth_id>`) emit
+  `CLIPS_UPLOADED_EVENT`. NotificationProvider de-dupes by clip id and shows
+  Close / Go to Clips, landing on `clips/game/[scheduleId]`.
+- Max file size is 500 MB: the bucket's `file_size_limit`, `MAX_BYTES` in
+  `clips/upload.tsx`, and the project-wide upload limit in the Supabase
+  dashboard (Storage → Settings) all have to allow it.
+
 ### Key season IDs / tables
 
 Current season is **2026-27 = HockeyTech season_id 94**.
@@ -119,6 +163,9 @@ Current season is **2026-27 = HockeyTech season_id 94**.
 | Playoff bracket (inactive) | `playoff_bracket` | 92 (`PLAYOFF_BRACKET_SEASON_ID`) |
 
 When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`, and `EXPENSE_SEASON_START` / `EXPENSE_SEASON_END` in `src/app/(protected)/(tabs)/home/index.tsx`.
+`EXPENSE_SEASON_START` **must be a Monday** (reports are due Mondays, every 14
+days from it). Copying last year's date shifts the weekday: 2026-27 shipped
+with Sept 22, a Tuesday, and every report showed a day late.
 
 Those last two do double duty: they drive the 14-day expense-report cycle *and*
 bound which games can appear on a report. `myGames` keeps prior seasons, and the
@@ -218,8 +265,10 @@ Officials are matched by `roster.lastfirstfullname` (e.g., `"Dietrich, Mike"`). 
 it). anon gets nothing; a signed-in user sees data only if they have a `roster`
 row (`private.is_official()`). Officials can read everything the app shows and
 insert/update what the client-side syncs write; nothing grants DELETE except an
-official's own push tokens. Grants are explicit — a **new table gets no access
-until you add grants + policies** for it.
+official's own push tokens. Grants are explicit — but Supabase's default privileges still give
+anon/authenticated **every** privilege on a new table in `public`, so a new
+table needs `revoke all ... from anon, authenticated`, then exactly the grants
+it uses, plus RLS policies (see `sql/2026-10-04_clips.sql`).
 
 - `roster`: officials update only their own row, and only the onboarding
   columns (`ical_url`, `changedpassword`, `accepted_tos`, `tos_accepted_at`,

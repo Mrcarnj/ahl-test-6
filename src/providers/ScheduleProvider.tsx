@@ -197,6 +197,9 @@ const ScheduleContext = createContext<ScheduleContextType>({
     realtimeEnabled: false,
 });
 
+// Quiet period before a burst of teamRosters/teams Realtime events reloads.
+const LEAGUE_REALTIME_SETTLE_MS = 3000;
+
 export default function ScheduleProvider({ children }: PropsWithChildren) {
     const { roster } = useRoster();
     const [allGames, setAllGames] = useState<Schedule[]>([]);
@@ -543,6 +546,12 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         // or not the iCal sync succeeds. They used to run only after a
         // successful one, so a failed or timed-out iCal fetch skipped them.
         void runBackgroundSyncs();
+        // Pull-to-refresh shows the latest stats and standings from the DB
+        // straight away, whatever the iCal sync below does. (It used to reload
+        // only the games, and only after a successful iCal sync; rosters were
+        // never reloaded, so someone else's sync stayed invisible until a
+        // restart.)
+        if (source === 'manual') reloadLeagueDataRef.current();
 
         if (syncInFlightRef.current) {
             return { success: false, error: 'Schedule sync already in progress' };
@@ -602,17 +611,77 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const runBackgroundSyncsRef = useRef(runBackgroundSyncs);
     runBackgroundSyncsRef.current = runBackgroundSyncs;
 
-    // Check the daily stats sync on every return to the app. The foreground
-    // schedule sync (APP_REFRESH_EVENT) only fires after 10+ minutes in the
-    // background and is skipped while a load runs, so an official who opened
-    // the app at 4:58 and again at 5:05 would otherwise miss the morning sync.
-    // The check is three one-row queries; the sync itself runs once a day.
+    /**
+     * Re-reads player stats/rosters (`teamRosters`) and standings (`teams`,
+     * joined onto the games) from the DB. The nightly sync is run by whichever
+     * official opens the app first, so everyone else picks the numbers up here
+     * or through the Realtime subscription below.
+     */
+    const lastLeagueReloadAtRef = useRef(0);
+    const reloadLeagueData = (options?: { minIntervalMs?: number }) => {
+        const now = Date.now();
+        if (options?.minIntervalMs && now - lastLeagueReloadAtRef.current < options.minIntervalMs) return;
+        lastLeagueReloadAtRef.current = now;
+        void loadTeamRosters();
+        void fetchScheduleRef.current();
+    };
+    const reloadLeagueDataRef = useRef(reloadLeagueData);
+    reloadLeagueDataRef.current = reloadLeagueData;
+
+    // On every return to the app:
+    //  * check the daily stats sync. The foreground schedule sync
+    //    (APP_REFRESH_EVENT) only fires after 10+ minutes in the background and
+    //    is skipped while a load runs, so an official who opened the app at
+    //    4:58 and again at 5:05 would otherwise miss the morning sync. The
+    //    check is three one-row queries; the sync itself runs once a day.
+    //  * reload stats and standings, since the Realtime socket is usually
+    //    dropped while backgrounded and misses whatever changed meanwhile.
+    //    At most once a minute, so dismissing the photo picker or a system
+    //    sheet doesn't refetch ~1,600 rows.
     useEffect(() => {
         if (!roster?.auth_id) return;
         const sub = AppState.addEventListener('change', (next) => {
-            if (next === 'active') void runBackgroundSyncsRef.current();
+            if (next !== 'active') return;
+            void runBackgroundSyncsRef.current();
+            reloadLeagueDataRef.current({ minIntervalMs: 60 * 1000 });
         });
         return () => sub.remove();
+    }, [roster?.auth_id]);
+
+    // Live stats and standings while the app is open. The nightly sync writes
+    // every row, so one sync is ~1,600 events: reload once they've been quiet
+    // for a few seconds, and leave this device's own sync to reload at its end.
+    const loadTeamRostersRef = useRef(loadTeamRosters);
+    loadTeamRostersRef.current = loadTeamRosters;
+    useEffect(() => {
+        if (!roster?.auth_id) return;
+        const timers: Record<'rosters' | 'standings', ReturnType<typeof setTimeout> | null> = {
+            rosters: null,
+            standings: null,
+        };
+        const settle = (which: 'rosters' | 'standings') => {
+            const fire = () => {
+                if (statsSyncInFlightRef.current) {
+                    timers[which] = setTimeout(fire, LEAGUE_REALTIME_SETTLE_MS);
+                    return;
+                }
+                timers[which] = null;
+                if (which === 'rosters') void loadTeamRostersRef.current();
+                else void fetchScheduleRef.current();
+            };
+            if (timers[which]) clearTimeout(timers[which]!);
+            timers[which] = setTimeout(fire, LEAGUE_REALTIME_SETTLE_MS);
+        };
+        const channel = supabase
+            .channel('league-data-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'teamRosters' }, () => settle('rosters'))
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams' }, () => settle('standings'))
+            .subscribe();
+        return () => {
+            if (timers.rosters) clearTimeout(timers.rosters);
+            if (timers.standings) clearTimeout(timers.standings);
+            void supabase.removeChannel(channel);
+        };
     }, [roster?.auth_id]);
 
     /**

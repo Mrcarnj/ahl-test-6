@@ -5,12 +5,19 @@ export type GameChangeAlertData = {
   body: string;
   /** Omitted for summaries of several games; hides the "View Crew" button. */
   gameId?: string;
+  /** Replaces "View Crew" with another destination (e.g. a game's clips). */
+  action?: { label: string; href: string };
+  /** Label for the dismiss button. Defaults to "Okay". */
+  dismissLabel?: string;
+  /** Identifies the alert for de-duplication (e.g. `clip:<id>`). */
+  key?: string;
 };
 
 type Props = {
   alert: GameChangeAlertData | null;
   onDismiss: () => void;
   onViewCrew: (gameId: string) => void;
+  onAction: (href: string) => void;
 };
 
 /**
@@ -19,7 +26,7 @@ type Props = {
  * There is deliberately no backdrop-tap dismissal: the official has to
  * acknowledge it with "Okay" or jump to the game with "View Crew".
  */
-export default function GameChangeAlert({ alert, onDismiss, onViewCrew }: Props) {
+export default function GameChangeAlert({ alert, onDismiss, onViewCrew, onAction }: Props) {
   return (
     <Modal
       visible={alert !== null}
@@ -37,10 +44,17 @@ export default function GameChangeAlert({ alert, onDismiss, onViewCrew }: Props)
             style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
             onPress={onDismiss}
           >
-            <Text style={styles.primaryText}>Okay</Text>
+            <Text style={styles.primaryText}>{alert?.dismissLabel ?? 'Okay'}</Text>
           </Pressable>
 
-          {alert?.gameId ? (
+          {alert?.action ? (
+            <Pressable
+              style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
+              onPress={() => alert.action && onAction(alert.action.href)}
+            >
+              <Text style={styles.secondaryText}>{alert.action.label}</Text>
+            </Pressable>
+          ) : alert?.gameId ? (
             <Pressable
               style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
               onPress={() => alert.gameId && onViewCrew(alert.gameId)}

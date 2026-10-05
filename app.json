@@ -70,7 +70,16 @@
       ],
       "expo-contacts",
       "expo-background-fetch",
-      "expo-task-manager"
+      "expo-task-manager",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow AHL Officials to access your videos so you can upload game clips for your crew.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

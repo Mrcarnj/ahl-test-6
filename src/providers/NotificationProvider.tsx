@@ -1,10 +1,12 @@
+import { format } from 'date-fns';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, DeviceEventEmitter } from 'react-native';
 import { registerForPushNotificationsAsync, scheduleGameDayNotification } from '../lib/notificationService';
 import { performAutoSync } from '../lib/icalHockeySync';
-import { APP_REFRESH_EVENT, SCHEDULE_CHANGES_EVENT } from '../lib/events';
+import { APP_REFRESH_EVENT, CLIPS_UPLOADED_EVENT, SCHEDULE_CHANGES_EVENT } from '../lib/events';
+import { type Clip, clipAlertText, formatGameShort } from '../lib/clips';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
 import { isWeb } from '../lib/platform';
@@ -18,6 +20,8 @@ import type { ScheduleChanges } from '../lib/scheduleChanges';
 // changed field, so a different change to the same game still shows.
 const RECENT_ALERT_WINDOW_MS = 5 * 60 * 1000;
 
+const GAME_DAY_REMINDER_LIMIT = 30;
+
 // Which diff fields a push covers, read from its `changes` text
 // (e.g. `gametime: "19:00:00-04" → "19:30:00-04", referee2: "..." → "..."`).
 function pushedFields(changes: unknown): string[] {
@@ -30,6 +34,26 @@ function pushedFields(changes: unknown): string[] {
 }
 
 type RecentAlerts = Map<string, number>; // `${gameId}|${field}` -> when shown
+
+const clipsHref = (scheduleId: string | number) => `/(protected)/(tabs)/clips/game/${scheduleId}`;
+
+/** One pop-up per game: the clip itself if there's one, a count if several. */
+function buildClipAlerts(clips: Clip[]): GameChangeAlertData[] {
+  const byGame = new Map<number, Clip[]>();
+  clips.forEach(c => byGame.set(c.schedule_id, [...(byGame.get(c.schedule_id) ?? []), c]));
+  return [...byGame.entries()].map(([scheduleId, list]) => {
+    const { title, body } = list.length === 1
+      ? clipAlertText(list[0])
+      : { title: '🎬 New Clips', body: `${list.length} new clips were uploaded to ${formatGameShort(list[0].game)}.` };
+    return {
+      title,
+      body,
+      key: `clips:${list.map(c => c.id).sort().join(',')}`,
+      dismissLabel: 'Close',
+      action: { label: 'Go to Clips', href: clipsHref(scheduleId) },
+    };
+  });
+}
 
 function coveredRecently(recent: RecentAlerts, gameId: string, fields: string[]): boolean {
   const now = Date.now();
@@ -67,6 +91,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   // Game changes recently shown from a push, and from the schedule diff.
   const pushAlertsRef = useRef<RecentAlerts>(new Map());
   const diffAlertsRef = useRef<RecentAlerts>(new Map());
+  // Clip ids already shown this session, from a push or from ClipsProvider.
+  const shownClipIdsRef = useRef<Set<string>>(new Set());
 
   const dismissAlert = useCallback(() => {
     setAlertQueue(queue => queue.slice(1));
@@ -75,6 +101,11 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const viewCrew = useCallback((gameId: string) => {
     setAlertQueue(queue => queue.slice(1));
     router.push(`/(protected)/game/${gameId}`);
+  }, []);
+
+  const runAlertAction = useCallback((href: string) => {
+    setAlertQueue(queue => queue.slice(1));
+    router.push(href as never);
   }, []);
 
   useEffect(() => {
@@ -128,8 +159,28 @@ export function NotificationProvider({ children }: PropsWithChildren) {
         }
       }
 
-      // Check if this is a game change notification
-      if (data?.type === 'game_change' || data?.gameId) {
+      // A crew member's clip. Realtime usually gets here first while the app
+      // is open; whichever arrives second is dropped by clip id.
+      if (data?.type === 'clip_uploaded' && data?.clipId && data?.scheduleId) {
+        const clipId = String(data.clipId);
+        if (!shownClipIdsRef.current.has(clipId)) {
+          shownClipIdsRef.current.add(clipId);
+          const { title, body } = notification.request.content;
+          setAlertQueue(queue => [...queue, {
+            title: title ?? '🎬 New Clip',
+            body: body ?? '',
+            key: `clips:${clipId}`,
+            dismissLabel: 'Close',
+            action: { label: 'Go to Clips', href: clipsHref(String(data.scheduleId)) },
+          }]);
+        }
+        return;
+      }
+
+      // Check if this is a game change notification (older pushes carry only
+      // a gameId). The local game-day reminder also has a gameId but changes
+      // nothing, so it doesn't trigger a sync.
+      if (data?.type === 'game_change' || (data?.gameId && data?.type !== 'game_day')) {
         console.log('🔄 Game change notification received, triggering sync...');
         console.log(`📱 App state: ${appState} - ${appState === 'background' ? 'Background sync triggered' : 'Foreground sync triggered'}`);
         
@@ -162,6 +213,11 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('📱 Notification tapped:', response);
       const data = response.notification.request.content.data;
+      if (data?.type === 'clip_uploaded' && data?.scheduleId) {
+        if (data.clipId) shownClipIdsRef.current.add(String(data.clipId));
+        router.push(clipsHref(String(data.scheduleId)) as never);
+        return;
+      }
       const gameId = data?.gameId;
       
       if (gameId) {
@@ -196,26 +252,51 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     return () => sub.remove();
   }, []);
 
+  // Clips a crew member uploaded to one of this official's games.
   useEffect(() => {
-    const scheduleNotifications = async () => {
-      // Cancel all existing notifications first
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      const newScheduledIds: string[] = [];
+    const sub = DeviceEventEmitter.addListener(CLIPS_UPLOADED_EVENT, (clips: Clip[]) => {
+      const fresh = clips.filter(c => !shownClipIdsRef.current.has(c.id));
+      if (fresh.length === 0) return;
+      fresh.forEach(c => shownClipIdsRef.current.add(c.id));
+      const alerts = buildClipAlerts(fresh);
+      setAlertQueue(queue => [...queue, ...alerts.filter(a => !queue.some(q => q.key === a.key))]);
+    });
+    return () => sub.remove();
+  }, []);
 
-      // Schedule new notifications for upcoming games
-      for (const game of myGames) {
-        const notificationId = await scheduleGameDayNotification(game);
-        if (notificationId) {
-          newScheduledIds.push(notificationId);
+  // 8 AM "It's gameday" reminders for upcoming games. myGames is replaced on
+  // every schedule load, so only rebuild when the upcoming games actually
+  // differ, and never run two rebuilds at once.
+  const gameDaySignatureRef = useRef<string | null>(null);
+  const gameDayRunRef = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (isWeb || myGames.length === 0) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const upcoming = myGames
+      .filter(g => g.id > 0 && g.gamedate >= today)
+      .sort((a, b) => a.gamedate.localeCompare(b.gamedate))
+      // iOS keeps at most 64 pending local notifications.
+      .slice(0, GAME_DAY_REMINDER_LIMIT);
+    const signature = upcoming
+      .map(g => [g.gameid, g.gamedate, g.gametime, g.awayteam, g.hometeam, g.homeTeamData?.arenaname].join('|'))
+      .join(';');
+    if (signature === gameDaySignatureRef.current) return;
+    gameDaySignatureRef.current = signature;
+
+    gameDayRunRef.current = gameDayRunRef.current.then(async () => {
+      try {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+        const ids: string[] = [];
+        for (const game of upcoming) {
+          const id = await scheduleGameDayNotification(game);
+          if (id) ids.push(id);
         }
+        setScheduledNotifications(ids);
+      } catch (e) {
+        console.error('❌ NOTIFICATION: Scheduling game-day reminders failed:', e);
+        gameDaySignatureRef.current = null;
       }
-
-      setScheduledNotifications(newScheduledIds);
-    };
-
-    if (!isWeb && myGames.length > 0) {
-      scheduleNotifications();
-    }
+    });
   }, [myGames]);
 
   // Listen for app refresh events to reschedule notifications
@@ -241,7 +322,12 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   return (
     <NotificationContext.Provider value={{ pushToken, scheduledNotifications }}>
       {children}
-      <GameChangeAlert alert={alertQueue[0] ?? null} onDismiss={dismissAlert} onViewCrew={viewCrew} />
+      <GameChangeAlert
+        alert={alertQueue[0] ?? null}
+        onDismiss={dismissAlert}
+        onViewCrew={viewCrew}
+        onAction={runAlertAction}
+      />
     </NotificationContext.Provider>
   );
 }

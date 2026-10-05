@@ -3,6 +3,9 @@ PODS:
     - ExpoModulesCore
   - EXConstants (18.0.9):
     - ExpoModulesCore
+  - EXImageLoader (6.0.0):
+    - ExpoModulesCore
+    - React-Core
   - EXJSONUtils (0.15.0)
   - EXManifests (1.0.8):
     - ExpoModulesCore
@@ -231,6 +234,8 @@ PODS:
     - SDWebImageAVIFCoder (~> 0.11.0)
     - SDWebImageSVGCoder (~> 1.7.0)
     - SDWebImageWebPCoder (~> 0.14.6)
+  - ExpoImagePicker (17.0.11):
+    - ExpoModulesCore
   - ExpoKeepAwake (15.0.7):
     - ExpoModulesCore
   - ExpoLinking (8.0.8):
@@ -265,6 +270,10 @@ PODS:
   - ExpoSymbols (1.0.7):
     - ExpoModulesCore
   - ExpoSystemUI (6.0.7):
+    - ExpoModulesCore
+  - ExpoVideo (3.0.16):
+    - ExpoModulesCore
+  - ExpoVideoThumbnails (10.0.8):
     - ExpoModulesCore
   - ExpoWebBrowser (15.0.7):
     - ExpoModulesCore
@@ -2381,6 +2390,7 @@ PODS:
 DEPENDENCIES:
   - EXApplication (from `../node_modules/expo-application/ios`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
+  - EXImageLoader (from `../node_modules/expo-image-loader/ios`)
   - EXJSONUtils (from `../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../node_modules/expo-manifests/ios`)
   - EXNotifications (from `../node_modules/expo-notifications/ios`)
@@ -2399,6 +2409,7 @@ DEPENDENCIES:
   - ExpoHaptics (from `../node_modules/expo-haptics/ios`)
   - ExpoHead (from `../node_modules/expo-router/ios`)
   - ExpoImage (from `../node_modules/expo-image/ios`)
+  - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
@@ -2406,6 +2417,8 @@ DEPENDENCIES:
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
   - ExpoSymbols (from `../node_modules/expo-symbols/ios`)
   - ExpoSystemUI (from `../node_modules/expo-system-ui/ios`)
+  - ExpoVideo (from `../node_modules/expo-video/ios`)
+  - ExpoVideoThumbnails (from `../node_modules/expo-video-thumbnails/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
   - EXTaskManager (from `../node_modules/expo-task-manager/ios`)
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
@@ -2505,6 +2518,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-application/ios"
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
+  EXImageLoader:
+    :path: "../node_modules/expo-image-loader/ios"
   EXJSONUtils:
     :path: "../node_modules/expo-json-utils/ios"
   EXManifests:
@@ -2541,6 +2556,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-router/ios"
   ExpoImage:
     :path: "../node_modules/expo-image/ios"
+  ExpoImagePicker:
+    :path: "../node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
     :path: "../node_modules/expo-keep-awake/ios"
   ExpoLinking:
@@ -2555,6 +2572,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-symbols/ios"
   ExpoSystemUI:
     :path: "../node_modules/expo-system-ui/ios"
+  ExpoVideo:
+    :path: "../node_modules/expo-video/ios"
+  ExpoVideoThumbnails:
+    :path: "../node_modules/expo-video-thumbnails/ios"
   ExpoWebBrowser:
     :path: "../node_modules/expo-web-browser/ios"
   EXTaskManager:
@@ -2724,6 +2745,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   EXApplication: 296622817d459f46b6c5fe8691f4aac44d2b79e7
   EXConstants: a95804601ee4a6aa7800645f9b070d753b1142b3
+  EXImageLoader: 189e3476581efe3ad4d1d3fb4735b7179eb26f05
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: 224345a575fca389073c416297b6348163f28d1a
   EXNotifications: 7a2975f4e282b827a0bc78bb1d232650cb569bbd
@@ -2742,6 +2764,7 @@ SPEC CHECKSUMS:
   ExpoHaptics: 807476b0c39e9d82b7270349d6487928ce32df84
   ExpoHead: 5570e5edbe54fd8f88e51e8b94bf2931caaa7363
   ExpoImage: e88f500585913969b930e13a4be47277eb7c6de8
+  ExpoImagePicker: ade85e148f735fc7e6f27dfe3eef28eb3887e90a
   ExpoKeepAwake: 1a2e820692e933c94a565ec3fbbe38ac31658ffe
   ExpoLinking: f051f28e50ea9269ff539317c166adec81d9342d
   ExpoModulesCore: fa0d48b82163d549371e37503630edb78e2fbf89
@@ -2749,6 +2772,8 @@ SPEC CHECKSUMS:
   ExpoSplashScreen: cbb839de72110dea1851dd3e85080b7923af2540
   ExpoSymbols: 1ae04ce686de719b9720453b988d8bc5bf776c68
   ExpoSystemUI: 6cd74248a2282adf6dec488a75fa532d69dee314
+  ExpoVideo: 8d9e8a1acd0c4c210e538b4355e34ae8ff5e04f7
+  ExpoVideoThumbnails: 503a79271416c8723f04b55ea4737282513ebe4f
   ExpoWebBrowser: 533bc2a1b188eec1c10e4926decf658f1687b5e5
   EXTaskManager: cf225704fab8de8794a6f57f7fa41a90c0e2cd47
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734

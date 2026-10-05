@@ -2,7 +2,7 @@
   "expo": {
     "name": "AHL Officials",
     "slug": "ahl-test-6",
-    "version": "1.0.2",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",

@@ -84,21 +84,22 @@ export default function Auth() {
       // Use the ID from the sign in response instead of the context
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('changedpassword, accepted_tos')
+        .select('changedpassword, accepted_tos, "ahlAdmin"')
         .eq('auth_id', authData.user.id)  // Use authData.user.id here
         .single();
 
       if (rosterError) {
         throw rosterError;
       }
-      const icalUrl = rosterData.accepted_tos ? await fetchMyIcalUrl() : null;
+      // An ahlAdmin sees every game straight from the DB and has no iCal feed.
+      const needsIcal = !rosterData.ahlAdmin && !(rosterData.accepted_tos && await fetchMyIcalUrl());
 
       // Handle the routing based on user status
       if (!rosterData.changedpassword) {
         router.replace('/(loginflow)/changepassword');
       } else if (!rosterData.accepted_tos) {
         router.replace('/(loginflow)/tos');
-      } else if (!icalUrl) {
+      } else if (needsIcal) {
         router.replace('/(loginflow)/ical-setup');
       } else {
         router.replace('/(protected)/(tabs)/home');

@@ -18,6 +18,7 @@ import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
 import { APP_REFRESH_EVENT, SCHEDULE_CHANGES_EVENT } from "../lib/events";
 import { withTimeout } from "../lib/withTimeout";
+import { currentSeasonLabel } from "../lib/season";
 import { type PlayoffBracketData } from "../lib/playoffBracket";
 import {
     diffSchedule,
@@ -200,8 +201,46 @@ const ScheduleContext = createContext<ScheduleContextType>({
 // Quiet period before a burst of teamRosters/teams Realtime events reloads.
 const LEAGUE_REALTIME_SETTLE_MS = 3000;
 
+const SCHEDULE_SELECT = `
+    *,
+    homeTeamData:teams!schedule_hometeam_fkey(*),
+    awayTeamData:teams!schedule_awayteam_fkey(*)
+`;
+const SCHEDULE_PAGE = 1000;
+
+/**
+ * Every game of the current season, for an ahlAdmin. Prior seasons are left
+ * out: the table keeps every season ever synced (it only grows), and game
+ * details, clip uploads and the expense cycle all work on this season only.
+ * PostgREST caps a response at 1000 rows and a full league season is more
+ * than that, so this pages; `id` breaks ties so a page boundary can't skip or
+ * repeat a game.
+ */
+async function fetchEveryGame(): Promise<Schedule[]> {
+    const games: Schedule[] = [];
+    const season = currentSeasonLabel();
+    for (let from = 0; ; from += SCHEDULE_PAGE) {
+        const { data, error } = await withTimeout(
+            supabase
+                .from('schedule')
+                .select(SCHEDULE_SELECT)
+                .eq('season', season)
+                .order('gamedate', { ascending: true })
+                .order('gametime', { ascending: true })
+                .order('id', { ascending: true })
+                .range(from, from + SCHEDULE_PAGE - 1),
+            20000,
+            'Schedule fetch (all games this season)'
+        );
+        if (error) throw error;
+        const batch = (data ?? []) as Schedule[];
+        games.push(...batch);
+        if (batch.length < SCHEDULE_PAGE) return games;
+    }
+}
+
 export default function ScheduleProvider({ children }: PropsWithChildren) {
-    const { roster } = useRoster();
+    const { roster, isAhlAdmin } = useRoster();
     const [allGames, setAllGames] = useState<Schedule[]>([]);
     const [myGames, setMyGames] = useState<Schedule[]>([]);
     const [loading, setLoading] = useState(false);
@@ -343,7 +382,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     
         const seq = ++fetchSeqRef.current;
         const userKey = roster.auth_id;
-        const detectChanges = options?.detectChanges ?? !syncInFlightRef.current;
+        // An ahlAdmin sees the whole league, not a schedule of their own, so
+        // there is nothing personal to pop up a change for.
+        const detectChanges = !isAhlAdmin && (options?.detectChanges ?? !syncInFlightRef.current);
 
         if (options?.includeRosters ?? !teamRostersRequestedRef.current) {
             void loadTeamRosters();
@@ -357,36 +398,37 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('📅 SCHEDULE: Fetching schedule data with team details...');
             const fetchStart = Date.now();
             
-            // Fetch all games with team data
-            const { data: scheduleData, error: scheduleError } = await withTimeout(
-                supabase
-                    .from('schedule')
-                    .select(`
-                        *,
-                        homeTeamData:teams!schedule_hometeam_fkey(*),
-                        awayTeamData:teams!schedule_awayteam_fkey(*)
-                    `)
-                    .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
-                    .order('gamedate', { ascending: true })
-                    .order('gametime', { ascending: true }),
-                20000,
-                'Schedule fetch'
-            );
-                
-            console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
-            if (scheduleError) {
-                console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
-                throw scheduleError;
+            let processedGames: Schedule[];
+            if (isAhlAdmin) {
+                processedGames = await fetchEveryGame();
+            } else {
+                // This official's games, with team data
+                const { data: scheduleData, error: scheduleError } = await withTimeout(
+                    supabase
+                        .from('schedule')
+                        .select(SCHEDULE_SELECT)
+                        .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
+                        .order('gamedate', { ascending: true })
+                        .order('gametime', { ascending: true }),
+                    20000,
+                    'Schedule fetch'
+                );
+                if (scheduleError) {
+                    console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
+                    throw scheduleError;
+                }
+                processedGames = scheduleData || [];
             }
-    
-            console.log('✅ SCHEDULE: Raw data fetched successfully');
-            console.log(`📊 SCHEDULE: Processing ${scheduleData?.length || 0} games...`);
-    
-            const processedGames: Schedule[] = scheduleData || [];
+
+            console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
+            console.log(`📊 SCHEDULE: Processing ${processedGames.length} games${isAhlAdmin ? ' (all games — ahlAdmin)' : ''}...`);
+
             if (seq >= appliedScheduleSeqRef.current) {
                 appliedScheduleSeqRef.current = seq;
                 setAllGames(processedGames);
-                // Since we're already filtering at the database level, we can just use the processed games directly
+                // Already filtered at the database level (or, for an ahlAdmin,
+                // deliberately every game), so every screen reading myGames
+                // shows the admin the whole league.
                 setMyGames(processedGames);
                 setScheduleLoaded(true);
                 console.log(`✅ SCHEDULE: Found ${processedGames.length} assigned games`);
@@ -546,6 +588,24 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         // or not the iCal sync succeeds. They used to run only after a
         // successful one, so a failed or timed-out iCal fetch skipped them.
         void runBackgroundSyncs();
+
+        // An ahlAdmin has no iCal feed: "syncing" is just re-reading every game
+        // from the DB. At startup the roster effect has already started that
+        // read. No banner either — there are no new/updated counts to report.
+        if (isAhlAdmin) {
+            if (source === 'manual') void loadTeamRosters();
+            const res: { success: boolean; error?: string } =
+                source === 'startup' ? { success: true } : await fetchSchedule();
+            if (!res.success) {
+                const msg = res.error ?? 'Schedule load failed';
+                setScheduleSyncStatus({ status: 'error', source, showInBanner, error: msg, finishedAt: Date.now() });
+                return { success: false, error: msg };
+            }
+            setScheduleSyncStatus({ status: 'success', source, showInBanner: false, finishedAt: Date.now() });
+            void setLastSyncTime();
+            return { success: true, newGames: 0, updatedGames: 0, skippedGames: 0 };
+        }
+
         // Pull-to-refresh shows the latest stats and standings from the DB
         // straight away, whatever the iCal sync below does. (It used to reload
         // only the games, and only after a successful iCal sync; rosters were
@@ -741,8 +801,9 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                                data.linesperson2 === roster.lastfirstfullname;
                     };
                     
-                    // If the change affects the current user's games
-                    if (isRelevantToUser(newData) || isRelevantToUser(oldData)) {
+                    // If the change affects the current user's games (an
+                    // ahlAdmin's "games" are all of them)
+                    if (isAhlAdmin || isRelevantToUser(newData) || isRelevantToUser(oldData)) {
                         console.log('🔄 Change affects current user, processing...');
                         
                         // Notifications are sent by the device whose iCal sync wrote the change
@@ -781,7 +842,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             }
             setRealtimeEnabled(false);
         };
-    }, [roster?.lastfirstfullname, scheduleRealtimeRefresh]);
+    }, [roster?.lastfirstfullname, isAhlAdmin, scheduleRealtimeRefresh]);
 
     // Fetch schedule when roster data changes
     useEffect(() => {

@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import { shareImage } from '@/src/lib/shareImage';
+import HeaderBackButton from '@/src/components/HeaderBackButton';
 
 declare global {
   var captureCalendar: (() => Promise<string | null>) | undefined;
@@ -47,6 +48,22 @@ export default function HomeLayout() {
                     here pushed it off-center inside that circle). */}
                 <Ionicons name="share-outline" size={24} color="#ff6600" />
               </TouchableOpacity>
+            ),
+            headerStyle: {
+              backgroundColor: '#000000',
+            },
+            headerTintColor: '#ffffff',
+          }}
+        />
+        {/* The title is set by the screen, from the date. */}
+        <Stack.Screen
+          name="day/[date]"
+          options={{
+            headerTitle: "Games",
+            headerShown: true,
+            headerBackVisible: false,
+            headerLeft: () => (
+              <HeaderBackButton label="Calendar" fallback="/(protected)/(tabs)/calendar" />
             ),
             headerStyle: {
               backgroundColor: '#000000',

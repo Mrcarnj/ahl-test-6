@@ -36,8 +36,9 @@ export default function Index() {
         return <Redirect href="/(loginflow)/tos" />;
     }
 
-    // Check if user needs to set up iCal URL
-    if (roster && roster.accepted_tos && !roster.ical_url) {
+    // Check if user needs to set up iCal URL (an ahlAdmin never does: they
+    // see every game straight from the DB)
+    if (roster && roster.accepted_tos && !roster.ahlAdmin && !roster.ical_url) {
         return <Redirect href="/(loginflow)/ical-setup" />;
     }
 

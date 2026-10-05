@@ -9,6 +9,7 @@ import { APP_REFRESH_EVENT, CLIPS_UPLOADED_EVENT, SCHEDULE_CHANGES_EVENT } from 
 import { type Clip, clipAlertText, formatGameShort } from '../lib/clips';
 import { useAuth } from './AuthProvider';
 import { useSchedule } from './ScheduleProvider';
+import { useRoster } from './RosterProvider';
 import { isWeb } from '../lib/platform';
 import GameChangeAlert, { GameChangeAlertData } from '../components/GameChangeAlert';
 import { buildScheduleChangeAlerts } from '../lib/scheduleChangeAlerts';
@@ -84,6 +85,7 @@ const NotificationContext = createContext<NotificationContextType>({
 export function NotificationProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
   const { myGames } = useSchedule();
+  const { isAhlAdmin } = useRoster();
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [scheduledNotifications, setScheduledNotifications] = useState<string[]>([]);
   // Game changes that arrived while the app was open, shown one at a time.
@@ -266,11 +268,12 @@ export function NotificationProvider({ children }: PropsWithChildren) {
 
   // 8 AM "It's gameday" reminders for upcoming games. myGames is replaced on
   // every schedule load, so only rebuild when the upcoming games actually
-  // differ, and never run two rebuilds at once.
+  // differ, and never run two rebuilds at once. An ahlAdmin's myGames is every
+  // game in the league, none of them theirs, so they get no reminders.
   const gameDaySignatureRef = useRef<string | null>(null);
   const gameDayRunRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    if (isWeb || myGames.length === 0) return;
+    if (isWeb || isAhlAdmin || myGames.length === 0) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     const upcoming = myGames
       .filter(g => g.id > 0 && g.gamedate >= today)
@@ -297,7 +300,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
         gameDaySignatureRef.current = null;
       }
     });
-  }, [myGames]);
+  }, [myGames, isAhlAdmin]);
 
   // Listen for app refresh events to reschedule notifications
   useEffect(() => {

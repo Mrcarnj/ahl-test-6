@@ -33,7 +33,7 @@ const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
 const TestScheduleScreen = () => {
     const router = useRouter();
     const { myGames, playoffBracket, scheduleLoaded, scheduleSyncStatus } = useSchedule();
-    const { roster } = useRoster();
+    const { roster, isAhlAdmin } = useRoster();
     const { syncStatus, refreshSyncStatus } = useHockeySync();
 
     // "Last refresh" is read from storage once on mount; re-read it whenever a
@@ -78,9 +78,11 @@ const TestScheduleScreen = () => {
         });
     };
 
-    const todayEvent = useMemo(() => {
+    // An official has at most one; an ahlAdmin's myGames is the whole league,
+    // so this is every game being played today.
+    const todayEvents = useMemo(() => {
         const today = format(new Date(), 'yyyy-MM-dd');
-        return myGames.find(game => game.gamedate === today);
+        return myGames.filter(game => game.gamedate === today);
     }, [myGames]);
 
     const upcomingEvents = useMemo(() => {
@@ -366,12 +368,13 @@ const TestScheduleScreen = () => {
                     />
                     <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
                 </View>
-                {todayEvent && (
-                    <>
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Today</Text>
+                {todayEvents.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Today</Text>
+                        {todayEvents.map((todayEvent, i) => (
                             <TouchableOpacity
-                                style={styles.gameCardToday}
+                                key={todayEvent.id}
+                                style={[styles.gameCardToday, i > 0 && styles.gameCardTodaySpaced]}
                                 onPress={() => handleGamePress(todayEvent.gameid)}
                                 activeOpacity={0.7}
                             >
@@ -386,8 +389,8 @@ const TestScheduleScreen = () => {
                                 </View>
                                 <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                             </TouchableOpacity>
-                        </View>
-                    </>
+                        ))}
+                    </View>
                 )}
 
                 <View style={styles.separator} />
@@ -406,14 +409,15 @@ const TestScheduleScreen = () => {
 
                     {dateRange && (
                         <>
-                            <Text style={styles.dateRangeText}>
-                                Date Range Due: {dateRange}
-                            </Text>
-                            <Text style={styles.dateRangeText}>
-                                Games on Report: {gamesOnExpenseReport.length > 0
-                                    ? gamesOnExpenseReport.join(', ')
-                                    : scheduleLoaded ? 'No games in this period' : '…'}
-                            </Text>
+                                <Text style={styles.dateRangeText}>
+                                    Date Range Due: {dateRange}
+                                </Text>
+                                {/* An ahlAdmin files no report of their own games. */}
+                                {!isAhlAdmin && <Text style={styles.dateRangeText}>
+                                    Games on Report: {gamesOnExpenseReport.length > 0
+                                        ? gamesOnExpenseReport.join(', ')
+                                        : scheduleLoaded ? 'No games in this period' : '…'}
+                                </Text>}
                         </>
                     )}
                 </View>
@@ -421,32 +425,38 @@ const TestScheduleScreen = () => {
                 <View style={styles.separator} />
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Upcoming Games</Text>
-                    {upcomingEvents.length > 0 ? (
-                        upcomingEvents.map(game => (
-                            <TouchableOpacity
-                                key={game.id}
-                                style={styles.gameCard}
-                                onPress={() => handleGamePress(game.gameid)}
-                                activeOpacity={0.7}
-                            >
-                                <View style={styles.gameContent}>
-                                    <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
-                                    <Text style={styles.matchup}>
-                                        {game.awayteam} @ {game.hometeam}
-                                    </Text>
-                                    <Text style={styles.gameDetails}>
-                                        {`${formatGameTime(game.gametime, game.gamedate)} // ${game.homeTeamData?.arenaname ?? ''}`}
-                                    </Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                            </TouchableOpacity>
-                        ))
-                    ) : scheduleLoaded ? (
-                        <Text style={styles.noGamesText}>No upcoming games</Text>
-                    ) : (
-                        // First load of the schedule from the DB is still in flight.
-                        <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
+                    {/* An ahlAdmin's next few league games say little; they
+                        have Today, the calendar and View All Games. */}
+                    {!isAhlAdmin && (
+                        <>
+                        <Text style={styles.sectionTitle}>Upcoming Games</Text>
+                        {upcomingEvents.length > 0 ? (
+                            upcomingEvents.map(game => (
+                                <TouchableOpacity
+                                    key={game.id}
+                                    style={styles.gameCard}
+                                    onPress={() => handleGamePress(game.gameid)}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={styles.gameContent}>
+                                        <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
+                                        <Text style={styles.matchup}>
+                                            {game.awayteam} @ {game.hometeam}
+                                        </Text>
+                                        <Text style={styles.gameDetails}>
+                                            {`${formatGameTime(game.gametime, game.gamedate)} // ${game.homeTeamData?.arenaname ?? ''}`}
+                                        </Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                                </TouchableOpacity>
+                            ))
+                        ) : scheduleLoaded ? (
+                            <Text style={styles.noGamesText}>No upcoming games</Text>
+                        ) : (
+                            // First load of the schedule from the DB is still in flight.
+                            <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
+                        )}
+                        </>
                     )}
                     <TouchableOpacity
                         style={styles.gameCard}
@@ -557,6 +567,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+    },
+    gameCardTodaySpaced: {
+        marginTop: 12,
     },
     gameContent: {
         flex: 1,

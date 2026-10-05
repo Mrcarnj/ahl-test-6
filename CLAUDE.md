@@ -157,6 +157,36 @@ crew sees it in their Clips tab. Schema, RLS and bucket are in
   `clips/upload.tsx`, and the project-wide upload limit in the Supabase
   dashboard (Storage → Settings) all have to allow it.
 
+### Admin view (`ahlAdmin`)
+
+A roster row with `ahlAdmin = true` is league office, not an official. Read it
+as `isAhlAdmin` from `useRoster()`. The switch is in ScheduleProvider: for an
+admin, `myGames` (and `allGames`) is **every game of the current season** in
+`schedule`, paged past PostgREST's 1000-row cap, so every screen that reads
+`myGames` shows the whole league without its own branch. Prior seasons are not
+loaded: the table keeps every season ever synced, and game details, uploads
+and the expense cycle only use the current one. Screens read it from memory;
+the DB is hit at startup, on refresh and on Realtime changes, never by opening
+a screen. On top of that:
+
+- **No iCal.** Login, TOS and `app/index.tsx` skip `ical-setup`;
+  `syncScheduleFromIcal` just re-reads the DB (no banner); Realtime reloads on
+  any schedule change.
+- **No personal alerts.** No schedule-change diff/pop-ups and no 8 AM
+  game-day reminders. Pushes only ever go to a game's crew anyway.
+- **Home:** Today lists every game that day; no Upcoming Games list; the
+  expense card keeps the countdown and date range but drops "Games on Report".
+- **All Games** is a virtualized `SectionList` (it was a ScrollView that drew
+  every card, which a full league season stalls).
+- **Calendar:** a day with more than one game shows the count and opens
+  `calendar/day/[date]`, a list of that day's games (this works the same for
+  an official with two games in a day).
+- **Clips:** every clip, no All / Mine / Crew toggle (search and tag filters
+  stay). Admins can upload to any game —
+  `sql/2026-10-05_admin_clip_upload.sql` (applied 2026-10-05) widens the
+  crew-only insert policies to `private.is_admin()`.
+- **Profile:** no game count / breakdown and no iCal URL.
+
 ### Key season IDs / tables
 
 Current season is **2026-27 = HockeyTech season_id 94**.

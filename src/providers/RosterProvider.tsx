@@ -30,6 +30,12 @@ type RosterContextType = {
     allRosters: Roster[];
     loading: boolean;
     error: string | null;
+    /**
+     * League-office admin (`roster.ahlAdmin`). They see every game rather than
+     * an iCal-synced schedule of their own: no iCal setup, no game-change
+     * alerts or game-day reminders, no game counts.
+     */
+    isAhlAdmin: boolean;
     refreshRoster: () => Promise<{ success: boolean; error?: string }>;
 };
 
@@ -38,6 +44,7 @@ const RosterContext = createContext<RosterContextType>({
     allRosters: [],
     loading: false,
     error: null,
+    isAhlAdmin: false,
     refreshRoster: async () => ({ success: false }),
 });
 
@@ -190,9 +197,10 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     // Only "loading" when there is nothing to show yet; a refresh over
     // existing data happens silently.
     const loading = fetching && allRosters.length === 0;
+    const isAhlAdmin = !!roster?.ahlAdmin;
 
     return (
-        <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster }}>
+        <RosterContext.Provider value={{ roster, allRosters, loading, error, isAhlAdmin, refreshRoster }}>
             {children}
         </RosterContext.Provider>
     );

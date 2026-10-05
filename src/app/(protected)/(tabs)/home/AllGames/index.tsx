@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SectionList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSchedule, Schedule } from '@/src/providers/ScheduleProvider';
-import { format, parse, isToday as checkIsToday } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 
 // An AHL season runs Sept–June, so July 1 is the rollover: a game in
@@ -13,73 +13,84 @@ const seasonLabel = (gamedate: string): string => {
     return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
 };
 
+type GameSection = {
+    key: string;
+    /** 'list' sections get a big title; 'season' sections are a collapsible prior season. */
+    kind: 'list' | 'season';
+    title: string;
+    data: Schedule[];
+    /** Games in a prior season, shown in its header even while collapsed. */
+    total?: number;
+    expanded?: boolean;
+    emptyText?: string;
+};
+
+const formatGameDate = (dateString: string) => {
+    const date = parse(dateString, 'yyyy-MM-dd', new Date());
+    return format(date, 'EEEE, MMMM d, yyyy');
+};
+
+/**
+ * A virtualized list: an ahlAdmin's myGames is the whole league (over a
+ * thousand games by season's end), and drawing every card up front in a
+ * ScrollView stalled the screen. The games themselves are already in memory —
+ * opening this screen never fetches.
+ */
 export default function AllGames() {
     const router = useRouter();
     const { myGames } = useSchedule();
     // Prior seasons start collapsed; this holds the ones the user opened.
     const [expandedSeasons, setExpandedSeasons] = useState<Set<string>>(new Set());
 
-    const toggleSeason = (season: string) => {
+    const toggleSeason = useCallback((season: string) => {
         setExpandedSeasons(prev => {
             const next = new Set(prev);
             if (next.has(season)) next.delete(season);
             else next.add(season);
             return next;
         });
-    };
+    }, []);
 
-
-    const formatGameDate = (dateString: string) => {
-        const date = parse(dateString, 'yyyy-MM-dd', new Date());
-        return format(date, 'EEEE, MMMM d, yyyy');
-    };
-
-    // Split games into upcoming and past
-    const { upcomingGames, pastGames } = myGames.reduce((acc: { upcomingGames: Schedule[], pastGames: Schedule[] }, game) => {
-        const gameDate = parse(game.gamedate, 'yyyy-MM-dd', new Date());
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (checkIsToday(gameDate) || gameDate > today) {
-            acc.upcomingGames.push(game);
-        } else {
-            acc.pastGames.push(game);
+    // Upcoming (today on, earliest first), this season's past games (newest
+    // first), then each earlier season as its own collapsible group, newest
+    // first. gamedate is 'yyyy-MM-dd', so string comparison is chronological.
+    const { upcomingGames, currentSeasonPastGames, priorSeasons } = useMemo(() => {
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const currentSeason = seasonLabel(today);
+        const upcoming: Schedule[] = [];
+        const past: Schedule[] = [];
+        for (const game of myGames) {
+            if (game.gamedate >= today) upcoming.push(game);
+            else past.push(game);
         }
-        return acc;
-    }, { upcomingGames: [], pastGames: [] });
+        upcoming.sort((a, b) => a.gamedate.localeCompare(b.gamedate));
+        past.sort((a, b) => b.gamedate.localeCompare(a.gamedate));
 
-    // Sort upcoming games by date (earliest first)
-    upcomingGames.sort((a, b) => {
-        const dateA = parse(a.gamedate, 'yyyy-MM-dd', new Date());
-        const dateB = parse(b.gamedate, 'yyyy-MM-dd', new Date());
-        return dateA.getTime() - dateB.getTime();
-    });
-
-    // Sort past games by date (most recent first)
-    pastGames.sort((a, b) => {
-        const dateA = parse(a.gamedate, 'yyyy-MM-dd', new Date());
-        const dateB = parse(b.gamedate, 'yyyy-MM-dd', new Date());
-        return dateB.getTime() - dateA.getTime();
-    });
-
-    // This season's past games stay in the flat list; each earlier season gets
-    // its own collapsible group. pastGames is newest first, so both the groups
-    // and the games inside them come out newest first too.
-    const currentSeason = seasonLabel(format(new Date(), 'yyyy-MM-dd'));
-    const currentSeasonPastGames: Schedule[] = [];
-    const priorSeasons: { season: string; games: Schedule[] }[] = [];
-    for (const game of pastGames) {
-        const season = seasonLabel(game.gamedate);
-        if (season === currentSeason) {
-            currentSeasonPastGames.push(game);
-            continue;
+        const currentPast: Schedule[] = [];
+        const prior: { season: string; games: Schedule[] }[] = [];
+        for (const game of past) {
+            const season = seasonLabel(game.gamedate);
+            if (season === currentSeason) {
+                currentPast.push(game);
+                continue;
+            }
+            const last = prior[prior.length - 1];
+            if (last?.season === season) last.games.push(game);
+            else prior.push({ season, games: [game] });
         }
-        const last = priorSeasons[priorSeasons.length - 1];
-        if (last?.season === season) last.games.push(game);
-        else priorSeasons.push({ season, games: [game] });
-    }
+        return { upcomingGames: upcoming, currentSeasonPastGames: currentPast, priorSeasons: prior };
+    }, [myGames]);
 
-    const handleGamePress = (gameId: string) => {
+    const sections = useMemo<GameSection[]>(() => [
+        { key: 'upcoming', kind: 'list', title: 'Upcoming Games', data: upcomingGames, emptyText: 'No upcoming games' },
+        { key: 'past', kind: 'list', title: 'Past Games', data: currentSeasonPastGames, emptyText: 'No past games this season' },
+        ...priorSeasons.map(({ season, games }): GameSection => {
+            const expanded = expandedSeasons.has(season);
+            return { key: season, kind: 'season', title: season, data: expanded ? games : [], total: games.length, expanded };
+        }),
+    ], [upcomingGames, currentSeasonPastGames, priorSeasons, expandedSeasons]);
+
+    const handleGamePress = useCallback((gameId: string) => {
         router.push({
             pathname: "/(protected)/game/[id]",
             params: {
@@ -87,12 +98,11 @@ export default function AllGames() {
                 source: 'home'
             }
         });
-    };
+    }, [router]);
 
-    const renderGameCard = (game: Schedule) => (
+    const renderGameCard = ({ item: game, section }: { item: Schedule; section: GameSection }) => (
         <TouchableOpacity
-            key={game.id}
-            style={styles.gameCard}
+            style={[styles.gameCard, section.kind === 'season' && styles.seasonGame]}
             onPress={() => handleGamePress(game.gameid)}
             activeOpacity={0.7}
         >
@@ -108,62 +118,57 @@ export default function AllGames() {
         </TouchableOpacity>
     );
 
+    const renderSectionHeader = ({ section }: { section: GameSection }) => {
+        if (section.kind === 'list') {
+            return (
+                <>
+                    {section.key === 'past' && <View style={styles.separator} />}
+                    <Text style={styles.sectionTitle}>{section.title}</Text>
+                </>
+            );
+        }
+        const total = section.total ?? 0;
+        return (
+            <TouchableOpacity
+                style={styles.seasonHeader}
+                onPress={() => toggleSeason(section.title)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: section.expanded }}
+            >
+                <Text style={styles.seasonTitle}>{section.title}</Text>
+                <View style={styles.seasonHeaderRight}>
+                    <Text style={styles.seasonCount}>
+                        {total} {total === 1 ? 'game' : 'games'}
+                    </Text>
+                    <Ionicons
+                        name={section.expanded ? 'chevron-up' : 'chevron-down'}
+                        size={22}
+                        color="#ff6600"
+                    />
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderSectionFooter = ({ section }: { section: GameSection }) =>
+        section.kind === 'list' && section.data.length === 0
+            ? <Text style={styles.noGamesText}>{section.emptyText}</Text>
+            : null;
+
     return (
-        <ScrollView
+        <SectionList
             style={styles.container}
-        >
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Upcoming Games</Text>
-                {upcomingGames.length > 0 ? (
-                    upcomingGames.map(renderGameCard)
-                ) : (
-                    <Text style={styles.noGamesText}>No upcoming games</Text>
-                )}
-            </View>
-
-            <View style={styles.separator} />
-
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Past Games</Text>
-                {currentSeasonPastGames.length > 0 ? (
-                    currentSeasonPastGames.map(renderGameCard)
-                ) : (
-                    <Text style={styles.noGamesText}>No past games this season</Text>
-                )}
-
-                {priorSeasons.map(({ season, games }) => {
-                    const expanded = expandedSeasons.has(season);
-                    return (
-                        <View key={season} style={styles.seasonGroup}>
-                            <TouchableOpacity
-                                style={styles.seasonHeader}
-                                onPress={() => toggleSeason(season)}
-                                activeOpacity={0.7}
-                                accessibilityRole="button"
-                                accessibilityState={{ expanded }}
-                            >
-                                <Text style={styles.seasonTitle}>{season}</Text>
-                                <View style={styles.seasonHeaderRight}>
-                                    <Text style={styles.seasonCount}>
-                                        {games.length} {games.length === 1 ? 'game' : 'games'}
-                                    </Text>
-                                    <Ionicons
-                                        name={expanded ? 'chevron-up' : 'chevron-down'}
-                                        size={22}
-                                        color="#ff6600"
-                                    />
-                                </View>
-                            </TouchableOpacity>
-                            {expanded && (
-                                <View style={styles.seasonGames}>
-                                    {games.map(renderGameCard)}
-                                </View>
-                            )}
-                        </View>
-                    );
-                })}
-            </View>
-        </ScrollView>
+            contentContainerStyle={styles.content}
+            sections={sections}
+            keyExtractor={(game) => String(game.id)}
+            renderItem={renderGameCard}
+            renderSectionHeader={renderSectionHeader}
+            renderSectionFooter={renderSectionFooter}
+            stickySectionHeadersEnabled={false}
+            initialNumToRender={15}
+            windowSize={9}
+        />
     );
 }
 
@@ -172,7 +177,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000',
     },
-    section: {
+    content: {
         padding: 16,
     },
     sectionTitle: {
@@ -213,13 +218,12 @@ const styles = StyleSheet.create({
     separator: {
         height: 1,
         backgroundColor: '#333',
-        marginVertical: 20,
-        marginHorizontal: 16,
-    },
-    seasonGroup: {
-        marginTop: 12,
+        marginTop: 8,
+        marginBottom: 24,
     },
     seasonHeader: {
+        marginTop: 12,
+        marginBottom: 12,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -243,9 +247,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#999',
     },
-    seasonGames: {
-        marginTop: 12,
-        paddingLeft: 8,
+    seasonGame: {
+        marginLeft: 8,
     },
     noGamesText: {
         color: '#999',

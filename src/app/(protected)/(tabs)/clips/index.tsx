@@ -1,6 +1,7 @@
 // Every clip this official can see — their own and their crews' — in one list,
 // grouped by game (newest game first), with search, a Mine / Crew toggle and
 // tag filters. Filtering runs on the already-loaded list, so it's instant.
+// An ahlAdmin sees every clip in the league and gets no Mine / Crew toggle.
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -55,7 +56,7 @@ function matchesSearch(clip: Clip, q: string): boolean {
 
 export default function ClipsScreen() {
   const { clips, loaded, refreshing, error, refresh } = useClips();
-  const { roster } = useRoster();
+  const { roster, isAhlAdmin } = useRoster();
   const myId = roster?.auth_id;
 
   const [query, setQuery] = useState('');
@@ -127,19 +128,21 @@ export default function ClipsScreen() {
         />
       </View>
 
-      <View style={styles.scopeRow}>
-        {SCOPES.map((s) => (
-          <Pressable
-            key={s.key}
-            onPress={() => setScope(s.key)}
-            style={[styles.scopeBtn, scope === s.key && styles.scopeBtnOn]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: scope === s.key }}
-          >
-            <Text style={[styles.scopeText, scope === s.key && styles.scopeTextOn]}>{s.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {!isAhlAdmin ? (
+        <View style={styles.scopeRow}>
+          {SCOPES.map((s) => (
+            <Pressable
+              key={s.key}
+              onPress={() => setScope(s.key)}
+              style={[styles.scopeBtn, scope === s.key && styles.scopeBtnOn]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: scope === s.key }}
+            >
+              <Text style={[styles.scopeText, scope === s.key && styles.scopeTextOn]}>{s.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {usedTags.length > 0 ? (
         <View style={styles.tagRow}>
@@ -195,7 +198,9 @@ export default function ClipsScreen() {
               <Text style={styles.emptyText}>
                 {filtersActive
                   ? 'Try a different search or clear a filter.'
-                  : 'Clips you or your crews upload to your games show up here.'}
+                  : isAhlAdmin
+                    ? 'Clips uploaded to any game show up here.'
+                    : 'Clips you or your crews upload to your games show up here.'}
               </Text>
               {!filtersActive ? (
                 <Pressable style={styles.uploadBtn} onPress={() => router.push('/(protected)/(tabs)/clips/upload')}>

@@ -12,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {
     const { user } = useAuth();
-    const { roster, refreshRoster } = useRoster();
+    // An ahlAdmin's myGames is the whole league and they have no iCal feed,
+    // so neither the game count nor the iCal section applies to them.
+    const { roster, refreshRoster, isAhlAdmin } = useRoster();
     const { myGames } = useSchedule();
 
     // State for collapsible sections
@@ -233,23 +235,27 @@ const Profile = () => {
                 />
                 <Text style={styles.name}>{profileData.name}</Text>
                 
-                {/* Total Games Count */}
-                <View style={styles.totalGamesContainer}>
-                    <Text style={styles.totalGamesText}>
-                        Total Games: {profileData.gameCount}
-                    </Text>
-                </View>
+                {!isAhlAdmin && (
+                    <>
+                        {/* Total Games Count */}
+                        <View style={styles.totalGamesContainer}>
+                            <Text style={styles.totalGamesText}>
+                                Total Games: {profileData.gameCount}
+                            </Text>
+                        </View>
 
-                {/* Collapsible Game Breakdown */}
-                <View style={styles.breakdownContainer}>
-                    <Text style={styles.breakdownTitle}>Game Breakdown</Text>
-                    <FlatList
-                        data={profileData.seasonsBreakdown}
-                        renderItem={renderSeasonSection}
-                        keyExtractor={(season) => season.season}
-                        scrollEnabled={false}
-                    />
-                </View>
+                        {/* Collapsible Game Breakdown */}
+                        <View style={styles.breakdownContainer}>
+                            <Text style={styles.breakdownTitle}>Game Breakdown</Text>
+                            <FlatList
+                                data={profileData.seasonsBreakdown}
+                                renderItem={renderSeasonSection}
+                                keyExtractor={(season) => season.season}
+                                scrollEnabled={false}
+                            />
+                        </View>
+                    </>
+                )}
                 <View style={styles.infoSection}>
                     <View style={styles.fieldContainer}>
                         <Text style={styles.label}>Email</Text>
@@ -265,53 +271,55 @@ const Profile = () => {
                         </View>
                     </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>iCal URL</Text>
-                        {isEditingIcalUrl ? (
-                            <View style={styles.editContainer}>
-                                <TextInput
-                                    style={styles.icalUrlInput}
-                                    value={icalUrlValue}
-                                    onChangeText={setIcalUrlValue}
-                                    placeholder="Enter iCal URL..."
-                                    placeholderTextColor="#666"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    keyboardType="url"
-                                />
-                                <View style={styles.editButtons}>
+                    {!isAhlAdmin && (
+                        <View style={styles.fieldContainer}>
+                            <Text style={styles.label}>iCal URL</Text>
+                            {isEditingIcalUrl ? (
+                                <View style={styles.editContainer}>
+                                    <TextInput
+                                        style={styles.icalUrlInput}
+                                        value={icalUrlValue}
+                                        onChangeText={setIcalUrlValue}
+                                        placeholder="Enter iCal URL..."
+                                        placeholderTextColor="#666"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        keyboardType="url"
+                                    />
+                                    <View style={styles.editButtons}>
+                                        <TouchableOpacity 
+                                            style={[styles.editButton, styles.saveButton]} 
+                                            onPress={saveIcalUrl}
+                                            disabled={savingIcalUrl}
+                                        >
+                                            <Text style={[styles.editButtonText, styles.saveButtonText]}>
+                                                {savingIcalUrl ? 'Saving...' : 'Save'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity 
+                                            style={[styles.editButton, styles.cancelButton]} 
+                                            onPress={cancelEditIcalUrl}
+                                            disabled={savingIcalUrl}
+                                        >
+                                            <Text style={styles.editButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <View style={styles.valueContainer}>
+                                    <Text style={styles.value}>
+                                        {profileData.icalUrl || 'Not set'}
+                                    </Text>
                                     <TouchableOpacity 
-                                        style={[styles.editButton, styles.saveButton]} 
-                                        onPress={saveIcalUrl}
-                                        disabled={savingIcalUrl}
+                                        style={styles.editIconButton} 
+                                        onPress={() => setIsEditingIcalUrl(true)}
                                     >
-                                        <Text style={[styles.editButtonText, styles.saveButtonText]}>
-                                            {savingIcalUrl ? 'Saving...' : 'Save'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={[styles.editButton, styles.cancelButton]} 
-                                        onPress={cancelEditIcalUrl}
-                                        disabled={savingIcalUrl}
-                                    >
-                                        <Text style={styles.editButtonText}>Cancel</Text>
+                                        <Text style={styles.editIcon}>✏️</Text>
                                     </TouchableOpacity>
                                 </View>
-                            </View>
-                        ) : (
-                            <View style={styles.valueContainer}>
-                                <Text style={styles.value}>
-                                    {profileData.icalUrl || 'Not set'}
-                                </Text>
-                                <TouchableOpacity 
-                                    style={styles.editIconButton} 
-                                    onPress={() => setIsEditingIcalUrl(true)}
-                                >
-                                    <Text style={styles.editIcon}>✏️</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
+                            )}
+                        </View>
+                    )}
 
                     {/* Notification Settings */}
                     <TouchableOpacity

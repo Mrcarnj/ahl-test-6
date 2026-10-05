@@ -34,7 +34,10 @@ type CustomMarking = {
   gameTime?: string;
   selected?: boolean;
   text?: string;
+  /** Set when the day has exactly one game: tapping goes straight to it. */
   gameid?: string;
+  /** Games that day. Above one, tapping opens the day's game list. */
+  count?: number;
 };
 
 export default function CalendarScreen() {
@@ -52,18 +55,32 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { syncStatus, refreshSyncStatus } = useHockeySync();
 
-  // Create marked dates object from myGames
+  // Create marked dates object from myGames. A day with one game shows the
+  // matchup; a day with several (every day, for an ahlAdmin, whose myGames is
+  // the whole league) shows how many.
   const markedDates = React.useMemo(() => {
-    return myGames.reduce((acc: {[key: string]: CustomMarking}, game) => {
-      const formattedDate = game.gamedate; // Already in YYYY-MM-DD format
-      acc[formattedDate] = {
-        selected: true,
-        text: `${game.awayTeamData?.abbreviation}\n@\n${game.homeTeamData?.abbreviation}`,
-        gameTime: formatGameTime(game.gametime, game.gamedate),
-        gameid: game.gameid,
-      };
-      return acc;
-    }, {});
+    const byDate: { [key: string]: typeof myGames } = {};
+    for (const game of myGames) {
+      // gamedate is YYYY-MM-DD
+      if (byDate[game.gamedate]) byDate[game.gamedate].push(game);
+      else byDate[game.gamedate] = [game];
+    }
+    const acc: { [key: string]: CustomMarking } = {};
+    for (const [date, games] of Object.entries(byDate)) {
+      if (games.length === 1) {
+        const [game] = games;
+        acc[date] = {
+          selected: true,
+          text: `${game.awayTeamData?.abbreviation}\n@\n${game.homeTeamData?.abbreviation}`,
+          gameTime: formatGameTime(game.gametime, game.gamedate),
+          gameid: game.gameid,
+          count: 1,
+        };
+      } else {
+        acc[date] = { selected: true, text: `${games.length}\ngames`, count: games.length };
+      }
+    }
+    return acc;
   }, [myGames]);
 
   const captureCalendar = async () => {
@@ -129,6 +146,11 @@ export default function CalendarScreen() {
                 id: selectedGame.gameid,
                 source: 'calendar'
             }
+        });
+    } else if ((selectedGame?.count ?? 0) > 1) {
+        router.push({
+            pathname: "/(protected)/(tabs)/calendar/day/[date]",
+            params: { date: selectedDate },
         });
     }
 };
@@ -213,7 +235,7 @@ export default function CalendarScreen() {
                   </Text>
                   {marking?.text && (
                     <>
-                      <Text style={styles.gameInfo}>{marking.text}</Text>
+                      <Text style={[styles.gameInfo, (marking.count ?? 0) > 1 && styles.gameCount]}>{marking.text}</Text>
                       {marking.gameTime && (
                         <Text style={styles.gameTime}>{marking.gameTime}</Text>
                       )}
@@ -275,6 +297,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 13,
     marginBottom: 3,
+  },
+  gameCount: {
+    fontWeight: '700',
   },
   gameTime: {
     fontSize: 10,

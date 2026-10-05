@@ -43,6 +43,7 @@ import { isWeb } from '@/src/lib/platform';
 import { currentSeasonLabel } from '@/src/lib/season';
 import { supabase } from '@/src/lib/supabase';
 import { useClips } from '@/src/providers/ClipsProvider';
+import { useRoster } from '@/src/providers/RosterProvider';
 import { formatGameDate, useSchedule } from '@/src/providers/ScheduleProvider';
 
 // Matches the `clips` bucket's file_size_limit (sql/2026-10-04_clips.sql).
@@ -55,7 +56,9 @@ function formatMb(bytes: number | null): string | null {
 
 export default function UploadClipScreen() {
   const params = useLocalSearchParams<{ scheduleId?: string }>();
+  // For an ahlAdmin, myGames is every game in the league.
   const { myGames } = useSchedule();
+  const { isAhlAdmin } = useRoster();
   const { addClip } = useClips();
 
   const [video, setVideo] = useState<PickedVideo | null>(null);
@@ -364,7 +367,11 @@ export default function UploadClipScreen() {
             {tags.length ? '' : 'Pick at least one tag.'}
           </Text>
         ) : null}
-        {uploading ? <Text style={styles.hint}>Your crew will be notified when the upload finishes.</Text> : null}
+        {uploading ? (
+          <Text style={styles.hint}>
+            {isAhlAdmin ? 'The game’s crew' : 'Your crew'} will be notified when the upload finishes.
+          </Text>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );

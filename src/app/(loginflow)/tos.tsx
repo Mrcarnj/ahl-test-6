@@ -104,7 +104,7 @@ export default function TermsOfService() {
       try {
         const { data: verifyData, error: verifyError } = await supabase
           .from('roster')
-          .select('accepted_tos, tos_accepted_at')
+          .select('accepted_tos, tos_accepted_at, "ahlAdmin"')
           .eq('auth_id', user.id)
           .single();
         
@@ -112,7 +112,8 @@ export default function TermsOfService() {
           console.error('❌ Verification failed:', verifyError);
         } else {
           console.log('✅ Verification result:', verifyData);
-          const icalUrl = await fetchMyIcalUrl();
+          // An ahlAdmin sees every game straight from the DB and has no iCal feed.
+          const needsIcal = !verifyData.ahlAdmin && !(await fetchMyIcalUrl());
           
           // Reset loading state before navigation
           setLoading(false);
@@ -120,7 +121,7 @@ export default function TermsOfService() {
           // Navigate based on iCal URL status
           console.log('🔄 Checking iCal URL status...');
           setTimeout(() => {
-            if (!icalUrl) {
+            if (needsIcal) {
               console.log('🔄 Navigating to iCal setup...');
               router.replace('/(loginflow)/ical-setup');
             } else {

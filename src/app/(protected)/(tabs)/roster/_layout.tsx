@@ -4,7 +4,9 @@ import { Stack } from "expo-router";
 
 export default function RosterLayout() {
     return (
-      <Stack screenOptions={{ headerShown: false }}>
+      // contentStyle: without it the stack paints its default (light) card
+      // background, which flashed white before the screen's first frame.
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#000000' } }}>
           <Stack.Screen 
             name="index" 
             options={{

@@ -1,6 +1,6 @@
 // app/(protected)/(tabs)/roster/index.tsx
-import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useCallback, useMemo, memo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, TextInput, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 // Display order for the AHL Front Office section, by email. Anyone with
 // ahlAdmin who isn't listed falls to the end, alphabetically.
 const FRONT_OFFICE_ORDER = [
-    'sthompson@theahl.com',
+    'sthomson@theahl.com',
     'ryerkovich@theahl.com',
     'kdanahy@theahl.com',
     'jjordan@theahl.com',
@@ -37,38 +37,37 @@ const RosterItem = memo(function RosterItem({ item, onPress }: {
 });
 
 const RosterScreen = () => {
+    // The list comes from RosterProvider, which loads it from cache at launch
+    // and keeps it current. Refreshing here on mount (as this screen used to)
+    // put the whole tab back into its loading state on every first visit.
     const { allRosters, loading, error, refreshRoster } = useRoster();
-    const refreshRosterRef = useRef(refreshRoster);
-    refreshRosterRef.current = refreshRoster;
 
     const [searchQuery, setSearchQuery] = useState('');
-    const [filteredRosters, setFilteredRosters] = useState<Roster[]>([]);
-    const [adminRosters, setAdminRosters] = useState<Roster[]>([]);
+    const [pulling, setPulling] = useState(false);
 
-    useEffect(() => {
-        refreshRosterRef.current();
-    }, []);
+    // Derived during render, not in an effect, so the first frame already has
+    // the list instead of an empty screen that fills in a frame later.
+    const adminRosters = useMemo(() => allRosters
+        .filter(roster => roster.ahlAdmin)
+        .sort((a, b) => frontOfficeRank(a) - frontOfficeRank(b)
+            || a.lastfirstfullname.localeCompare(b.lastfirstfullname)),
+    [allRosters]);
 
-    const sanitizeSearchQuery = (query: string): string => {
-        return query.replace(/[^a-zA-Z\s]/g, '');
-    };
-     
-    useEffect(() => {
-        const sortedAdminRosters = allRosters
-            .filter(roster => roster.ahlAdmin)
-            .sort((a, b) => frontOfficeRank(a) - frontOfficeRank(b)
-                || a.lastfirstfullname.localeCompare(b.lastfirstfullname));
-        setAdminRosters(sortedAdminRosters);
-     
-        const sanitizedQuery = sanitizeSearchQuery(searchQuery);
-        const sortedAndFilteredRosters = allRosters
-            .filter((roster) =>
-                roster.lastfirstfullname.toLowerCase().includes(sanitizedQuery.toLowerCase())
-            )
+    const filteredRosters = useMemo(() => {
+        const query = searchQuery.replace(/[^a-zA-Z\s]/g, '').toLowerCase();
+        return allRosters
+            .filter((roster) => roster.lastfirstfullname.toLowerCase().includes(query))
             .sort((a, b) => a.lastfirstfullname.localeCompare(b.lastfirstfullname));
-     
-        setFilteredRosters(sortedAndFilteredRosters);
-     }, [searchQuery, allRosters]);
+    }, [searchQuery, allRosters]);
+
+    const onPullRefresh = useCallback(async () => {
+        setPulling(true);
+        try {
+            await refreshRoster();
+        } finally {
+            setPulling(false);
+        }
+    }, [refreshRoster]);
 
     const handleRosterPress = useCallback((id: number) => {
         router.push({
@@ -86,12 +85,24 @@ const RosterScreen = () => {
         <RosterItem item={item} onPress={handleRosterPress} />
     ), [handleRosterPress]);
 
+    // Only reached on a first-ever launch with no cache yet.
     if (loading) {
-        return <ActivityIndicator size="large" color="##ff6600" />;
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <ActivityIndicator size="large" color="#ff6600" />
+            </View>
+        );
     }
 
-    if (error) {
-        return <Text>Error: {error}</Text>;
+    if (error && allRosters.length === 0) {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <Text style={styles.errorText}>Couldn&apos;t load the roster.</Text>
+                <TouchableOpacity onPress={onPullRefresh} style={styles.retryButton}>
+                    <Text style={styles.retryText}>Try again</Text>
+                </TouchableOpacity>
+            </View>
+        );
     }
 
     return (
@@ -121,9 +132,19 @@ const RosterScreen = () => {
             <View style={styles.contentContainer}>
                 {/* Filtered Rosters Section */}
                 <View style={styles.filteredRostersContainer}>
-                    <ScrollView style={styles.scrollableRosters}>
+                    <ScrollView
+                        style={styles.scrollableRosters}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={pulling}
+                                onRefresh={onPullRefresh}
+                                tintColor="#ff6600"
+                                colors={['#ff6600']}
+                            />
+                        }
+                    >
                         <FlatList
-                            data={filteredRosters} // Limit to 15 items
+                            data={filteredRosters}
                             keyExtractor={keyExtractor}
                             renderItem={renderItem}
                             scrollEnabled={false} // Disable FlatList scroll since we're using ScrollView
@@ -155,6 +176,25 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
+    },
+    centered: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    errorText: {
+        color: '#ccc',
+        fontSize: 16,
+        marginBottom: 12,
+    },
+    retryButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+        backgroundColor: '#ff6600',
+    },
+    retryText: {
+        color: '#fff',
+        fontWeight: 'bold',
     },
     contentContainer: {
         flex: 1,

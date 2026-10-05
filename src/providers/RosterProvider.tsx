@@ -44,17 +44,24 @@ const RosterContext = createContext<RosterContextType>({
 export default function RosterProvider({ children }: PropsWithChildren) {
     const { user } = useAuth();
     const [roster, setRoster] = useState<Roster | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [fetching, setFetching] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [allRosters, setAllRosters] = useState<Roster[]>([]);
-    const lastFetchRef = useRef<Date | null>(null);
+    // When the full officials list was last fetched. The list changes maybe
+    // once a month, so it is reused for a day; the official's own row is
+    // re-read on every launch (it holds the onboarding and admin flags).
+    const lastAllFetchRef = useRef<number | null>(null);
+    const allRostersRef = useRef<Roster[]>([]);
+    allRostersRef.current = allRosters;
     const fetchRosterRef = useRef<(force?: boolean) => Promise<{ success: boolean; error?: string }>>(async () => ({ success: false }));
     const loadCachedDataRef = useRef<() => Promise<boolean>>(async () => false);
 
     const ROSTER_CACHE_VERSION = 1;
-    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const ALL_ROSTERS_TTL = 24 * 60 * 60 * 1000; // 24 hours
     const CACHE_KEY = user?.id ? `rosterCache_${user.id}` : 'rosterCache';
 
+    // Shows whatever is cached, however old, so the Roster tab never waits on
+    // the network. Returns whether a cache was found.
     const loadCachedData = async () => {
         try {
             const cachedData = await safeAsyncStorage.getItem(CACHE_KEY);
@@ -65,15 +72,11 @@ export default function RosterProvider({ children }: PropsWithChildren) {
                     await safeAsyncStorage.removeItem(CACHE_KEY);
                     return false;
                 }
-                const isExpired = new Date().getTime() - timestamp > CACHE_DURATION;
-
-                if (!isExpired) {
-                    console.log('Using cached roster data');
-                    setRoster(roster);
-                    setAllRosters(allRosters);
-                    lastFetchRef.current = new Date(timestamp);
-                    return true;
-                }
+                console.log('Using cached roster data');
+                setRoster(roster);
+                setAllRosters(allRosters);
+                lastAllFetchRef.current = timestamp;
+                return true;
             }
         } catch (e) {
             console.error('Error loading cache:', e);
@@ -82,12 +85,12 @@ export default function RosterProvider({ children }: PropsWithChildren) {
     };
     loadCachedDataRef.current = loadCachedData;
 
-    const saveToCache = async (rosterData: Roster | null, allRostersData: Roster[]) => {
+    const saveToCache = async (rosterData: Roster | null, allRostersData: Roster[], timestamp: number) => {
         try {
             const cacheData = {
                 roster: rosterData,
                 allRosters: allRostersData,
-                timestamp: new Date().getTime(),
+                timestamp,
                 cacheVersion: ROSTER_CACHE_VERSION,
             };
             await safeAsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
@@ -96,16 +99,18 @@ export default function RosterProvider({ children }: PropsWithChildren) {
         }
     };
 
+    // Always re-reads the official's own row. The full list is re-read when
+    // `force` is set (pull-to-refresh, onboarding) or once it is a day old.
+    // Existing data stays on screen throughout, and through a failed fetch.
     const fetchRoster = async (force = false): Promise<{ success: boolean; error?: string }> => {
         if (!user?.id) return { success: false, error: 'No user' };
 
-        if (!force && lastFetchRef.current && (new Date().getTime() - lastFetchRef.current.getTime() < CACHE_DURATION)) {
-            console.log('Using memory-cached roster data');
-            return { success: true };
-        }
+        const needAll = force
+            || lastAllFetchRef.current === null
+            || Date.now() - lastAllFetchRef.current > ALL_ROSTERS_TTL;
 
         try {
-            setLoading(true);
+            setFetching(true);
             setError(null);
 
             const [{ data: userRosterRow, error: userRosterError }, icalUrl] = await withTimeout(
@@ -124,33 +129,34 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             if (userRosterError) throw userRosterError;
             const userRosterData = { ...(userRosterRow as unknown as Roster), ical_url: icalUrl };
 
-            const { data: allRostersData, error: allRostersError } = await withTimeout(
-                supabase
-                    .from('roster')
-                    .select(ROSTER_COLUMNS),
-                15000,
-                'All rosters fetch'
-            );
+            let allRostersList = allRostersRef.current;
+            if (needAll) {
+                const { data: allRostersData, error: allRostersError } = await withTimeout(
+                    supabase
+                        .from('roster')
+                        .select(ROSTER_COLUMNS),
+                    15000,
+                    'All rosters fetch'
+                );
 
-            if (allRostersError) throw allRostersError;
-            const allRostersList = (allRostersData || []) as unknown as Roster[];
+                if (allRostersError) throw allRostersError;
+                allRostersList = (allRostersData || []) as unknown as Roster[];
+                lastAllFetchRef.current = Date.now();
+                setAllRosters(allRostersList);
+            }
 
             setRoster(userRosterData);
-            setAllRosters(allRostersList);
-            lastFetchRef.current = new Date();
 
-            await saveToCache(userRosterData, allRostersList);
+            await saveToCache(userRosterData, allRostersList, lastAllFetchRef.current ?? Date.now());
 
             return { success: true };
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'An error occurred';
             console.error('Fetch roster error:', errorMessage);
             setError(errorMessage);
-            setRoster(null);
-            setAllRosters([]);
             return { success: false, error: errorMessage };
         } finally {
-            setLoading(false);
+            setFetching(false);
         }
     };
     fetchRosterRef.current = fetchRoster;
@@ -161,18 +167,16 @@ export default function RosterProvider({ children }: PropsWithChildren) {
             console.log('🧹 No user ID, clearing roster data');
             setRoster(null);
             setAllRosters([]);
-            lastFetchRef.current = null;
+            lastAllFetchRef.current = null;
             setError(null);
         }
     }, [user?.id]);
 
-    // Initial load - try cache first, then fetch if needed
+    // Initial load - show the cache straight away, then refresh behind it.
     useEffect(() => {
         const initializeData = async () => {
-            const hasCachedData = await loadCachedDataRef.current();
-            if (!hasCachedData) {
-                fetchRosterRef.current();
-            }
+            await loadCachedDataRef.current();
+            fetchRosterRef.current();
         };
 
         if (user?.id) {
@@ -182,6 +186,10 @@ export default function RosterProvider({ children }: PropsWithChildren) {
 
     // Expose refreshRoster as a way to force fetch new data
     const refreshRoster = useCallback(() => fetchRosterRef.current(true), []);
+
+    // Only "loading" when there is nothing to show yet; a refresh over
+    // existing data happens silently.
+    const loading = fetching && allRosters.length === 0;
 
     return (
         <RosterContext.Provider value={{ roster, allRosters, loading, error, refreshRoster }}>

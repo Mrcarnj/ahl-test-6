@@ -62,6 +62,20 @@ function readDuration(uri: string): Promise<number | null> {
   });
 }
 
+export type CompressHandle = {
+  promise: Promise<PickedVideo>;
+  cancel: () => void;
+};
+
+/**
+ * No in-browser re-encoding: uploads go as picked. (Native compresses to 480p
+ * H.264; see clipUpload.ts.)
+ */
+export function compressVideo(video: PickedVideo, onProgress?: (fraction: number) => void): CompressHandle {
+  onProgress?.(1);
+  return { promise: Promise.resolve(video), cancel: () => {} };
+}
+
 export function makeThumbnail(video: PickedVideo): Promise<string | null> {
   return new Promise((resolve) => {
     const el = document.createElement('video');

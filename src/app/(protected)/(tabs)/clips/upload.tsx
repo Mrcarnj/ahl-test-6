@@ -22,7 +22,15 @@ import {
 } from 'react-native';
 import TagPicker from '@/src/components/clips/TagPicker';
 import { Alert } from '@/src/lib/alert';
-import { makeThumbnail, pickVideo, type PickedVideo, uploadFile, type UploadHandle } from '@/src/lib/clipUpload';
+import {
+  compressVideo,
+  type CompressHandle,
+  makeThumbnail,
+  pickVideo,
+  type PickedVideo,
+  uploadFile,
+  type UploadHandle,
+} from '@/src/lib/clipUpload';
 import {
   CLIP_TAGS,
   CLIPS_BUCKET,
@@ -59,7 +67,17 @@ export default function UploadClipScreen() {
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
+  // Submit runs in two phases: wait for compression (if still going), then upload.
+  const [phase, setPhase] = useState<'compressing' | 'uploading'>('uploading');
   const uploadRef = useRef<UploadHandle | null>(null);
+  const submitCancelledRef = useRef(false);
+  // Compression starts as soon as a video is picked and runs while the
+  // official fills in the rest of the form.
+  const compressRef = useRef<CompressHandle | null>(null);
+  const [compressProgress, setCompressProgress] = useState<number | null>(null);
+  const [compressed, setCompressed] = useState<PickedVideo | null>(null);
+  const [compressError, setCompressError] = useState<string | null>(null);
+  useEffect(() => () => compressRef.current?.cancel(), []);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -86,7 +104,11 @@ export default function UploadClipScreen() {
       : eligibleGames.slice(0, GAMES_SHOWN_INITIALLY);
 
   const uploading = progress !== null;
-  const tooBig = video?.sizeBytes != null && video.sizeBytes > MAX_BYTES;
+  // Judged on the file that will actually upload, once compression is done.
+  const finalSize = compressed?.sizeBytes ?? (compressError ? video?.sizeBytes : null) ?? null;
+  const tooBig = finalSize != null && finalSize > MAX_BYTES;
+  const compressing = !!video && !compressed && !compressError;
+  const barFraction = (phase === 'compressing' ? compressProgress : progress) ?? 0;
   const canSubmit = !!video && !tooBig && selectedIndex >= 0 && title.trim().length > 0 && tags.length > 0 && !uploading;
 
   const choose = async () => {
@@ -94,7 +116,26 @@ export default function UploadClipScreen() {
     try {
       const picked = await pickVideo();
       if (!picked) return;
+      compressRef.current?.cancel();
       setVideo(picked);
+      setCompressed(null);
+      setCompressError(null);
+      setCompressProgress(0);
+      const handle = compressVideo(picked, (f) => {
+        if (compressRef.current === handle) setCompressProgress(f);
+      });
+      compressRef.current = handle;
+      handle.promise.then(
+        (v) => {
+          if (compressRef.current === handle) setCompressed(v);
+        },
+        (e) => {
+          if (compressRef.current !== handle) return;
+          // Upload the original rather than block the official.
+          console.warn('⚠️ CLIPS: Compression failed, uploading original:', e);
+          setCompressError(e instanceof Error ? e.message : 'Compression failed');
+        },
+      );
       setThumbUri(null);
       setThumbUri(await makeThumbnail(picked));
     } catch (e) {
@@ -111,18 +152,33 @@ export default function UploadClipScreen() {
     const game = eligibleGames[selectedIndex];
     const clipId = newClipId();
     const base = `${game.id}/${clipId}`;
-    const videoPath = `${base}.${video.ext}`;
     const thumbPath = thumbUri ? `${base}.jpg` : null;
     const uploaded: string[] = [];
+    submitCancelledRef.current = false;
 
     setProgress(0);
     try {
+      // Wait for compression if it's still running; fall back to the original
+      // if it failed.
+      let final: PickedVideo = compressed ?? video;
+      if (!compressed && !compressError && compressRef.current) {
+        setPhase('compressing');
+        final = await compressRef.current.promise.catch(() => video);
+      }
+      if (submitCancelledRef.current) throw new Error('Upload cancelled');
+      if (final.sizeBytes != null && final.sizeBytes > MAX_BYTES) {
+        throw new Error('This video is over 500 MB. Trim it and try again.');
+      }
+      setPhase('uploading');
+      setProgress(0);
+      const videoPath = `${base}.${final.ext}`;
+
       if (thumbPath && thumbUri) {
         uploadRef.current = uploadFile(thumbPath, thumbUri, 'image/jpeg');
         await uploadRef.current.promise;
         uploaded.push(thumbPath);
       }
-      uploadRef.current = uploadFile(videoPath, video.uri, video.mimeType, setProgress);
+      uploadRef.current = uploadFile(videoPath, final.uri, final.mimeType, setProgress);
       await uploadRef.current.promise;
       uploaded.push(videoPath);
 
@@ -134,8 +190,8 @@ export default function UploadClipScreen() {
         tags,
         video_path: videoPath,
         thumbnail_path: thumbPath,
-        duration_seconds: video.durationSeconds,
-        size_bytes: video.sizeBytes,
+        duration_seconds: final.durationSeconds,
+        size_bytes: final.sizeBytes,
       });
       addClip(clip);
       if (!isWeb) void sendClipUploadedNotification(clip);
@@ -181,10 +237,22 @@ export default function UploadClipScreen() {
               )}
               <View style={styles.flex}>
                 <Text style={styles.videoInfo}>
-                  {[formatClipDuration(video.durationSeconds), formatMb(video.sizeBytes)].filter(Boolean).join(' · ') ||
-                    'Video selected'}
+                  {[
+                    formatClipDuration(video.durationSeconds),
+                    compressed ? formatMb(compressed.sizeBytes) : formatMb(video.sizeBytes),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'Video selected'}
                 </Text>
-                <Text style={styles.change}>{uploading ? '' : 'Tap to choose a different video'}</Text>
+                <Text style={styles.change}>
+                  {compressing
+                    ? `Optimizing for upload… ${Math.round((compressProgress ?? 0) * 100)}%`
+                    : compressed && compressed !== video && video.sizeBytes
+                      ? `Optimized from ${formatMb(video.sizeBytes)}`
+                      : uploading
+                        ? ''
+                        : 'Tap to choose a different video'}
+                </Text>
               </View>
             </View>
           ) : picking ? (
@@ -263,13 +331,23 @@ export default function UploadClipScreen() {
         {uploading ? (
           <View style={styles.progressBox}>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.round((progress ?? 0) * 100)}%` }]} />
+              <View style={[styles.progressFill, { width: `${Math.round(barFraction * 100)}%` }]} />
             </View>
             <View style={styles.progressRow}>
               <Text style={styles.progressText}>
-                {progress !== null && progress >= 1 ? 'Saving…' : `Uploading… ${Math.round((progress ?? 0) * 100)}%`}
+                {phase === 'compressing'
+                  ? `Optimizing video… ${Math.round(barFraction * 100)}%`
+                  : progress !== null && progress >= 1
+                    ? 'Saving…'
+                    : `Uploading… ${Math.round(barFraction * 100)}%`}
               </Text>
-              <Pressable onPress={() => uploadRef.current?.cancel()} hitSlop={8}>
+              <Pressable
+                onPress={() => {
+                  submitCancelledRef.current = true;
+                  uploadRef.current?.cancel();
+                }}
+                hitSlop={8}
+              >
                 <Text style={styles.cancel}>Cancel</Text>
               </Pressable>
             </View>

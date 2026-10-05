@@ -12,6 +12,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import { Video } from 'react-native-compressor';
 import { CLIPS_BUCKET } from './clips';
 import { supabase } from './supabase';
 
@@ -37,18 +38,12 @@ export async function pickVideo(): Promise<PickedVideo | null> {
     mediaTypes: ['videos'],
     // iOS: the trim editor, so officials can cut a clip down before it uploads.
     allowsEditing: true,
-    // iOS: transcode to H.264 at 640x480 (fit within, aspect kept). iPhones
-    // record HEVC, which Android and most browsers can't play, and 480p is
-    // plenty for reviewing a play at a fraction of the size (a few MB per
-    // 10 s instead of ~15 MB at full quality).
-    //
-    // Both settings are needed. allowsEditing uses UIImagePickerController,
-    // which encodes a trimmed clip with `videoQuality` and ignores
-    // `videoExportPreset` — with only the preset set (and videoQuality left at
-    // its High default) clips uploaded uncompressed at ~12 Mbps.
-    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-    videoExportPreset: ImagePicker.VideoExportPreset.H264_640x480,
-    videoQuality: ImagePicker.UIImagePickerControllerQualityType.VGA640x480,
+    // Hand over the original (trimmed at full quality); compressVideo does the
+    // real compression. The picker's own presets were tried first and are a
+    // poor fit: "640x480" fits *inside* 640x480, so a portrait clip came out
+    // 296 px wide, and it still ran ~3.5 Mbps at 60 fps (15 MB per 30 s).
+    videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+    videoQuality: ImagePicker.UIImagePickerControllerQualityType.High,
     quality: 1,
   });
   if (result.canceled || !result.assets?.[0]) return null;
@@ -74,6 +69,69 @@ function mimeForExt(ext: string): string {
   if (ext === 'm4v') return 'video/x-m4v';
   if (ext === 'webm') return 'video/webm';
   return 'video/mp4';
+}
+
+// Target for uploaded clips: 480p (long edge 854) H.264 at 1.5 Mbps, frame
+// rate kept (max 60). Measured on a 32 s, 61 MB 60 fps iPhone recording:
+// 6.2 MB, against 4.3 MB at 1.0 Mbps (smears on fast plays) and 10.1 MB for
+// 720p at 2.5 Mbps.
+const CLIP_MAX_EDGE = 854;
+const CLIP_BITRATE = 1_500_000;
+
+export type CompressHandle = {
+  promise: Promise<PickedVideo>;
+  cancel: () => void;
+};
+
+/**
+ * Re-encodes a picked clip to the upload target. Output is H.264 MP4, which
+ * also fixes iPhone HEVC that Android and most browsers can't play. A clip
+ * already at or under the target bitrate is returned as-is, since
+ * re-encoding it would only make it bigger.
+ */
+export function compressVideo(video: PickedVideo, onProgress?: (fraction: number) => void): CompressHandle {
+  let cancellationId: string | null = null;
+  let cancelled = false;
+
+  const promise = (async (): Promise<PickedVideo> => {
+    const sourceBitrate =
+      video.sizeBytes && video.durationSeconds ? (video.sizeBytes * 8) / video.durationSeconds : null;
+    if (sourceBitrate !== null && sourceBitrate <= CLIP_BITRATE * 1.15 && video.ext === 'mp4') {
+      onProgress?.(1);
+      return video;
+    }
+    const uri = await Video.compress(
+      video.uri,
+      {
+        compressionMethod: 'manual',
+        maxSize: CLIP_MAX_EDGE,
+        bitrate: CLIP_BITRATE,
+        progressDivider: 2,
+        getCancellationId: (id) => {
+          cancellationId = id;
+        },
+      },
+      (p) => onProgress?.(Math.min(Math.max(p, 0), 1)),
+    );
+    if (cancelled) throw new Error('Compression cancelled');
+    const info = await FileSystem.getInfoAsync(uri);
+    onProgress?.(1);
+    return {
+      uri,
+      durationSeconds: video.durationSeconds,
+      sizeBytes: info.exists ? info.size ?? null : null,
+      mimeType: 'video/mp4',
+      ext: 'mp4',
+    };
+  })();
+
+  return {
+    promise,
+    cancel: () => {
+      cancelled = true;
+      if (cancellationId) Video.cancelCompression(cancellationId);
+    },
+  };
 }
 
 /** A JPEG of a frame one second in (or the first frame for very short clips). */

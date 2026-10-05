@@ -138,10 +138,14 @@ crew sees it in their Clips tab. Schema, RLS and bucket are in
   upload URL with RN's XHR and a `{ uri }` body (read natively, real
   `upload.onprogress`; expo-file-system's upload task never reported
   progress), files first, then the
-  row, so nobody is alerted to a clip whose video isn't there yet. iOS
-  transcodes to H.264 640x480 (iPhone HEVC won't play on Android/web); it
-  needs both `videoExportPreset` and `videoQuality`, since trimming
-  (`allowsEditing`) ignores the preset.
+  row, so nobody is alerted to a clip whose video isn't there yet.
+- **Compression:** clips are re-encoded on device by `react-native-compressor`
+  (a Nitro module) to 480p H.264 at 1.5 Mbps (`CLIP_MAX_EDGE` /
+  `CLIP_BITRATE` in `clipUpload.ts`), starting as soon as a video is picked —
+  ~6 MB per 30 s, and H.264 because iPhone HEVC won't play on Android/web.
+  The picker hands over the original: its own presets fit *inside* 640x480
+  (a portrait clip came out 296 px wide) at a fixed ~3.5 Mbps. Web uploads
+  the file as picked.
 - **Alerts:** the uploader's device pushes `type: 'clip_uploaded'` to the
   crew. While the app is open, ClipsProvider's Realtime + a per-user
   "newest clip seen" watermark (`clipsSeenAt_v1_<auth_id>`) emit

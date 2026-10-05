@@ -3,8 +3,9 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Alert } from '@/src/lib/alert';
 import {
@@ -19,19 +20,59 @@ import {
 import { useClips } from '@/src/providers/ClipsProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 
-function Player({ url }: { url: string }) {
-  const player = useVideoPlayer(url, (p) => {
-    p.play();
-  });
+type Poster = { url: string | null; cacheKey: string | null };
+
+/** The clip's thumbnail filling the player area, with an optional overlay. */
+function PosterFrame({ poster, children }: { poster: Poster; children?: React.ReactNode }) {
   return (
-    <VideoView
-      player={player}
-      style={styles.video}
-      nativeControls
-      contentFit="contain"
-      fullscreenOptions={{ enable: true }}
-      allowsPictureInPicture
-    />
+    <View style={StyleSheet.absoluteFill}>
+      {poster.url ? (
+        <Image
+          source={{ uri: poster.url, cacheKey: poster.cacheKey ?? undefined }}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+        />
+      ) : null}
+      <View style={styles.posterOverlay}>{children}</View>
+    </View>
+  );
+}
+
+/**
+ * Doesn't autoplay: the video loads paused behind the thumbnail, and starts
+ * when the official taps the play button. Native controls appear from then on.
+ */
+function Player({ url, poster }: { url: string; poster: Poster }) {
+  const player = useVideoPlayer(url);
+  const [started, setStarted] = useState(false);
+  return (
+    <>
+      <VideoView
+        player={player}
+        style={styles.video}
+        nativeControls={started}
+        contentFit="contain"
+        fullscreenOptions={{ enable: true }}
+        allowsPictureInPicture
+      />
+      {started ? null : (
+        <PosterFrame poster={poster}>
+          <Pressable
+            onPress={() => {
+              setStarted(true);
+              player.play();
+            }}
+            style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Play clip"
+            hitSlop={16}
+          >
+            <Ionicons name="play" size={34} color="#fff" style={styles.playIcon} />
+          </Pressable>
+        </PosterFrame>
+      )}
+    </>
   );
 }
 
@@ -56,6 +97,21 @@ export default function ClipScreen() {
       .then((c) => (c ? setFetched(c) : setMissing(true)))
       .catch(() => setMissing(true));
   }, [listed, clipId]);
+
+  // The thumbnail's signed URL is usually already cached from the list.
+  const thumbnailPath = clip?.thumbnail_path ?? null;
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!thumbnailPath) return;
+    let cancelled = false;
+    getSignedUrl(thumbnailPath)
+      .then((u) => !cancelled && setPosterUrl(u))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [thumbnailPath]);
+  const poster: Poster = { url: posterUrl, cacheKey: thumbnailPath };
 
   const videoPath = clip?.video_path;
   useEffect(() => {
@@ -116,11 +172,13 @@ export default function ClipScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.videoWrap}>
         {url ? (
-          <Player url={url} />
+          <Player url={url} poster={poster} />
         ) : urlError ? (
           <Text style={styles.muted}>{urlError}</Text>
         ) : (
-          <ActivityIndicator color="#ff6600" />
+          <PosterFrame poster={poster}>
+            <ActivityIndicator color="#ff6600" />
+          </PosterFrame>
         )}
       </View>
 
@@ -197,6 +255,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  posterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 102, 0, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.95 }],
+  },
+  playIcon: {
+    // The glyph's visual center sits left of its box.
+    marginLeft: 5,
   },
   video: {
     width: '100%',

@@ -1,8 +1,23 @@
 // src/screens/SituationBookScreen.tsx
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  BookSearchNavBar,
+  BookSearchResultsModal,
+} from "@/src/components/BookSearchResults";
 import PdfViewer from "@/src/components/PdfViewer";
+import {
+  buildSituationRefs,
+  refAt,
+  type BookPage,
+} from "@/src/lib/bookRefs";
+import {
+  findMatches,
+  getSnippet,
+  toTitleCase,
+  type BookSearchHit,
+} from "@/src/lib/bookSearch";
 import AntDesign from "@expo/vector-icons/AntDesign";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -16,7 +31,6 @@ import {
 
 // `page` is the physical PDF page (what `#page=` jumps to); each page's text
 // starts with the number printed on it, which is 4 lower in the 2026-27 book.
-type BookPage = { page: number; text: string };
 
 const printedPageNumber = (page: BookPage) => {
   const first = page.text.split("\n", 1)[0].trim();
@@ -40,9 +54,10 @@ export default function SituationBook() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState<BookPage[]>([]);
+  const [searchResults, setSearchResults] = useState<BookSearchHit[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState<number | null>(null);
+  const [resultsVisible, setResultsVisible] = useState(false);
   const situationBookUri = selectedPage
     ? `${SITUATION_BOOK_URL}#page=${selectedPage}`
     : SITUATION_BOOK_URL;
@@ -60,20 +75,56 @@ export default function SituationBook() {
     };
   }, []);
 
+  const situationRefs = useMemo(
+    () => buildSituationRefs(ruleBookText),
+    [ruleBookText],
+  );
+
   const handleSearch = () => {
+    const trimmedTerm = searchTerm.trim();
+    if (!trimmedTerm) return;
     if (ruleBookText.length === 0) {
       alert("Search is still loading. Try again in a moment.");
       return;
     }
-    const results = ruleBookText.filter((page) =>
-      page.text.toLowerCase().includes(searchTerm.toLowerCase()),
-    );
+
+    // One result per situation a page's hits fall under, so a page holding
+    // 8D and 8E with a hit in each makes two rows.
+    const results = ruleBookText
+      .flatMap((page) => {
+        const printed = printedPageNumber(page);
+        const hits = new Map<string, BookSearchHit>();
+        for (const match of findMatches(page.text, trimmedTerm)) {
+          const ref = refAt(situationRefs, page.page, match.index);
+          const key = ref?.situation ?? "";
+          if (hits.has(key)) continue;
+          const section = ref?.section ?? `Page ${printed}`;
+          const ruleTitle =
+            ref?.rule != null
+              ? `Rule ${ref.rule}${ref.ruleName ? ` - ${toTitleCase(ref.ruleName)}` : ""}`
+              : null;
+          hits.set(key, {
+            page: page.page,
+            title: ref?.situation ? `${section} - ${ref.situation}` : section,
+            subtitle: `${ruleTitle ? `${ruleTitle} - ` : ""}Page ${printed}`,
+            navLabel: `${ref?.situation ? `${ref.situation} · ` : ""}Page ${printed}`,
+            snippet: getSnippet(page.text, match),
+            isFuzzy: match.fuzzy,
+          });
+        }
+        return Array.from(hits.values());
+      })
+      // Exact matches first, each group in book order (flatMap keeps it).
+      .sort((a, b) => Number(a.isFuzzy) - Number(b.isFuzzy));
 
     setSearchResults(results);
     setCurrentResultIndex(0);
-    setSelectedPage(results[0]?.page ?? null);
+    setSelectedPage(null);
     if (results.length === 0) {
       alert("No results found.");
+      setResultsVisible(false);
+    } else {
+      setResultsVisible(true);
     }
   };
 
@@ -92,6 +143,12 @@ export default function SituationBook() {
       setCurrentResultIndex(prevIndex);
       setSelectedPage(searchResults[prevIndex].page);
     }
+  };
+
+  const goToResult = (index: number) => {
+    setCurrentResultIndex(index);
+    setSelectedPage(searchResults[index].page);
+    setResultsVisible(false);
   };
 
   return (
@@ -146,6 +203,7 @@ export default function SituationBook() {
               setSearchTerm("");
               setSearchResults([]);
               setSelectedPage(null);
+              setResultsVisible(false);
             }}
             style={styles.clearButton}
           >
@@ -155,19 +213,23 @@ export default function SituationBook() {
       </View>
 
       {searchResults.length > 0 && searchTerm !== "" && (
-        <View style={styles.navigationContainer}>
-          <TouchableOpacity onPress={goToPreviousResult}>
-            <AntDesign name="up" size={24} color="#ff6600" />
-          </TouchableOpacity>
-          <Text style={styles.resultInfo}>
-            Page {printedPageNumber(searchResults[currentResultIndex])} (
-            {currentResultIndex + 1} of {searchResults.length})
-          </Text>
-          <TouchableOpacity onPress={goToNextResult}>
-            <AntDesign name="down" size={24} color="#ff6600" />
-          </TouchableOpacity>
-        </View>
+        <BookSearchNavBar
+          results={searchResults}
+          currentIndex={currentResultIndex}
+          onPrevious={goToPreviousResult}
+          onNext={goToNextResult}
+          onShowResults={() => setResultsVisible(true)}
+        />
       )}
+
+      <BookSearchResultsModal
+        visible={resultsVisible}
+        searchTerm={searchTerm}
+        results={searchResults}
+        currentIndex={currentResultIndex}
+        onSelect={goToResult}
+        onClose={() => setResultsVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -228,17 +290,5 @@ const styles = StyleSheet.create({
     right: 10,
     top: 7,
     padding: 5,
-  },
-  navigationContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 10,
-    backgroundColor: "#333",
-  },
-  resultInfo: {
-    color: "#fff",
-    fontSize: 16,
-    marginHorizontal: 10,
   },
 });

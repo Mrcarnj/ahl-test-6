@@ -13,6 +13,10 @@ type AuthContextType = {
     user: User | null;
 };
 
+// Where this provider used to keep its own copy of the session. Read once,
+// to migrate, then deleted.
+const LEGACY_SESSION_KEY = 'session';
+
 const AuthContext = createContext<AuthContextType>({
     session: null,
     user: null,
@@ -68,99 +72,83 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         return () => sub.remove();
     }, [session?.user, lastForegroundSyncAt]);
 
+    // The Supabase client is the only owner of the session: it persists it,
+    // rotates the refresh token and signs out when a refresh is refused. This
+    // provider just mirrors what the client reports.
+    //
+    // It used to keep its own copy under the 'session' key and push it back
+    // into the client with setSession() on every launch, before subscribing.
+    // A copy whose refresh token had already been rotated made that refresh
+    // fail; the client signed itself out, the SIGNED_OUT event fired before
+    // anyone was listening, and the app went on showing a "signed-in" user
+    // whose every query ran as anon. Under RLS that is an empty schedule and
+    // "permission denied for function get_my_ical_url", fixed only by
+    // signing out and back in.
     useEffect(() => {
-        const setupAuth = async () => {
-            try {
-                console.log('Setting up auth...');
-
-                // Try AsyncStorage first
-                const storedSession = await safeAsyncStorage.getItem('session');
-                console.log('Stored session from AsyncStorage:', storedSession ? 'exists' : 'none');
-                
-                if (storedSession) {
-                    const parsedSession = JSON.parse(storedSession);
-                    console.log('Setting stored session');
-                    setSession(parsedSession);
-                    await supabase.auth.setSession(parsedSession);
-                    // Trigger sync for stored session (app startup)
-                    if (parsedSession.user) {
-                        console.log('🔄 AUTH: App started with stored session, triggering sync...');
-                        if (!startupSyncTriggeredRef.current) {
-                            startupSyncTriggeredRef.current = true;
-                            triggerLoginSync();
-                        }
-                    }
-                }
-
-                // Get Supabase session
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
-                console.log('Current Supabase session:', currentSession ? 'exists' : 'none');
-
-                if (currentSession) {
-                    console.log('Setting current session');
-                    setSession(currentSession);
-                    await safeAsyncStorage.setItem('session', JSON.stringify(currentSession));
-                    // Trigger sync for current session (app startup)
-                    console.log('🔄 AUTH: App started with current session, triggering sync...');
-                    if (!startupSyncTriggeredRef.current) {
-                        startupSyncTriggeredRef.current = true;
-                        triggerLoginSync();
-                    }
-                }
-
-                // Set up auth listener
-                const { data: { subscription } } = supabase.auth.onAuthStateChange(
-                    async (event, session) => {
-                        console.log('Auth state change:', event, session ? 'with session' : 'no session');
-                        
-                        if (session) {
-                            setSession(session);
-                            await safeAsyncStorage.setItem('session', JSON.stringify(session));
-                            
-                            // Trigger sync on successful authentication
-                            if (event === 'SIGNED_IN') {
-                                // On web, supabase-js re-validates the stored session when the
-                                // browser tab regains focus and can re-emit SIGNED_IN for the
-                                // same session. Gating on the startup ref keeps that from
-                                // turning a tab switch into a schedule sync; the ref is
-                                // cleared on SIGNED_OUT so a real re-login still syncs.
-                                if (isWeb && startupSyncTriggeredRef.current) {
-                                    console.log('⊘ AUTH: SIGNED_IN on web after startup sync — not re-syncing');
-                                } else {
-                                    console.log('🔄 AUTH: User signed in, triggering sync...');
-                                    startupSyncTriggeredRef.current = true;
-                                    // Run sync in background without blocking the auth flow
-                                    triggerLoginSync();
-                                }
-                            }
-                        } else {
-                            if (event === 'SIGNED_OUT') {
-                                console.log('Explicit sign out, clearing session');
-                                startupSyncTriggeredRef.current = false;
-                                setSession(null);
-                                await safeAsyncStorage.removeItem('session');
-                                // Clear all user-specific caches on logout
-                                await clearAllRosterCaches();
-                            } else {
-                                console.log('Session null but not signing out, event:', event);
-                            }
-                        }
-                    }
-                );
-
-                // Initialize and start auto-refresh
-                await supabase.auth.initialize();
-                supabase.auth.startAutoRefresh();
-
-                return () => {
-                    subscription.unsubscribe();
-                };
-            } catch (error) {
-                console.error('Error in setupAuth:', error);
+        const startSync = () => {
+            if (!startupSyncTriggeredRef.current) {
+                startupSyncTriggeredRef.current = true;
+                triggerLoginSync();
             }
         };
 
-        setupAuth();
+        // Subscribe first, so nothing the client does during start-up (a
+        // refresh, or a sign-out because the refresh was refused) is missed.
+        // No awaiting supabase calls in here: the client holds a lock while
+        // it runs these callbacks.
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+            console.log('Auth state change:', event, nextSession ? 'with session' : 'no session');
+            setSession(nextSession);
+
+            if (event === 'INITIAL_SESSION' && nextSession) {
+                console.log('🔄 AUTH: App started with a stored session, triggering sync...');
+                startSync();
+            } else if (event === 'SIGNED_IN') {
+                // On web, supabase-js re-validates the stored session when the
+                // browser tab regains focus and can re-emit SIGNED_IN for the
+                // same session. Gating on the startup ref keeps that from
+                // turning a tab switch into a schedule sync; the ref is
+                // cleared on SIGNED_OUT so a real re-login still syncs.
+                if (isWeb && startupSyncTriggeredRef.current) {
+                    console.log('⊘ AUTH: SIGNED_IN on web after startup sync — not re-syncing');
+                } else {
+                    console.log('🔄 AUTH: User signed in, triggering sync...');
+                    startupSyncTriggeredRef.current = true;
+                    triggerLoginSync();
+                }
+            } else if (event === 'SIGNED_OUT') {
+                console.log('Signed out, clearing user caches');
+                startupSyncTriggeredRef.current = false;
+                // Clear all user-specific caches on logout
+                void clearAllRosterCaches();
+            }
+        });
+
+        // One-time move off the old 'session' copy. Normally the client has
+        // its own stored session and the copy is just deleted. Only if the
+        // client has none is the copy tried; if its refresh token is dead the
+        // user lands on the login screen, never in a half-signed-in app.
+        const migrateLegacySession = async () => {
+            try {
+                const legacy = await safeAsyncStorage.getItem(LEGACY_SESSION_KEY);
+                if (!legacy) return;
+                await safeAsyncStorage.removeItem(LEGACY_SESSION_KEY);
+                const { data: { session: current } } = await supabase.auth.getSession();
+                if (current) return;
+                const parsed = JSON.parse(legacy);
+                if (parsed?.access_token && parsed?.refresh_token) {
+                    const { error } = await supabase.auth.setSession(parsed);
+                    if (error) console.log('AUTH: Old stored session no longer valid; user must sign in');
+                }
+            } catch (error) {
+                console.error('Error migrating stored session:', error);
+            }
+        };
+        void migrateLegacySession();
+
+        supabase.auth.startAutoRefresh();
+
+        return () => subscription.unsubscribe();
     }, []);
 
     useEffect(() => {

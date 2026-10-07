@@ -979,7 +979,18 @@ async function sendNotificationsForGameChange(newGame, existingGame, changedFiel
         break; // Take the first replaced person
       }
     }
-    
+
+    // Officials who weren't on the game before this sync. The season is
+    // seeded from HockeyTech with no officials, so an assignment arrives here
+    // as an update rather than an insert; for these officials it's a new game
+    // ("New Game Added"), for the rest of the crew it's a change.
+    const officialsBefore = new Set(
+      officialFields.map(field => existingGame[field]).filter(Boolean)
+    );
+    const newlyAssigned = officialFields
+      .map(field => newGame[field])
+      .filter(name => name && !officialsBefore.has(name));
+
     console.log(`📱 Sending notifications for game ${newGame.gameid} changes: ${notificationChanges.join(', ')}`);
     
     // Send notification
@@ -993,7 +1004,8 @@ async function sendNotificationsForGameChange(newGame, existingGame, changedFiel
         gametime: newGame.gametime
       },
       notificationChanges,
-      replacedPerson
+      replacedPerson,
+      newlyAssigned
     );
     
   } catch (error) {

@@ -36,6 +36,9 @@ function pushedFields(changes: unknown): string[] {
 
 type RecentAlerts = Map<string, number>; // `${gameId}|${field}` -> when shown
 
+// Pseudo-field for a game newly on the official's schedule.
+const ADDED = 'added';
+
 const clipsHref = (scheduleId: string | number) => `/(protected)/(tabs)/clips/game/${scheduleId}`;
 
 /** One pop-up per game: the clip itself if there's one, a count if several. */
@@ -148,7 +151,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
           body: body ?? '',
           gameId,
         };
-        const fields = pushedFields(data.changes);
+        // A "New Game Added" push covers the diff's added game, not field changes.
+        const fields = data.kind === 'added' ? [ADDED] : pushedFields(data.changes);
         // The same change can be pushed more than once (the syncing device
         // and every open crew member's realtime listener both send it), so
         // don't stack identical pop-ups — nor repeat one the schedule diff
@@ -241,12 +245,16 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   // ScheduleProvider's change detection). Works on web too — no push needed.
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(SCHEDULE_CHANGES_EVENT, (changes: ScheduleChanges) => {
-      // Skip updates a push pop-up already covered in full.
+      // Skip games a push pop-up already covered in full.
       const updated = changes.updated.filter(
         u => !coveredRecently(pushAlertsRef.current, String(u.after.gameid), u.fields)
       );
       updated.forEach(u => remember(diffAlertsRef.current, String(u.after.gameid), u.fields));
-      const alerts = buildScheduleChangeAlerts({ ...changes, updated });
+      const added = changes.added.filter(
+        g => !coveredRecently(pushAlertsRef.current, String(g.gameid), [ADDED])
+      );
+      added.forEach(g => remember(diffAlertsRef.current, String(g.gameid), [ADDED]));
+      const alerts = buildScheduleChangeAlerts({ ...changes, added, updated });
       if (alerts.length > 0) {
         setAlertQueue(queue => [...queue, ...alerts]);
       }

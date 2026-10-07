@@ -89,6 +89,14 @@ and runs the sync behind it (on foreground-return it just runs the sync):
    - `syncTeamStandings` — HockeyTech standings → `teams` table (season 94).
    - `syncPlayoffBracketToDb` — disabled while playoffs are hidden.
 
+**Season seed.** `seed_schedule.py` inserts the whole regular season from
+HockeyTech once per season (insert-only: existing rows and their crews are
+never touched), so admins see every game before anyone is assigned. Seeded
+rows have no officials, which makes an assignment an *update* from empty: the
+officials newly on the game get a "New Game Added" push, the rest of the crew
+"Game Updated". Unassigned games aren't refreshed afterwards, so a postponed
+game nobody works yet keeps its seeded date until a crew's iCal sync fixes it.
+
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.
 
 Stats and standings reach other officials' open apps the same way: Realtime on
@@ -198,7 +206,7 @@ Current season is **2026-27 = HockeyTech season_id 94**.
 | Playoff player stats + rosters (inactive) | `playoffStats` | 92 |
 | Playoff bracket (inactive) | `playoff_bracket` | 92 (`PLAYOFF_BRACKET_SEASON_ID`) |
 
-When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`, and `EXPENSE_SEASON_START` / `EXPENSE_SEASON_END` in `src/app/(protected)/(tabs)/home/index.tsx`.
+When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`, and `EXPENSE_SEASON_START` / `EXPENSE_SEASON_END` in `src/app/(protected)/(tabs)/home/index.tsx`, then bump `SEASON_ID` / `SEASON_LABEL` in `seed_schedule.py` and run it.
 `EXPENSE_SEASON_START` **must be a Monday** (reports are due Mondays, every 14
 days from it). Copying last year's date shifts the weekday: 2026-27 shipped
 with Sept 22, a Tuesday, and every report showed a day late.

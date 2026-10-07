@@ -28,7 +28,8 @@
           "background-fetch"
         ],
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "runtimeVersion": "1.0.0"
     },
     "android": {
       "package": "com.dieter15.ahltest6",
@@ -39,7 +40,10 @@
         "WAKE_LOCK",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK"
-      ]
+      ],
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -89,6 +93,9 @@
       "eas": {
         "projectId": "d1103638-3c9e-4c41-8846-38a4a1486029"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d1103638-3c9e-4c41-8846-38a4a1486029"
     }
   }
 }

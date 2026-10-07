@@ -32,10 +32,23 @@ eas build --profile development
 eas build --profile preview
 eas build --profile production
 
+# OTA update (JS-only changes) to installed builds on that channel
+npx eas-cli@latest update --channel production --message "..."
+
 # Cloudflare Worker — iCal CORS proxy for the web build (in cloudflare-worker/)
 npm run dev    # local wrangler dev
 npm run deploy # deploy to Cloudflare
 ```
+
+**OTA updates** (`expo-updates`, channels `development` / `preview` /
+`production` in `eas.json`) reach only builds made with expo-updates and the
+same runtime version. `ios/` is gitignored, so EAS builds regenerate it from
+`app.json` (the few tracked `ios/` files only matter for local
+`expo run:ios`). iOS's runtime version is a fixed string, `"1.0.0"` in
+`app.json` (`ios.runtimeVersion`, mirrored in `ios/.../Supporting/Expo.plist`):
+bump it whenever a native change ships (new native library, SDK upgrade,
+native config), or an update can reach builds that lack the code and crash
+them. Android uses the `appVersion` policy (the app's `version`).
 
 TypeScript is checked by `expo lint` (eslint-config-expo). There is no separate test suite.
 

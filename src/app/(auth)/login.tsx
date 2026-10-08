@@ -38,8 +38,10 @@ export default function Auth() {
   };
 
   const validatePassword = (password: string): boolean => {
-    // Ensure password meets minimum requirements and has no illegal chars
-    return /^[a-zA-Z0-9!@#$%^&*(),.?":{}|<>]{6,64}$/.test(password);
+    // Length only. A character whitelist here locked out officials whose
+    // password (set on the change-password screen, which allows far more
+    // characters) contains e.g. - _ + = or a space. Supabase checks the rest.
+    return password.length >= 6 && password.length <= 64;
   };
 
   async function signInWithEmail() {

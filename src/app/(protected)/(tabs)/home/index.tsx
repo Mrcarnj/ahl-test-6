@@ -502,6 +502,16 @@ const TestScheduleScreen = () => {
                             <Text style={styles.link}>{link.title}</Text>
                         </TouchableOpacity>
                     ))}
+                    {/* An ahlAdmin has no games of their own to fly to. */}
+                    {!isAhlAdmin && (
+                        <TouchableOpacity
+                            onPress={() => router.push('/(protected)/(tabs)/home/flights')}
+                            style={[styles.linkButton, styles.linkButtonRow]}
+                        >
+                            <Ionicons name="airplane" size={16} color="#fff" />
+                            <Text style={styles.link}>Flights</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
                 <View style={styles.lastSyncRow}>
                     <Text style={styles.lastSyncText}>
@@ -645,6 +655,11 @@ const styles = StyleSheet.create({
         padding: 10,
         marginBottom: 15,
         alignItems: 'center',
+    },
+    linkButtonRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
     },
     link: {
         fontSize: 15,

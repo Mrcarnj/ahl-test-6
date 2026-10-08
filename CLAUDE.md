@@ -178,6 +178,28 @@ crew sees it in their Clips tab. Schema, RLS and bucket are in
   `clips/upload.tsx`, and the project-wide upload limit in the Supabase
   dashboard (Storage → Settings) all have to allow it.
 
+### Flights
+
+Home → **Flights** (hidden for `ahlAdmin`) prices travel to an upcoming game:
+pick the game (`home/flights/index`), then home airport (remembered per user,
+`flightsHomeAirport_v1_<auth_id>`), destination airport, round trip / one way,
+day before / game day, a return date, or extra one-way flights (on to another
+city, then home; max 4). `results?leg=N` lists flights per leg, `summary`
+totals them; that is what the travel form will be filled from. Trip state lives
+in `FlightTripProvider` in `flights/_layout.tsx`.
+
+- **Airports** per team are hardcoded in `TEAM_AIRPORTS` (`src/lib/flights.ts`),
+  keyed by `teams.abbreviation`; no table has them. Update with franchise moves.
+- **Fares** come from the `flight-search` Edge Function
+  (`supabase/functions/flight-search`), SerpApi's Google Flights engine,
+  economy, limited to DL/UA/AA/WN/AS/WS/AC. It holds `SERPAPI_KEY`, admits
+  officials only and caches each response for 3 h in `flight_search_cache`
+  (`sql/2026-10-07_flight_search_cache.sql`), which doubles as the usage log.
+  The free plan is 250 searches/month for everyone; a one-way leg is 1 search,
+  a round trip 2 (outbound, then returns via `departure_token`).
+- Round-trip prices are for the whole trip on both lists; one-way legs add up.
+- `supabase/functions` is Deno: excluded from `tsconfig.json` and ESLint.
+
 ### Admin view (`ahlAdmin`)
 
 A roster row with `ahlAdmin = true` is league office, not an official. Read it

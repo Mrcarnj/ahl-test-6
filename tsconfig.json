@@ -13,5 +13,10 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  // Edge Functions run on Deno (jsr: imports, the Deno global), not RN.
+  "exclude": [
+    "node_modules",
+    "supabase/functions"
   ]
 }

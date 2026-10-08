@@ -35,6 +35,8 @@ export default function HomeLayout() {
             headerTintColor: '#ffffff',
           }}
         />
+        {/* Its own stack, which draws the headers (see flights/_layout). */}
+        <Stack.Screen name="flights" options={{ headerShown: false }} />
     </Stack>
   );
 }

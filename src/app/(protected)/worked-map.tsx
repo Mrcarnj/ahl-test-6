@@ -479,32 +479,47 @@ type PinMarkerProps = {
 };
 
 /**
- * A zero-size anchor that follows its city through the map's zoom and pan
- * (c + t + s * q, same as the image) without being scaled itself. Pins used to
- * live inside the zoomed view and scale by 1 / zoom, which iOS renders small
- * and then magnifies, so they went soft and blocky zoomed in.
+ * A pin laid out at its city on the unzoomed map (real left/top/size, so the
+ * native view tree knows where it is), then shifted by just the zoom and pan:
+ * c + t + s * q minus the unzoomed c + q. It isn't scaled itself, so it stays
+ * sharp at any zoom. It used to be a zero-size view at the corner, placed
+ * entirely by the animated transform with the icon overflowing it; that drew
+ * in the simulator but the pins were missing on a device build.
  */
 function PinMarker({ city, mapX, mapY, cx, cy, selected, scale, tx, ty }: PinMarkerProps) {
     const follow = useAnimatedStyle(() => ({
         transform: [
-            { translateX: cx + tx.value + scale.value * mapX },
-            { translateY: cy + ty.value + scale.value * mapY },
+            { translateX: tx.value + (scale.value - 1) * mapX },
+            { translateY: ty.value + (scale.value - 1) * mapY },
         ],
     }));
     const size = selected ? PIN_SELECTED : PIN;
+    const tipY = size * PIN_TIP;
     return (
         <Animated.View
             pointerEvents="none"
-            style={[styles.marker, selected && styles.markerSelected, follow]}
+            collapsable={false}
+            style={[
+                styles.marker,
+                { left: cx + mapX - size / 2, top: cy + mapY - tipY, width: size, height: size },
+                selected && styles.markerSelected,
+                follow,
+            ]}
         >
             <Ionicons
                 name={city.worked > 0 ? 'location' : 'location-outline'}
                 size={size}
                 color={ORANGE}
-                style={[styles.pin, { left: -size / 2, top: -size * PIN_TIP }]}
+                style={styles.pin}
             />
             {selected && (
-                <View style={[styles.callout, city.x > 0.7 ? { right: 16 } : { left: 16 }]}>
+                <View
+                    style={[
+                        styles.callout,
+                        { top: tipY - 48 },
+                        city.x > 0.7 ? { right: size / 2 + 16 } : { left: size / 2 + 16 },
+                    ]}
+                >
                     <Text style={styles.calloutCity} numberOfLines={1}>{city.city}</Text>
                     <Text style={styles.calloutMeta} numberOfLines={1}>{cityMeta(city)}</Text>
                 </View>
@@ -606,16 +621,11 @@ const styles = StyleSheet.create({
     },
     marker: {
         position: 'absolute',
-        left: 0,
-        top: 0,
-        width: 0,
-        height: 0,
     },
     markerSelected: {
         zIndex: 2,
     },
     pin: {
-        position: 'absolute',
         // Lifts the pin off the dark map.
         textShadowColor: 'rgba(0,0,0,0.9)',
         textShadowOffset: { width: 0, height: 1 },
@@ -623,7 +633,6 @@ const styles = StyleSheet.create({
     },
     callout: {
         position: 'absolute',
-        top: -48,
         width: 170,
         backgroundColor: '#1c1c1f',
         borderColor: ORANGE,

@@ -9,9 +9,11 @@ import { FlatList, Image, Linking, ScrollView, StyleSheet, Text, TextInput, Touc
 import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 const Profile = () => {
     const { user } = useAuth();
+    const router = useRouter();
     // An ahlAdmin's myGames is the whole league and they have no iCal feed,
     // so neither the game count nor the iCal section applies to them.
     const { roster, refreshRoster, isAhlAdmin } = useRoster();
@@ -244,6 +246,14 @@ const Profile = () => {
                             </Text>
                         </View>
 
+                        <TouchableOpacity
+                            style={styles.statsButton}
+                            onPress={() => router.push('/(protected)/season-stats')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.statsButtonText}>📊 This Year&apos;s Stats</Text>
+                        </TouchableOpacity>
+
                         {/* Collapsible Game Breakdown */}
                         <View style={styles.breakdownContainer}>
                             <Text style={styles.breakdownTitle}>Game Breakdown</Text>
@@ -429,6 +439,20 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         borderRadius: 8,
         alignItems: 'center',
+    },
+    statsButton: {
+        borderColor: '#ff6600',
+        borderWidth: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        marginBottom: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    statsButtonText: {
+        color: '#ff6600',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     notificationButtonText: {
         color: '#000',

@@ -82,6 +82,28 @@ export default function ProtectedLayout() {
                   headerTintColor: '#ffffff',
                 }}
               />
+              <Stack.Screen
+                name="season-stats"
+                options={{
+                  headerTitle: "This Year's Stats",
+                  headerShown: true,
+                  headerBackVisible: false,
+                  headerLeft: () => (
+                    <HeaderBackButton
+                      label="Profile"
+                      fallback="/(protected)/(tabs)/profile"
+                    />
+                  ),
+                  headerStyle: {
+                    backgroundColor: '#000000',
+                  },
+                  headerTintColor: '#ffffff',
+                }}
+              />
+              <Stack.Screen
+                name="worked-map"
+                options={{ headerShown: false, animation: 'fade' }}
+              />
               <Stack.Screen 
                 name="official/[rosterId]" 
                 options={({ route }) => {

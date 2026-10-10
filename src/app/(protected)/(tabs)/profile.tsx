@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
+import { useTabletLayout } from '@/src/lib/platform';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -18,6 +19,8 @@ const Profile = () => {
     // so neither the game count nor the iCal section applies to them.
     const { roster, refreshRoster, isAhlAdmin } = useRoster();
     const { myGames } = useSchedule();
+    // iPad puts Email/Phone, and the three legal links, on one line each.
+    const isTablet = useTabletLayout();
 
     // State for collapsible sections
     const [expandedSeasons, setExpandedSeasons] = useState<Set<string>>(new Set());
@@ -266,24 +269,26 @@ const Profile = () => {
                         </View>
                     </>
                 )}
-                <View style={styles.infoSection}>
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Email</Text>
-                        <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{profileData.email}</Text>
+                <View style={[styles.infoSection, isTablet && styles.infoSectionTablet]}>
+                    <View style={isTablet && styles.fieldRow}>
+                        <View style={[styles.fieldContainer, isTablet && styles.fieldInRow]}>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>Email</Text>
+                            <View style={styles.valueContainer}>
+                                <Text style={[styles.value, isTablet && styles.centerText]}>{profileData.email}</Text>
+                            </View>
                         </View>
-                    </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Phone</Text>
-                        <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{profileData.phone}</Text>
+                        <View style={[styles.fieldContainer, isTablet && styles.fieldInRow]}>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>Phone</Text>
+                            <View style={styles.valueContainer}>
+                                <Text style={[styles.value, isTablet && styles.centerText]}>{profileData.phone}</Text>
+                            </View>
                         </View>
                     </View>
 
                     {!isAhlAdmin && (
                         <View style={styles.fieldContainer}>
-                            <Text style={styles.label}>iCal URL</Text>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>iCal URL</Text>
                             {isEditingIcalUrl ? (
                                 <View style={styles.editContainer}>
                                     <TextInput
@@ -317,7 +322,7 @@ const Profile = () => {
                                 </View>
                             ) : (
                                 <View style={styles.valueContainer}>
-                                    <Text style={styles.value}>
+                                    <Text style={[styles.value, isTablet && styles.centerText]}>
                                         {profileData.icalUrl || 'Not set'}
                                     </Text>
                                     <TouchableOpacity 
@@ -333,7 +338,7 @@ const Profile = () => {
 
                     {/* Notification Settings */}
                     <TouchableOpacity
-                        style={styles.notificationButton}
+                        style={[styles.notificationButton, isTablet && styles.noSideMargin]}
                         onPress={() => user?.id && requestNotificationPermissions(user.id)}
                         activeOpacity={0.7}
                     >
@@ -341,34 +346,36 @@ const Profile = () => {
                     </TouchableOpacity>
 
                     {/* Legal */}
-                    <View style={styles.legalSection}>
-                        <Text style={styles.legalHeading}>Help & Legal</Text>
-                        <TouchableOpacity
-                            onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
-                            accessibilityRole="link"
-                            style={styles.legalRow}
-                        >
-                            <Text style={styles.legalLink}>Terms of Service</Text>
-                            {roster?.tos_accepted_at ? (
-                                <Text style={styles.legalMeta}>
-                                    Accepted {new Date(roster.tos_accepted_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                                </Text>
-                            ) : null}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
-                            accessibilityRole="link"
-                            style={styles.legalRow}
-                        >
-                            <Text style={styles.legalLink}>Privacy Policy</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => Linking.openURL(SUPPORT_URL)}
-                            accessibilityRole="link"
-                            style={styles.legalRow}
-                        >
-                            <Text style={styles.legalLink}>Support</Text>
-                        </TouchableOpacity>
+                    <View style={[styles.legalSection, isTablet && styles.noSideMargin]}>
+                        <Text style={[styles.legalHeading, isTablet && styles.centerText]}>Help & Legal</Text>
+                        <View style={isTablet && styles.legalLinksRow}>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Terms of Service</Text>
+                                {roster?.tos_accepted_at ? (
+                                    <Text style={styles.legalMeta}>
+                                        Accepted {new Date(roster.tos_accepted_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    </Text>
+                                ) : null}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Privacy Policy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(SUPPORT_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Support</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     <TouchableOpacity 
@@ -461,6 +468,9 @@ const styles = StyleSheet.create({
     },
     breakdownContainer: {
         width: '100%',
+        // Phone width and below it's full-bleed; on iPad/web it stays a
+        // centred column instead of stretching the season rows edge to edge.
+        maxWidth: 560,
         marginBottom: 20,
     },
     breakdownTitle: {
@@ -592,6 +602,17 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         minHeight: 44,
     },
+    legalLinksRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        columnGap: 40,
+    },
+    // In the iPad row the "Accepted" date sits right after its link.
+    legalRowInline: {
+        justifyContent: 'flex-start',
+        gap: 10,
+    },
     legalLink: {
         color: '#ff8533',
         fontSize: 16,
@@ -622,6 +643,23 @@ const styles = StyleSheet.create({
     },
     fieldContainer: {
         marginBottom: 15,
+    },
+    // iPad: everything under the breakdown shares its centred column.
+    infoSectionTablet: {
+        maxWidth: 560,
+    },
+    centerText: {
+        textAlign: 'center',
+    },
+    noSideMargin: {
+        marginHorizontal: 0,
+    },
+    fieldRow: {
+        flexDirection: 'row',
+        gap: 40,
+    },
+    fieldInRow: {
+        flex: 1,
     },
     label: {
         fontSize: 18,

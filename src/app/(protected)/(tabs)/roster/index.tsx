@@ -5,6 +5,9 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { Roster } from '@/src/providers/ScheduleProvider';
 import { router } from 'expo-router';
+import OfficialDetails from '@/src/components/OfficialDetails';
+import SideDrawer from '@/src/components/SideDrawer';
+import { useTabletLayout } from '@/src/lib/platform';
 
 // Display order for the AHL Front Office section, by email. Anyone with
 // ahlAdmin who isn't listed falls to the end, alphabetically.
@@ -21,13 +24,15 @@ const frontOfficeRank = (roster: Roster): number => {
     return i === -1 ? FRONT_OFFICE_ORDER.length : i;
 };
 
-const RosterItem = memo(function RosterItem({ item, onPress }: {
+const RosterItem = memo(function RosterItem({ item, onPress, selected }: {
     item: { id: number; lastfirstfullname: string },
-    onPress: (id: number) => void
+    onPress: (id: number) => void,
+    /** Open in the iPad drawer. */
+    selected?: boolean,
 }) {
     return (
     <TouchableOpacity
-        style={styles.itemContainer}
+        style={[styles.itemContainer, selected && styles.selectedItem]}
         onPress={() => onPress(item.id)}
     >
         <Text style={styles.itemText}>{item.lastfirstfullname}</Text>
@@ -44,6 +49,10 @@ const RosterScreen = () => {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [pulling, setPulling] = useState(false);
+    // On iPad a tapped official opens in a drawer over the right half, so the
+    // list stays in view; null when it's closed.
+    const isTablet = useTabletLayout();
+    const [selectedId, setSelectedId] = useState<number | null>(null);
 
     // Derived during render, not in an effect, so the first frame already has
     // the list instead of an empty screen that fills in a frame later.
@@ -70,6 +79,10 @@ const RosterScreen = () => {
     }, [refreshRoster]);
 
     const handleRosterPress = useCallback((id: number) => {
+        if (isTablet) {
+            setSelectedId(id);
+            return;
+        }
         router.push({
             pathname: "/(protected)/official/[rosterId]",
             params: { 
@@ -77,13 +90,13 @@ const RosterScreen = () => {
                 source: 'roster'
             }
         });
-    }, []);
+    }, [isTablet]);
 
     const keyExtractor = useCallback((item: Roster) => item.id.toString(), []);
 
     const renderItem = useCallback(({ item }: { item: Roster }) => (
-        <RosterItem item={item} onPress={handleRosterPress} />
-    ), [handleRosterPress]);
+        <RosterItem item={item} onPress={handleRosterPress} selected={isTablet && item.id === selectedId} />
+    ), [handleRosterPress, isTablet, selectedId]);
 
     // Only reached on a first-ever launch with no cache yet.
     if (loading) {
@@ -107,6 +120,9 @@ const RosterScreen = () => {
 
     return (
         <View style={styles.container}>
+            {/* With the drawer open the list keeps to the left half, so its
+                rows end at the drawer instead of running under it. */}
+            <View style={[styles.listPane, isTablet && selectedId !== null && styles.listPaneNarrow]}>
             <View style={styles.searchContainer}>
                 <TextInput
                     style={styles.searchBar}
@@ -168,6 +184,18 @@ const RosterScreen = () => {
                     />
                 </ScrollView>
             </View>
+            </View>
+
+            {isTablet && selectedId !== null && (
+                <SideDrawer
+                    title="Official's Details"
+                    onClose={() => setSelectedId(null)}
+                    style={styles.drawer}
+                >
+                    {/* Keyed so switching officials starts from a clean profile. */}
+                    <OfficialDetails key={selectedId} rosterId={selectedId} />
+                </SideDrawer>
+            )}
         </View>
     );
 };
@@ -242,6 +270,25 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+    },
+    listPane: {
+        flex: 1,
+    },
+    listPaneNarrow: {
+        width: '50%',
+    },
+    selectedItem: {
+        borderWidth: 1,
+        borderColor: '#ff6600',
+    },
+    drawer: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        right: 0,
+        width: '50%',
+        borderLeftWidth: 1,
+        borderLeftColor: '#333',
     },
     itemText: {
         fontSize: 16,

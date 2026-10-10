@@ -13,7 +13,7 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb, useTabletLayout } from '@/src/lib/platform';
 import AllGamesList from '@/src/components/AllGamesList';
 import MiniCalendar from '@/src/components/MiniCalendar';
-import Animated, { SlideInRight, SlideOutRight } from 'react-native-reanimated';
+import SideDrawer from '@/src/components/SideDrawer';
 
 /**
  * The season the expense-report cycle covers. Each report covers a 14-day
@@ -542,23 +542,13 @@ const TestScheduleScreen = () => {
                         {/* Slides over both right sectors, which stay mounted
                             underneath so the calendar keeps its month. */}
                         {allGamesOpen && (
-                            <Animated.View
+                            <SideDrawer
+                                title="All Games"
+                                onClose={() => setAllGamesOpen(false)}
                                 style={tabletStyles.panel}
-                                entering={SlideInRight.duration(250)}
-                                exiting={SlideOutRight.duration(200)}
                             >
-                                <View style={tabletStyles.panelHeader}>
-                                    <Text style={tabletStyles.panelTitle}>All Games</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setAllGamesOpen(false)}
-                                        hitSlop={12}
-                                        accessibilityLabel="Close All Games"
-                                    >
-                                        <Ionicons name="close" size={28} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
                                 <AllGamesList />
-                            </Animated.View>
+                            </SideDrawer>
                         )}
                     </View>
                 </View>
@@ -793,25 +783,9 @@ const tabletStyles = StyleSheet.create({
         bottom: SECTOR_GAP,
         left: SECTOR_GAP,
         right: SECTOR_GAP,
-        backgroundColor: '#000',
         borderRadius: 12,
         borderWidth: 1,
         borderColor: '#333',
-        overflow: 'hidden',
-    },
-    panelHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#333',
-    },
-    panelTitle: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
     },
     activeCard: {
         borderWidth: 1,

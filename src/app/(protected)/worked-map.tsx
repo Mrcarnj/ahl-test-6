@@ -3,9 +3,9 @@
 // "Where I've Worked": a US + Canada map with a pin at every home team's city
 // the official has a game at, filtered by season. Reached from Profile.
 //
-// The app is portrait-only and stays that way: on a phone the whole screen is
-// drawn turned 90° clockwise, so it reads right way up once the phone is held
-// sideways. The web build draws it unrotated.
+// Phones are portrait-only and stay that way: there the whole screen is drawn
+// turned 90° clockwise, so it reads right way up once the phone is held
+// sideways. iPad (locked to landscape) and the web build draw it unrotated.
 //
 // The map pinches to zoom (up to MAX_ZOOM), pans while zoomed, and double-tap
 // zooms in or back out. Pins are drawn over the map rather than inside its
@@ -100,8 +100,9 @@ export default function WorkedMapScreen() {
     );
 
     // Landscape box: the phone's long side is this screen's width. The phone's
-    // top (notch / Dynamic Island) ends up on the left after rotating.
-    const rotate = !isWeb;
+    // top (notch / Dynamic Island) ends up on the left after rotating. A window
+    // that is already landscape (iPad, web) needs no turning.
+    const rotate = !isWeb && window.height > window.width;
     const boxWidth = rotate ? window.height : window.width;
     const boxHeight = rotate ? window.width : window.height;
     const padLeft = rotate ? insets.top : insets.left;
@@ -112,6 +113,8 @@ export default function WorkedMapScreen() {
             style={[
                 styles.box,
                 { width: boxWidth, height: boxHeight, paddingLeft: padLeft + 12, paddingRight: padRight + 12 },
+                // Unrotated, the bottom edge is the real one: clear the home indicator.
+                !rotate && { paddingBottom: 10 + insets.bottom },
                 rotate && {
                     position: 'absolute',
                     left: (window.width - boxWidth) / 2,

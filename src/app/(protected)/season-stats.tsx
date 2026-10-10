@@ -6,6 +6,7 @@
 // upcoming ones show as a total.
 
 import { currentSeasonLabel } from '@/src/lib/season';
+import { isPad, isWeb } from '@/src/lib/platform';
 import { flipLastFirst, seasonStats, StatRow } from '@/src/lib/seasonStats';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
@@ -86,7 +87,10 @@ export default function SeasonStatsScreen() {
                 <Ionicons name="map" size={22} color={ORANGE} />
                 <View style={styles.mapButtonBody}>
                     <Text style={styles.mapButtonText}>Where I&apos;ve Worked</Text>
-                    <Text style={styles.mapButtonHint}>Turn your phone sideways</Text>
+                    {/* Only phones draw the map turned; iPad and web are already landscape. */}
+                    {!isWeb && !isPad && (
+                        <Text style={styles.mapButtonHint}>Turn your phone sideways</Text>
+                    )}
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
             </TouchableOpacity>

@@ -13,21 +13,24 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb } from '@/src/lib/platform';
 
 /**
- * The season the expense-report cycle covers. Expense reports fall every 14
- * days from the start date up to the end date, and — just as importantly —
- * only games inside this window belong on a report.
+ * The season the expense-report cycle covers. Each report covers a 14-day
+ * period, Monday through Sunday two weeks later, starting from the start
+ * date; it is due EXPENSE_DUE_DAYS_AFTER_PERIOD days after the period's last
+ * day. Just as importantly, only games inside this window belong on a report.
  *
  * Officials' `myGames` still contains last season's games (including its
  * playoffs), so without this bound they leak onto the current season's first
  * reports. Bump both when the season rolls over.
  *
- * START must be a MONDAY: reports are due on Mondays, and every due date is a
- * whole number of 14-day steps from it. 2025-26 used Sept 22, a Monday that
- * year; carried over unchanged to 2026-27 it fell on a Tuesday, and every
- * report showed as due a day late.
+ * START must be a MONDAY, the first day of a report period: every period is a
+ * whole number of 14-day steps from it. 2026-27 periods: Sept 14-27 (due
+ * Fri Oct 2), Sept 28-Oct 11 (due Fri Oct 16), and so on. 2025-26 instead
+ * had reports due the Monday right after each period ended.
  */
-const EXPENSE_SEASON_START = new Date(2026, 8, 21); // Monday, September 21, 2026
+const EXPENSE_SEASON_START = new Date(2026, 8, 14); // Monday, September 14, 2026
 const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
+// Sunday period end -> due the Friday after.
+const EXPENSE_DUE_DAYS_AFTER_PERIOD = 5;
 
 
 const TestScheduleScreen = () => {
@@ -123,23 +126,21 @@ const TestScheduleScreen = () => {
         const endDate = EXPENSE_SEASON_END;
         const today = parse(todayKey, 'yyyy-MM-dd', new Date()); // local midnight
         // Copy, so the loop below can never advance the shared constant.
-        let nextDueDate = new Date(EXPENSE_SEASON_START);
+        let periodStart = new Date(EXPENSE_SEASON_START);
     
-        while (nextDueDate <= endDate) {
-            // Create date objects for comparison that are set to start of day
-            const currentDueDate = new Date(nextDueDate);
-            currentDueDate.setHours(0, 0, 0, 0);
+        while (periodStart <= endDate) {
+            // Last day of the period (inclusive) and the day the report is due.
+            const rangeStartDate = new Date(periodStart);
+            rangeStartDate.setHours(0, 0, 0, 0);
+            const rangeEndDate = addDays(rangeStartDate, 13);
+            const currentDueDate = addDays(rangeEndDate, EXPENSE_DUE_DAYS_AFTER_PERIOD);
             
             // Create a copy for tomorrow comparison
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
     
             if (currentDueDate >= today) {
-                const rangeEndDate = new Date(currentDueDate);
-                const rangeStartDate = new Date(rangeEndDate);
-                rangeStartDate.setDate(rangeStartDate.getDate() - 14);
-    
-                const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(addDays(rangeEndDate, -1), 'MMMM d')}`;
+                const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(rangeEndDate, 'MMMM d')}`;
     
                 // Check if it's due today
                 if (currentDueDate.getTime() === today.getTime()) {
@@ -176,7 +177,7 @@ const TestScheduleScreen = () => {
                     rangeEndDate 
                 };
             }
-            nextDueDate = addDays(nextDueDate, 14);
+            periodStart = addDays(periodStart, 14);
         }
         
         return { 

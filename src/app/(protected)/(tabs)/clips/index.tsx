@@ -1,7 +1,8 @@
-// Every clip this official can see — their own and their crews' — in one list,
-// grouped by game (newest game first), with search, a Mine / Crew toggle and
-// tag filters. Filtering runs on the already-loaded list, so it's instant.
-// An ahlAdmin sees every clip in the league and gets no Mine / Crew toggle.
+// Clips grouped by game (newest game first), with search, a Mine / Crew / All
+// toggle (Mine first) and tag filters. "Crew" is clips others uploaded to
+// games this official worked; "All" is every clip in the league (every
+// official can watch every clip). Filtering runs on the already-loaded list,
+// so it's instant. An ahlAdmin gets no toggle and always sees All.
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -22,15 +23,33 @@ import { useThumbnailUrls } from '@/src/components/clips/useThumbnailUrls';
 import { CLIP_TAGS, type Clip, displayName, formatGameShort } from '@/src/lib/clips';
 import { useClips } from '@/src/providers/ClipsProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
+import { useSchedule } from '@/src/providers/ScheduleProvider';
+import { useTabletLayout } from '@/src/lib/platform';
 
 type Scope = 'all' | 'mine' | 'crew';
 const SCOPES: { key: Scope; label: string }[] = [
-  { key: 'all', label: 'All' },
   { key: 'mine', label: 'Mine' },
   { key: 'crew', label: 'Crew' },
+  { key: 'all', label: 'All' },
 ];
 
-type Section = { scheduleId: number; title: string; data: Clip[]; gamedate: string };
+const EMPTY_TEXT: Record<Scope, string> = {
+  mine: 'Clips you upload show up here.',
+  crew: 'Clips your crews upload to games you worked show up here.',
+  all: 'Clips uploaded by officials across the league show up here.',
+};
+
+/** A game's clips, as rows: one clip per row on a phone, a row of three on iPad. */
+type Section = { scheduleId: number; title: string; data: Clip[][]; count: number; gamedate: string };
+
+/** Clips across a row on iPad before wrapping to the next. */
+const TABLET_COLUMNS = 3;
+
+const toRows = (clips: Clip[], perRow: number): Clip[][] => {
+  const rows: Clip[][] = [];
+  for (let i = 0; i < clips.length; i += perRow) rows.push(clips.slice(i, i + perRow));
+  return rows;
+};
 
 function matchesSearch(clip: Clip, q: string): boolean {
   if (!q) return true;
@@ -58,9 +77,14 @@ export default function ClipsScreen() {
   const { clips, loaded, refreshing, error, refresh } = useClips();
   const { roster, isAhlAdmin } = useRoster();
   const myId = roster?.auth_id;
+  const { myGames } = useSchedule();
+  // Schedule rows this official worked: "Crew" clips are others' on these.
+  const myScheduleIds = useMemo(() => new Set(myGames.map((g) => g.id)), [myGames]);
 
   const [query, setQuery] = useState('');
-  const [scope, setScope] = useState<Scope>('all');
+  const [pickedScope, setScope] = useState<Scope>('mine');
+  // Admins have no toggle, so they always get the whole league.
+  const scope: Scope = isAhlAdmin ? 'all' : pickedScope;
   const [tags, setTags] = useState<string[]>([]);
 
   // Offer only tags that some clip actually has, in the preset order, then
@@ -76,27 +100,33 @@ export default function ClipsScreen() {
     () =>
       clips.filter(
         (c) =>
-          (scope === 'all' || (scope === 'mine') === (c.uploaded_by === myId)) &&
+          (scope === 'all' ||
+            (scope === 'mine'
+              ? c.uploaded_by === myId
+              : c.uploaded_by !== myId && myScheduleIds.has(c.schedule_id))) &&
           tags.every((t) => c.tags.includes(t)) &&
           matchesSearch(c, query.trim()),
       ),
-    [clips, scope, tags, query, myId],
+    [clips, scope, tags, query, myId, myScheduleIds],
   );
 
+  const isTablet = useTabletLayout();
+  const perRow = isTablet ? TABLET_COLUMNS : 1;
+
   const sections = useMemo<Section[]>(() => {
-    const byGame = new Map<number, Section>();
+    const byGame = new Map<number, { scheduleId: number; title: string; clips: Clip[]; gamedate: string }>();
     for (const c of filtered) {
-      let s = byGame.get(c.schedule_id);
-      if (!s) {
-        s = { scheduleId: c.schedule_id, title: formatGameShort(c.game), data: [], gamedate: c.game?.gamedate ?? '' };
-        byGame.set(c.schedule_id, s);
+      let g = byGame.get(c.schedule_id);
+      if (!g) {
+        g = { scheduleId: c.schedule_id, title: formatGameShort(c.game), clips: [], gamedate: c.game?.gamedate ?? '' };
+        byGame.set(c.schedule_id, g);
       }
-      s.data.push(c);
+      g.clips.push(c);
     }
-    return [...byGame.values()].sort(
-      (a, b) => b.gamedate.localeCompare(a.gamedate) || b.data[0].created_at.localeCompare(a.data[0].created_at),
-    );
-  }, [filtered]);
+    return [...byGame.values()]
+      .sort((a, b) => b.gamedate.localeCompare(a.gamedate) || b.clips[0].created_at.localeCompare(a.clips[0].created_at))
+      .map(({ clips: list, ...g }) => ({ ...g, data: toRows(list, perRow), count: list.length }));
+  }, [filtered, perRow]);
 
   const thumbs = useThumbnailUrls(filtered);
 
@@ -109,7 +139,8 @@ export default function ClipsScreen() {
     router.push({ pathname: '/(protected)/(tabs)/clips/[clipId]', params: { clipId: clip.id } });
   }, []);
 
-  const filtersActive = scope !== 'all' || tags.length > 0 || query.trim() !== '';
+  // Search and tags; the Mine / Crew / All toggle gets its own empty message.
+  const filtersActive = tags.length > 0 || query.trim() !== '';
 
   return (
     <View style={styles.container}>
@@ -157,7 +188,7 @@ export default function ClipsScreen() {
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(c) => c.id}
+          keyExtractor={(row) => row[0].id}
           stickySectionHeadersEnabled
           initialNumToRender={12}
           windowSize={7}
@@ -179,28 +210,34 @@ export default function ClipsScreen() {
                 {section.title}
               </Text>
               <Text style={styles.sectionCount}>
-                {section.data.length} <Ionicons name="chevron-forward" size={12} color="#888" />
+                {section.count} <Ionicons name="chevron-forward" size={12} color="#888" />
               </Text>
             </Pressable>
           )}
-          renderItem={({ item }) => (
-            <ClipCard
-              clip={item}
-              thumbnailUrl={item.thumbnail_path ? thumbs[item.thumbnail_path] : undefined}
-              isMine={item.uploaded_by === myId}
-              onPress={openClip}
-            />
+          renderItem={({ item: row }) => (
+            <View style={styles.clipRow}>
+              {row.map((clip) => (
+                <View key={clip.id} style={styles.clipCell}>
+                  <ClipCard
+                    clip={clip}
+                    thumbnailUrl={clip.thumbnail_path ? thumbs[clip.thumbnail_path] : undefined}
+                    isMine={clip.uploaded_by === myId}
+                    onPress={openClip}
+                  />
+                </View>
+              ))}
+              {/* Keep a short last row's clips at full column width. */}
+              {Array.from({ length: perRow - row.length }, (_, i) => (
+                <View key={`pad-${i}`} style={styles.clipCell} />
+              ))}
+            </View>
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="videocam-outline" size={40} color="#444" />
               <Text style={styles.emptyTitle}>{filtersActive ? 'No matching clips' : 'No clips yet'}</Text>
               <Text style={styles.emptyText}>
-                {filtersActive
-                  ? 'Try a different search or clear a filter.'
-                  : isAhlAdmin
-                    ? 'Clips uploaded to any game show up here.'
-                    : 'Clips you or your crews upload to your games show up here.'}
+                {filtersActive ? 'Try a different search or clear a filter.' : EMPTY_TEXT[scope]}
               </Text>
               {!filtersActive ? (
                 <Pressable style={styles.uploadBtn} onPress={() => router.push('/(protected)/(tabs)/clips/upload')}>
@@ -217,6 +254,12 @@ export default function ClipsScreen() {
 }
 
 const styles = StyleSheet.create({
+  clipRow: {
+    flexDirection: 'row',
+  },
+  clipCell: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: '#000',

@@ -13,6 +13,7 @@ import SyncBannerHost from '@/src/components/SyncBannerHost';
 import { isWeb, useTabletLayout } from '@/src/lib/platform';
 import AllGamesList from '@/src/components/AllGamesList';
 import MiniCalendar from '@/src/components/MiniCalendar';
+import ClipsFeed from '@/src/components/ClipsFeed';
 import SideDrawer from '@/src/components/SideDrawer';
 
 /**
@@ -533,11 +534,8 @@ const TestScheduleScreen = () => {
                         <View style={tabletStyles.sector}>
                             <MiniCalendar />
                         </View>
-                        {/* Placeholder: clips get their own design later. */}
-                        <View style={[tabletStyles.sector, tabletStyles.placeholder]}>
-                            <Ionicons name="videocam-outline" size={36} color="#ff6600" />
-                            <Text style={tabletStyles.placeholderTitle}>Clips</Text>
-                            <Text style={tabletStyles.placeholderText}>Coming soon</Text>
+                        <View style={tabletStyles.sector}>
+                            <ClipsFeed />
                         </View>
                         {/* Slides over both right sectors, which stay mounted
                             underneath so the calendar keeps its month. */}
@@ -760,22 +758,6 @@ const tabletStyles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#222',
         padding: 12,
-    },
-    placeholder: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    placeholderTitle: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginTop: 8,
-    },
-    placeholderText: {
-        color: '#999',
-        fontSize: 14,
-        fontStyle: 'italic',
-        marginTop: 4,
     },
     panel: {
         position: 'absolute',

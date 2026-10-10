@@ -9,6 +9,17 @@ import { Platform, useWindowDimensions } from 'react-native';
 export const isWeb = Platform.OS === 'web';
 export const isNative = !isWeb;
 
+/** True on any iPad, whatever its window size. */
+export const isPad = Platform.OS === 'ios' && Platform.isPad;
+
+/**
+ * Narrowest window that gets the iPad split layout. The app is locked to
+ * landscape on iPad (`UISupportedInterfaceOrientations~ipad` in app.json), and
+ * the smallest iPad is ~1130pt wide that way; a narrower window means Stage
+ * Manager or a resizable window, which gets the phone layout instead.
+ */
+export const TABLET_MIN_WIDTH = 900;
+
 /**
  * Width at which the web build swaps the slide-in drawer for a permanent
  * sidebar. Matches the tablet-portrait breakpoint used by the content
@@ -36,6 +47,16 @@ export type Responsive = {
   width: number;
   height: number;
 };
+
+/**
+ * True when a screen should draw its iPad layout (home's four-sector view).
+ * Re-renders on window resize, so a narrowed window falls back to the phone
+ * layout.
+ */
+export function useTabletLayout(): boolean {
+  const { width } = useWindowDimensions();
+  return isPad && width >= TABLET_MIN_WIDTH;
+}
 
 export function useResponsive(): Responsive {
   const { width, height } = useWindowDimensions();

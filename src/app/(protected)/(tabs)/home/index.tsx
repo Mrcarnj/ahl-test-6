@@ -10,7 +10,10 @@ import { ActivityIndicator, AppState, Image, Linking, ScrollView, StyleSheet, Te
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
-import { isWeb } from '@/src/lib/platform';
+import { isWeb, useTabletLayout } from '@/src/lib/platform';
+import AllGamesList from '@/src/components/AllGamesList';
+import MiniCalendar from '@/src/components/MiniCalendar';
+import Animated, { SlideInRight, SlideOutRight } from 'react-native-reanimated';
 
 /**
  * The season the expense-report cycle covers. Each report covers a 14-day
@@ -38,6 +41,10 @@ const TestScheduleScreen = () => {
     const { myGames, playoffBracket, scheduleLoaded, scheduleSyncStatus } = useSchedule();
     const { roster, isAhlAdmin } = useRoster();
     const { syncStatus, refreshSyncStatus } = useHockeySync();
+    // On iPad the home screen is split: these sections on the left, the
+    // calendar and clips on the right, and All Games opens over the right side.
+    const isTablet = useTabletLayout();
+    const [allGamesOpen, setAllGamesOpen] = useState(false);
 
     // "Last refresh" is read from storage once on mount; re-read it whenever a
     // schedule sync finishes so it reflects pull-to-refresh and foreground syncs.
@@ -352,6 +359,213 @@ const TestScheduleScreen = () => {
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
+    const header = (
+        <View style={[styles.header, isTablet && tabletStyles.header]}>
+            <Image
+                source={require('../../../../../assets/images/ahlLogo.png')}
+                style={[styles.leagueLogo, isTablet && tabletStyles.leagueLogo]}
+            />
+            <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
+        </View>
+    );
+
+    const sections = (
+        <>
+            {todayEvents.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Today</Text>
+                    {todayEvents.map((todayEvent, i) => (
+                        <TouchableOpacity
+                            key={todayEvent.id}
+                            style={[styles.gameCardToday, i > 0 && styles.gameCardTodaySpaced]}
+                            onPress={() => handleGamePress(todayEvent.gameid)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.gameContent}>
+                                <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
+                                <Text style={styles.matchup}>
+                                    {todayEvent.awayteam} @ {todayEvent.hometeam}
+                                </Text>
+                                <Text style={styles.gameDetails}>
+                                    {`${formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // ${todayEvent.homeTeamData?.arenaname ?? ''}`}
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
+
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                <View style={styles.expenseReportContainer}>
+                    <Text style={styles.reportTitle}>Expense Report Due: </Text>
+                    <Text style={[
+                        styles.expenseReportText,
+                        isToday && styles.expenseReportToday,
+                        isTomorrow && styles.expenseReportTomorrow
+                    ]}>
+                        {text}
+                    </Text>
+                </View>
+
+                {dateRange && (
+                    <>
+                            <Text style={styles.dateRangeText}>
+                                Date Range Due: {dateRange}
+                            </Text>
+                            {/* An ahlAdmin files no report of their own games. */}
+                            {!isAhlAdmin && <Text style={styles.dateRangeText}>
+                                Games on Report: {gamesOnExpenseReport.length > 0
+                                    ? gamesOnExpenseReport.join(', ')
+                                    : scheduleLoaded ? 'No games in this period' : '…'}
+                            </Text>}
+                    </>
+                )}
+            </View>
+
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                {/* An ahlAdmin's next few league games say little; they
+                    have Today, the calendar and View All Games. */}
+                {!isAhlAdmin && (
+                    <>
+                    <Text style={styles.sectionTitle}>Upcoming Games</Text>
+                    {upcomingEvents.length > 0 ? (
+                        upcomingEvents.map(game => (
+                            <TouchableOpacity
+                                key={game.id}
+                                style={styles.gameCard}
+                                onPress={() => handleGamePress(game.gameid)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={styles.gameContent}>
+                                    <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
+                                    <Text style={styles.matchup}>
+                                        {game.awayteam} @ {game.hometeam}
+                                    </Text>
+                                    <Text style={styles.gameDetails}>
+                                        {`${formatGameTime(game.gametime, game.gamedate)} // ${game.homeTeamData?.arenaname ?? ''}`}
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                            </TouchableOpacity>
+                        ))
+                    ) : scheduleLoaded ? (
+                        <Text style={styles.noGamesText}>No upcoming games</Text>
+                    ) : (
+                        // First load of the schedule from the DB is still in flight.
+                        <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
+                    )}
+                    </>
+                )}
+                <TouchableOpacity
+                    style={[styles.gameCard, isTablet && allGamesOpen && tabletStyles.activeCard]}
+                    onPress={() => isTablet
+                        ? setAllGamesOpen(open => !open)
+                        : router.push("/(protected)/(tabs)/home/AllGames")}
+                >
+                    <Text style={styles.link}>View All Games</Text>
+                    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                </TouchableOpacity>
+            </View>
+            {ruleLinks.length > 0 && (
+              <>
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                {ruleLinks.map((link) => (
+                    <TouchableOpacity
+                        key={link.title}
+                        onPress={() => openLink(link)}
+                        style={styles.gameCard}
+                    >
+                        <View style={styles.linkTitleContainer}>
+                            <Text style={styles.link}>{link.title}</Text>
+                            {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                            {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                        </View>
+                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                    </TouchableOpacity>
+                ))}
+            </View>
+              </>
+            )}
+
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>External Links</Text>
+                {externalUrlLinks.map((link) => (
+                    <TouchableOpacity
+                        key={link.title}
+                        onPress={() => openLink(link)}
+                        style={styles.linkButton}
+                    >
+                        <Text style={styles.link}>{link.title}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+            <View style={styles.lastSyncRow}>
+                <Text style={styles.lastSyncText}>
+                    Last refresh: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
+                </Text>
+            </View>
+        </>
+    );
+
+    if (isTablet) {
+        return (
+            <SafeAreaView style={styles.container} edges={['left', 'right', 'top']}>
+                <SyncBannerHost />
+                {header}
+                <View style={tabletStyles.body}>
+                    {/* Left half: everything the phone's home screen shows. */}
+                    <ScrollView
+                        style={tabletStyles.leftColumn}
+                        refreshControl={<AppRefreshControl />}
+                    >
+                        {sections}
+                    </ScrollView>
+                    <View style={tabletStyles.rightColumn}>
+                        <View style={tabletStyles.sector}>
+                            <MiniCalendar />
+                        </View>
+                        {/* Placeholder: clips get their own design later. */}
+                        <View style={[tabletStyles.sector, tabletStyles.placeholder]}>
+                            <Ionicons name="videocam-outline" size={36} color="#ff6600" />
+                            <Text style={tabletStyles.placeholderTitle}>Clips</Text>
+                            <Text style={tabletStyles.placeholderText}>Coming soon</Text>
+                        </View>
+                        {/* Slides over both right sectors, which stay mounted
+                            underneath so the calendar keeps its month. */}
+                        {allGamesOpen && (
+                            <Animated.View
+                                style={tabletStyles.panel}
+                                entering={SlideInRight.duration(250)}
+                                exiting={SlideOutRight.duration(200)}
+                            >
+                                <View style={tabletStyles.panelHeader}>
+                                    <Text style={tabletStyles.panelTitle}>All Games</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setAllGamesOpen(false)}
+                                        hitSlop={12}
+                                        accessibilityLabel="Close All Games"
+                                    >
+                                        <Ionicons name="close" size={28} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                                <AllGamesList />
+                            </Animated.View>
+                        )}
+                    </View>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}
             edges={['left', 'right', 'top']}>
@@ -362,153 +576,8 @@ const TestScheduleScreen = () => {
                 contentContainerStyle={styles.contentContainer}
                 refreshControl={<AppRefreshControl />}
             >
-                <View style={styles.header}>
-                    <Image
-                        source={require('../../../../../assets/images/ahlLogo.png')}
-                        style={styles.leagueLogo}
-                    />
-                    <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
-                </View>
-                {todayEvents.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Today</Text>
-                        {todayEvents.map((todayEvent, i) => (
-                            <TouchableOpacity
-                                key={todayEvent.id}
-                                style={[styles.gameCardToday, i > 0 && styles.gameCardTodaySpaced]}
-                                onPress={() => handleGamePress(todayEvent.gameid)}
-                                activeOpacity={0.7}
-                            >
-                                <View style={styles.gameContent}>
-                                    <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
-                                    <Text style={styles.matchup}>
-                                        {todayEvent.awayteam} @ {todayEvent.hometeam}
-                                    </Text>
-                                    <Text style={styles.gameDetails}>
-                                        {`${formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // ${todayEvent.homeTeamData?.arenaname ?? ''}`}
-                                    </Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                <View style={styles.separator} />
-
-                <View style={styles.section}>
-                    <View style={styles.expenseReportContainer}>
-                        <Text style={styles.reportTitle}>Expense Report Due: </Text>
-                        <Text style={[
-                            styles.expenseReportText,
-                            isToday && styles.expenseReportToday,
-                            isTomorrow && styles.expenseReportTomorrow
-                        ]}>
-                            {text}
-                        </Text>
-                    </View>
-
-                    {dateRange && (
-                        <>
-                                <Text style={styles.dateRangeText}>
-                                    Date Range Due: {dateRange}
-                                </Text>
-                                {/* An ahlAdmin files no report of their own games. */}
-                                {!isAhlAdmin && <Text style={styles.dateRangeText}>
-                                    Games on Report: {gamesOnExpenseReport.length > 0
-                                        ? gamesOnExpenseReport.join(', ')
-                                        : scheduleLoaded ? 'No games in this period' : '…'}
-                                </Text>}
-                        </>
-                    )}
-                </View>
-
-                <View style={styles.separator} />
-
-                <View style={styles.section}>
-                    {/* An ahlAdmin's next few league games say little; they
-                        have Today, the calendar and View All Games. */}
-                    {!isAhlAdmin && (
-                        <>
-                        <Text style={styles.sectionTitle}>Upcoming Games</Text>
-                        {upcomingEvents.length > 0 ? (
-                            upcomingEvents.map(game => (
-                                <TouchableOpacity
-                                    key={game.id}
-                                    style={styles.gameCard}
-                                    onPress={() => handleGamePress(game.gameid)}
-                                    activeOpacity={0.7}
-                                >
-                                    <View style={styles.gameContent}>
-                                        <Text style={styles.gameId}>{formatGameDate(game.gamedate)}</Text>
-                                        <Text style={styles.matchup}>
-                                            {game.awayteam} @ {game.hometeam}
-                                        </Text>
-                                        <Text style={styles.gameDetails}>
-                                            {`${formatGameTime(game.gametime, game.gamedate)} // ${game.homeTeamData?.arenaname ?? ''}`}
-                                        </Text>
-                                    </View>
-                                    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                                </TouchableOpacity>
-                            ))
-                        ) : scheduleLoaded ? (
-                            <Text style={styles.noGamesText}>No upcoming games</Text>
-                        ) : (
-                            // First load of the schedule from the DB is still in flight.
-                            <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
-                        )}
-                        </>
-                    )}
-                    <TouchableOpacity
-                        style={styles.gameCard}
-                        onPress={() => router.push("/(protected)/(tabs)/home/AllGames")}
-                    >
-                        <Text style={styles.link}>View All Games</Text>
-                        <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                    </TouchableOpacity>
-                </View>
-                {ruleLinks.length > 0 && (
-                  <>
-                <View style={styles.separator} />
-
-                <View style={styles.section}>
-                    {ruleLinks.map((link) => (
-                        <TouchableOpacity
-                            key={link.title}
-                            onPress={() => openLink(link)}
-                            style={styles.gameCard}
-                        >
-                            <View style={styles.linkTitleContainer}>
-                                <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
-                                {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
-                            </View>
-                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                        </TouchableOpacity>
-                    ))}
-                </View>
-                  </>
-                )}
-
-                <View style={styles.separator} />
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>External Links</Text>
-                    {externalUrlLinks.map((link) => (
-                        <TouchableOpacity
-                            key={link.title}
-                            onPress={() => openLink(link)}
-                            style={styles.linkButton}
-                        >
-                            <Text style={styles.link}>{link.title}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-                <View style={styles.lastSyncRow}>
-                    <Text style={styles.lastSyncText}>
-                        Last refresh: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
-                    </Text>
-                </View>
+                {header}
+                {sections}
             </ScrollView>
         </SafeAreaView>
     );
@@ -666,6 +735,87 @@ const styles = StyleSheet.create({
         height: 80,
         resizeMode: 'contain',
         marginBottom: 10,
+    },
+});
+
+const SECTOR_GAP = 16;
+
+const tabletStyles = StyleSheet.create({
+    header: {
+        marginBottom: 8,
+    },
+    leagueLogo: {
+        width: 64,
+        height: 64,
+        marginBottom: 6,
+    },
+    body: {
+        flex: 1,
+        flexDirection: 'row',
+    },
+    leftColumn: {
+        flex: 1,
+    },
+    rightColumn: {
+        flex: 1,
+        padding: SECTOR_GAP,
+        gap: SECTOR_GAP,
+        // Clips the panel while it slides in and out.
+        overflow: 'hidden',
+    },
+    sector: {
+        flex: 1,
+        backgroundColor: '#111',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#222',
+        padding: 12,
+    },
+    placeholder: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    placeholderTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginTop: 8,
+    },
+    placeholderText: {
+        color: '#999',
+        fontSize: 14,
+        fontStyle: 'italic',
+        marginTop: 4,
+    },
+    panel: {
+        position: 'absolute',
+        top: SECTOR_GAP,
+        bottom: SECTOR_GAP,
+        left: SECTOR_GAP,
+        right: SECTOR_GAP,
+        backgroundColor: '#000',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#333',
+        overflow: 'hidden',
+    },
+    panelHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
+    },
+    panelTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    activeCard: {
+        borderWidth: 1,
+        borderColor: '#ff6600',
     },
 });
 

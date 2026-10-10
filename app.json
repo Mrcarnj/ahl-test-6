@@ -27,9 +27,14 @@
           "background-fetch",
           "background-fetch"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       },
-      "runtimeVersion": "1.0.0"
+      "requireFullScreen": true,
+      "runtimeVersion": "1.0.1"
     },
     "android": {
       "package": "com.dieter15.ahltest6",

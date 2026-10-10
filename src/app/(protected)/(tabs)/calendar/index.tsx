@@ -4,31 +4,37 @@ import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, ScrollView, RefreshControl, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
-import { format } from 'date-fns';
+import { differenceInCalendarWeeks, endOfMonth, format, startOfMonth } from 'date-fns';
 import { useRouter } from 'expo-router';
 import ViewShot from "react-native-view-shot";
-import { useSchedule, formatGameTime } from '@/src/providers/ScheduleProvider';
+import { Image } from 'expo-image';
+import { useSchedule, formatGameTime, getTeamLogo } from '@/src/providers/ScheduleProvider';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import { withTimeout } from '@/src/lib/withTimeout';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
-import { isWeb } from '@/src/lib/platform';
+import { isWeb, useTabletLayout } from '@/src/lib/platform';
 
 /**
- * Vertical space the calendar screen needs around the grid: the two
- * hint lines, the month header and weekday row that react-native-calendars
- * draws itself, and the last-sync line underneath.
- */
-const CALENDAR_CHROME_HEIGHT = 160;
-
-/**
- * Bounds for a web day cell. Between them the grid simply fills the height it
- * has; the cap stops cells becoming absurd on a very tall display, and the
- * floor keeps the date and matchup legible on a short one (where the page will
- * scroll a little rather than render an unreadable grid).
+ * Smallest day cell. Above it the month always fits the screen exactly; only
+ * a window too short for this (a landscape phone, a tiny browser window)
+ * scrolls, rather than squashing the matchups into an unreadable grid.
  */
 const MIN_DAY_HEIGHT = 54;
-const MAX_DAY_HEIGHT = 160;
+
+/**
+ * Before the first measurement: react-native-calendars' month title and
+ * weekday row, which it draws itself above the grid. Measured and replaced
+ * on the first layout.
+ */
+const INITIAL_GRID_CHROME = 75;
+
+/**
+ * A game day needs about this much height for its date, three-line matchup
+ * and (on a phone, two-line) game time. Shorter cells — a six-week month on a
+ * phone — switch to smaller game text so nothing is clipped.
+ */
+const FULL_TEXT_DAY_HEIGHT = 92;
 
 type CustomMarking = {
   gameTime?: string;
@@ -38,6 +44,9 @@ type CustomMarking = {
   gameid?: string;
   /** Games that day. Above one, tapping opens the day's game list. */
   count?: number;
+  /** One-game days: team logos, which iPad shows instead of the abbreviations. */
+  awayLogo?: string;
+  homeLogo?: string;
 };
 
 export default function CalendarScreen() {
@@ -50,6 +59,10 @@ export default function CalendarScreen() {
     height: windowHeight,
   });
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  // Height the calendar has on screen (the ScrollView's viewport), and how much
+  // of the calendar's own height is its header rather than week rows.
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [gridChrome, setGridChrome] = useState(INITIAL_GRID_CHROME);
   const [refreshing, setRefreshing] = useState(false);
   const { myGames, syncScheduleFromIcal } = useSchedule();
   const router = useRouter();
@@ -75,6 +88,8 @@ export default function CalendarScreen() {
           gameTime: formatGameTime(game.gametime, game.gamedate),
           gameid: game.gameid,
           count: 1,
+          awayLogo: getTeamLogo(game.awayTeamData),
+          homeLogo: getTeamLogo(game.homeTeamData),
         };
       } else {
         acc[date] = { selected: true, text: `${games.length}\ngames`, count: games.length };
@@ -106,35 +121,45 @@ export default function CalendarScreen() {
     if (width > 0 && height > 0) setContainerSize({ width, height });
   };
 
-  // react-native-calendars lays its grid out from explicit cell sizes, so these
-  // have to be recomputed whenever the container resizes.
+  // Weeks this month spans (4-6), which is how many rows the calendar draws.
+  const weekCount = differenceInCalendarWeeks(endOfMonth(currentMonth), startOfMonth(currentMonth)) + 1;
+
+  // The whole month fits on screen, on any device: react-native-calendars lays
+  // its grid out from explicit cell sizes (its swipe wrapper takes no style, so
+  // rows can't simply flex), so the rows split whatever height is left under
+  // its header between this month's weeks.
+  const dayHeight = viewportHeight > 0
+    // -1: sub-pixel rounding must never leave a sliver to scroll.
+    ? Math.max(MIN_DAY_HEIGHT, (viewportHeight - gridChrome - 1) / weekCount)
+    : MIN_DAY_HEIGHT;
+
+  const compactText = dayHeight < FULL_TEXT_DAY_HEIGHT;
+  // iPad cells are wide enough for "[away logo] @ [home logo]" on one line.
+  const logoCells = useTabletLayout();
+  const logoSize = Math.min(44, dayHeight * 0.38);
+
   const dynamicStyles = useMemo(() => {
-    const { width, height } = containerSize;
-    const calendarWidth = width * 0.98;
-
-    // Native keeps the original width-derived height: on a phone the grid is
-    // taller than the viewport and the page scrolls, which is the expected feel.
-    //
-    // On web the column is far wider than a phone, so that same formula produces
-    // ~200px rows and a month that runs well off the bottom. Derive the row
-    // height from the height actually available instead, so the whole month fits
-    // without scrolling. Six is the worst case a month can span, so a five-week
-    // month simply leaves the last row's worth of space empty.
-    const dayHeight = isWeb
-      ? Math.min(
-          MAX_DAY_HEIGHT,
-          Math.max(MIN_DAY_HEIGHT, (height - CALENDAR_CHROME_HEIGHT) / 6),
-        )
-      : (calendarWidth * 1.4) / 6;
-
+    const calendarWidth = containerSize.width * 0.98;
     return {
-      calendar: { width },
+      calendar: { width: containerSize.width },
       dayContainer: {
         width: calendarWidth / 7,
         height: dayHeight,
       },
     };
-  }, [containerSize]);
+  }, [containerSize, dayHeight]);
+
+  const onViewportLayout = (event: LayoutChangeEvent) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0) setViewportHeight(height);
+  };
+
+  // Whatever the rendered calendar has beyond its week rows is its header.
+  // Self-correcting: measured against the row height it was drawn with.
+  const onCalendarLayout = (event: LayoutChangeEvent) => {
+    const chrome = event.nativeEvent.layout.height - weekCount * dayHeight;
+    if (chrome > 0 && Math.abs(chrome - gridChrome) > 0.5) setGridChrome(chrome);
+  };
 
   const onDayPress = (day: DateData) => {
     const selectedDate = day.dateString;
@@ -183,15 +208,21 @@ export default function CalendarScreen() {
   // }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    // No bottom edge: the tab bar below already clears the home indicator.
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.container} onLayout={onContainerLayout}>
         <Text style={styles.disclaimer}>
           <MaterialIcons name="tips-and-updates" />{' '}
           {isWeb ? 'Use Refresh in the menu to sync' : 'Pull To Refresh'}
         </Text>
         <Text style={styles.disclaimer}>Tap orange game days to access game details</Text>
-        <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }}>
+        {/* Outside the ScrollView, so a sync banner shrinks the grid instead
+            of pushing the last week off screen. */}
+        <SyncBannerHost />
+        <ViewShot ref={calendarRef} options={{ format: "jpg", quality: 0.9 }} style={styles.shot}>
         <ScrollView
+          style={styles.scrollView}
+          onLayout={onViewportLayout}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -201,7 +232,7 @@ export default function CalendarScreen() {
             />
           }
         >
-          <SyncBannerHost />
+          <View onLayout={onCalendarLayout}>
           <Calendar
             current={format(currentMonth, 'yyyy-MM-dd')}
             onMonthChange={onMonthChange}
@@ -233,11 +264,32 @@ export default function CalendarScreen() {
                   ]}>
                     {date?.day}
                   </Text>
-                  {marking?.text && (
-                    <>
-                      <Text style={[styles.gameInfo, (marking.count ?? 0) > 1 && styles.gameCount]}>{marking.text}</Text>
+                  {logoCells && marking?.awayLogo && marking.homeLogo ? (
+                    <View style={styles.logoGame}>
+                      <View style={styles.logoRow}>
+                        <Image
+                          source={{ uri: marking.awayLogo }}
+                          style={{ width: logoSize, height: logoSize }}
+                          contentFit="contain"
+                          cachePolicy="disk"
+                        />
+                        <Text style={styles.logoAt}>@</Text>
+                        <Image
+                          source={{ uri: marking.homeLogo }}
+                          style={{ width: logoSize, height: logoSize }}
+                          contentFit="contain"
+                          cachePolicy="disk"
+                        />
+                      </View>
                       {marking.gameTime && (
-                        <Text style={styles.gameTime}>{marking.gameTime}</Text>
+                        <Text style={styles.logoGameTime}>{marking.gameTime}</Text>
+                      )}
+                    </View>
+                  ) : marking?.text && (
+                    <>
+                      <Text style={[styles.gameInfo, compactText && styles.gameInfoCompact, (marking.count ?? 0) > 1 && styles.gameCount]}>{marking.text}</Text>
+                      {marking.gameTime && (
+                        <Text style={[styles.gameTime, compactText && styles.gameTimeCompact]}>{marking.gameTime}</Text>
                       )}
                     </>
                   )}
@@ -245,10 +297,11 @@ export default function CalendarScreen() {
               );
             }}
           />
+          </View>
+          </ScrollView>
           <Text style={styles.lastSyncText}>
             Last sync: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
           </Text>
-          </ScrollView>
         </ViewShot>
       </View>
     </SafeAreaView>
@@ -277,6 +330,8 @@ const styles = StyleSheet.create({
   },
   dayContainer: {
     justifyContent: 'flex-start',
+    // At MIN_DAY_HEIGHT a matchup can be taller than its cell.
+    overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: '#333333',
     padding: 2,
@@ -297,6 +352,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 13,
     marginBottom: 3,
+  },
+  logoGame: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    // Sits a little above centre, clear of the time below.
+    marginTop: -8,
+  },
+  logoAt: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  logoGameTime: {
+    color: '#fff',
+    fontSize: 12,
+    marginTop: 10,
+  },
+  gameInfoCompact: {
+    fontSize: 10,
+    lineHeight: 11,
+    marginBottom: 1,
+  },
+  gameTimeCompact: {
+    fontSize: 9,
+    lineHeight: 10,
   },
   gameCount: {
     fontWeight: '700',
@@ -333,10 +419,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
+  shot: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
   scrollView: {
     flex: 1,
-    height: '100%',
-    
   },
 });
 

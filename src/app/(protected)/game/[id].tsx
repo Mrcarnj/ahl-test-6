@@ -30,9 +30,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Alert } from "@/src/lib/alert";
+import { isPad } from "@/src/lib/platform";
 import { currentSeasonLabel } from "@/src/lib/season";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
@@ -306,12 +308,22 @@ function EmptyRosterRow() {
  * regular season roster directly via `TeamRosterStatsTables`.
  */
 
+/**
+ * Narrowest window that shows away roster, crew and home roster side by side
+ * (iPad only). Each column then gets ~330pt, enough for the roster tables and
+ * the crew's 2x2 photos. Narrower windows (portrait, Stage Manager) keep the
+ * phone's Crew / Away / Home tabs.
+ */
+const THREE_COLUMN_MIN_WIDTH = 1000;
+
 const GameDetails = () => {
   const { id } = useLocalSearchParams<{ id: string; source: string }>();
   const { myGames } = useSchedule();
   const { allRosters, roster } = useRoster();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("crew");
+  const { width } = useWindowDimensions();
+  const threeColumns = isPad && width >= THREE_COLUMN_MIN_WIDTH;
 
   // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
   // one definition with the sync that writes `schedule.season`.
@@ -503,7 +515,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageRef}
+              style={[styles.profileImageRef, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.referee1)}{" "}
@@ -532,7 +544,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageRef}
+              style={[styles.profileImageRef, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.referee2)}{" "}
@@ -565,7 +577,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageLines}
+              style={[styles.profileImageLines, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.linesperson1)}{" "}
@@ -595,7 +607,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageLines}
+              style={[styles.profileImageLines, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.linesperson2)}{" "}
@@ -957,35 +969,64 @@ const GameDetails = () => {
         Note: Gamesheet not available until after completion of the game.
       </Text>
 
-      <View style={styles.tabContainer}>
-        {[
-          "Crew",
-          game.awayTeamData?.abbreviation || "Away",
-          game.homeTeamData?.abbreviation || "Home",
-        ].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
-            style={[
-              styles.tab,
-              activeTab === tab.toLowerCase().replace(" ", "") &&
-                styles.activeTab,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.toLowerCase().replace(" ", "") &&
-                  styles.activeTabText,
-              ]}
-            >
-              {tab}
+      {threeColumns ? (
+        // iPad: everything at once, away | crew | home, no tabs.
+        <View style={styles.columns}>
+          <View style={styles.column}>
+            <Text style={styles.columnTitle}>
+              {game.awayTeamData?.abbreviation || "Away"}
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <AwayTeamContent game={game} />
+          </View>
+          <View style={[styles.column, styles.crewColumn]}>
+            <Text style={styles.columnTitle}>Crew</Text>
+            <CrewContent
+              game={game}
+              allRosters={allRosters}
+              handleOfficialPress={handleOfficialPress}
+              handleGroupChat={handleGroupChat}
+            />
+          </View>
+          <View style={styles.column}>
+            <Text style={styles.columnTitle}>
+              {game.homeTeamData?.abbreviation || "Home"}
+            </Text>
+            <HomeTeamContent game={game} />
+          </View>
+        </View>
+      ) : (
+        <>
+          <View style={styles.tabContainer}>
+            {[
+              "Crew",
+              game.awayTeamData?.abbreviation || "Away",
+              game.homeTeamData?.abbreviation || "Home",
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
+                style={[
+                  styles.tab,
+                  activeTab === tab.toLowerCase().replace(" ", "") &&
+                    styles.activeTab,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab.toLowerCase().replace(" ", "") &&
+                      styles.activeTabText,
+                  ]}
+                >
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <View style={styles.contentContainer}>{renderContent()}</View>
+          <View style={styles.contentContainer}>{renderContent()}</View>
+        </>
+      )}
     </ScrollView>
   );
 };
@@ -1170,6 +1211,36 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#ffffff",
     marginBottom: 10,
+  },
+  // iPad three-column layout: 2x2 crew photos have to fit a ~330pt column.
+  profileImageColumn: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  columns: {
+    // Default stretch: equal-height columns, so the crew column's dividers
+    // run the full length of the longer roster beside it.
+    flexDirection: "row",
+  },
+  column: {
+    flex: 1,
+    paddingHorizontal: 8,
+  },
+  crewColumn: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#333",
+  },
+  columnTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    paddingBottom: 8,
+    marginBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "#ff6600",
   },
   refereeText: {
     fontSize: 16,

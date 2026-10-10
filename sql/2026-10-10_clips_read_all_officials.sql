@@ -11,13 +11,11 @@
 -- only pops a "New Clip" alert for clips on games the official worked
 -- (ClipsProvider.isCrewClipFromOthers).
 --
--- WHEN TO RUN: only once the build carrying this change is what officials
--- have installed (it needs a native build, not an OTA). Builds before it work
--- under this policy - nothing breaks, alerts stay crew-only - but their Clips
--- tab would list every clip in the league, and their "Crew" filter (which
--- there means "not mine") would show every other official's clips. The new
--- build's "Crew" is clips on games the official worked. Until this runs, the
--- iPad feed simply shows the clips each official can already see.
+-- Applied 2026-10-10, ahead of the iPad build. Builds before it work under
+-- this policy (alerts stay crew-only), but their Clips tab lists every clip in
+-- the league and their "Crew" filter (there: "not mine") shows every other
+-- official's clips. The new build's "Crew" is clips on games the official
+-- worked.
 --
 -- Rollback: sql/2026-10-10_clips_read_all_officials_rollback.sql
 

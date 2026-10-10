@@ -6,17 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AHL Officials** — a React Native/Expo app for AHL hockey officials. Each official authenticates, links their personal HorizonWebRef iCal feed, and the app syncs their game schedule, team rosters, and standings from Supabase.
 
-## Pending
-
-- **DB migration not run yet:** `sql/2026-10-10_clips_read_all_officials.sql`
-  (rollback beside it) lets every official watch every clip — the iPad home
-  "Leaguewide Clips" feed and the Clips tab's "All" depend on it. Run it in the
-  Supabase SQL editor **after** the build from the `ipad` branch (runtime
-  1.0.1) is what officials have installed; until then they only see their own
-  and their crews' clips. Running it early breaks nothing, but older builds'
-  Clips tab would list every clip in the league and their "Crew" filter would
-  show every other official's clips. Delete this note once it's run.
-
 ## Commands
 
 ```bash
@@ -161,10 +150,9 @@ crew sees it in their Clips tab. Schema, RLS and bucket are in
   (thumbnail, made on device). The first path segment is what the storage
   policies check.
 - **Access:** view = the game's crew (live from `schedule`) + admins
-  (`isAdmin`/`ahlAdmin`) — widened to every official by
-  `sql/2026-10-10_clips_read_all_officials.sql`, which is **not run yet**: run
-  it only once the iPad build (home Clips feed, Clips tab "Crew" = clips on
-  games you worked) is what officials have installed; upload = crew only; edit and delete = uploader or
+  (`isAdmin`/`ahlAdmin`), widened to every official by
+  `sql/2026-10-10_clips_read_all_officials.sql` (applied 2026-10-10) for the
+  iPad "Leaguewide Clips" feed and the Clips tab's All; upload = crew only; edit and delete = uploader or
   admin. Edits can change only `title`, `notes` and `tags` (column-level
   grant, `sql/2026-10-05_clips_edit.sql`; screen `clips/edit/[clipId]`).
   `uploaded_by`/`uploader_name` are set by a trigger, never by the client.

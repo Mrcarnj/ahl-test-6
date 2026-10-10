@@ -507,6 +507,16 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         let started = false;
         const failures: string[] = [];
         try {
+            // Signed out as far as the client knows (a token refresh that failed
+            // on a return to the app, with the network not back yet): queries
+            // would go out as anon, which RLS answers with zero rows, and zero
+            // rows reads as "never synced". Try again on the next resume.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                console.log('⏭️ SYNC: No session yet; skipping stats/standings check');
+                return;
+            }
+
             const [shouldStats, shouldRoster, shouldStandings] = await Promise.all([
                 shouldSyncPlayerStats(),
                 shouldSyncPlayerRoster(),

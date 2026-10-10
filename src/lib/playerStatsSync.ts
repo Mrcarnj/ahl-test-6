@@ -116,15 +116,23 @@ export async function shouldSyncPlayerStats(): Promise<boolean> {
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check player stats sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
     return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player stats sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 
@@ -150,15 +158,23 @@ export async function shouldSyncPlayerRoster(): Promise<boolean> {
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check player roster sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
     return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player roster sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 
@@ -860,15 +876,23 @@ export async function shouldSyncTeamStandings(): Promise<boolean> {
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check team standings sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
     return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking team standings sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 

@@ -44,7 +44,7 @@ npm run deploy # deploy to Cloudflare
 `production` in `eas.json`) reach only builds made with expo-updates and the
 same runtime version. `ios/` is gitignored, so EAS builds regenerate it from
 `app.json` (the few tracked `ios/` files only matter for local
-`expo run:ios`). iOS's runtime version is a fixed string, `"1.0.0"` in
+`expo run:ios`). iOS's runtime version is a fixed string, `"1.0.1"` in
 `app.json` (`ios.runtimeVersion`, mirrored in `ios/.../Supporting/Expo.plist`):
 bump it whenever a native change ships (new native library, SDK upgrade,
 native config), or an update can reach builds that lack the code and crash

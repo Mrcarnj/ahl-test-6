@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { StyleSheet, View, AppState, TextInput, TouchableOpacity, Text, Image, Linking } from 'react-native';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
 import { supabase } from '../../lib/supabase'
@@ -120,7 +121,7 @@ export default function Auth() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardSafeScrollView style={styles.screen} contentContainerStyle={styles.container}>
       <View style={styles.imageContainer}>
         <Image
           source={require('../../../assets/images/icon-256.png')}
@@ -181,13 +182,17 @@ export default function Auth() {
           </Text>
         </View>
       </View>
-    </View>
+    </KeyboardSafeScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+    backgroundColor: '#000',
+  },
+  container: {
+    flexGrow: 1,
     justifyContent: 'center',
     // Centres the form column; below FORM_MAX_WIDTH this is a no-op, so phones
     // are unaffected. The other (loginflow) screens already set #000 — this one

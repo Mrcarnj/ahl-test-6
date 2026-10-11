@@ -5,10 +5,12 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
 import { Alert } from '@/src/lib/alert';
 import { useTabletLayout } from '@/src/lib/platform';
+import { isValidIcalUrl } from '@/src/lib/textInput';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -91,12 +93,18 @@ const Profile = () => {
             return;
         }
 
+        const url = icalUrlValue.trim();
+        if (url && !isValidIcalUrl(url)) {
+            Alert.alert('Invalid URL', 'Please enter a valid iCal URL that starts with "https://www.horizonwebref.com/syncICS"');
+            return;
+        }
+
         try {
             setSavingIcalUrl(true);
-            
+
             const { error } = await supabase
                 .from('roster')
-                .update({ ical_url: icalUrlValue.trim() || null })
+                .update({ ical_url: url || null })
                 .eq('auth_id', roster.auth_id);
 
             if (error) {
@@ -227,7 +235,7 @@ const Profile = () => {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView 
+            <KeyboardSafeScrollView
                 style={styles.scrollView} 
                 contentContainerStyle={styles.container}
             >
@@ -385,7 +393,7 @@ const Profile = () => {
                         <Text style={styles.link}>Sign out</Text>
                     </TouchableOpacity>
                 </View>
-            </ScrollView>
+            </KeyboardSafeScrollView>
         </SafeAreaView>
     );
 };

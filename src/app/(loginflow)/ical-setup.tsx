@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { Alert } from '@/src/lib/alert';
@@ -15,6 +14,8 @@ import { useRoster } from '../../providers/RosterProvider';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 import { FORM_MAX_WIDTH } from '@/src/lib/platform';
+import { isValidIcalUrl } from '@/src/lib/textInput';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 
 export default function ICalSetup() {
   const { user } = useAuth();
@@ -39,7 +40,7 @@ export default function ICalSetup() {
 
   const validateUrl = (url: string) => {
     const trimmedUrl = url.trim();
-    const isValid = trimmedUrl.startsWith('https://www.horizonwebref.com/syncICS');
+    const isValid = isValidIcalUrl(trimmedUrl);
     setIsValidUrl(isValid);
     return isValid;
   };
@@ -98,7 +99,7 @@ export default function ICalSetup() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardSafeScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>iCal Sync Setup</Text>
           <Text style={styles.subtitle}>
@@ -156,7 +157,7 @@ export default function ICalSetup() {
             <Text style={styles.saveButtonText}>Save</Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardSafeScrollView>
     </SafeAreaView>
   );
 }

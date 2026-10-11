@@ -7,10 +7,13 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from '@/src/lib/alert';
 import { FORM_MAX_WIDTH } from '@/src/lib/platform';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 
 const validatePassword = (password: string): boolean => {
  // Check for common attack patterns and invalid characters
- const invalidPatterns = /[<>{}()'"`;]/g;
+ // No /g: a global regex keeps lastIndex between .test() calls, so the same
+ // password could pass one keystroke and fail the next.
+ const invalidPatterns = /[<>{}()'"`;]/;
  if (invalidPatterns.test(password)) {
    return false;
  }
@@ -150,7 +153,7 @@ export default function ChangePassword() {
  };
 
  return (
-   <View style={styles.container}>
+   <KeyboardSafeScrollView style={styles.screen} contentContainerStyle={styles.container}>
      <View style={styles.card}>
        <Text style={styles.title}>Change Password</Text>
        <Text style={styles.subtitle}>Please set a new password for your account</Text>
@@ -215,13 +218,17 @@ export default function ChangePassword() {
          </Text>
        </TouchableOpacity>
      </View>
-   </View>
+   </KeyboardSafeScrollView>
  );
 }
 
 const styles = StyleSheet.create({
- container: {
+ screen: {
    flex: 1,
+   backgroundColor: '#000',
+ },
+ container: {
+   flexGrow: 1,
    padding: 20,
    justifyContent: 'center',
    alignItems: 'center',

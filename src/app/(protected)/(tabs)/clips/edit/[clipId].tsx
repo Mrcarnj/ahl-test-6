@@ -6,16 +6,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import TagPicker from '@/src/components/clips/TagPicker';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 import { Alert } from '@/src/lib/alert';
 import {
   type Clip,
@@ -26,6 +24,7 @@ import {
   formatGameShort,
   updateClip,
 } from '@/src/lib/clips';
+import { cleanMultiLine, cleanSingleLine } from '@/src/lib/textInput';
 import { useClips } from '@/src/providers/ClipsProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 
@@ -88,8 +87,8 @@ export default function EditClipScreen() {
     ? [...CLIP_TAG_CATEGORIES, { name: 'Other', tags: retired }]
     : CLIP_TAG_CATEGORIES;
 
-  const title = form.title.trim();
-  const notes = form.notes.trim();
+  const title = cleanSingleLine(form.title);
+  const notes = cleanMultiLine(form.notes);
   const changed =
     title !== clip.title || notes !== (clip.notes ?? '') || !sameTags(form.tags, clip.tags);
   const canSave = changed && title.length > 0 && form.tags.length > 0 && !saving;
@@ -118,53 +117,47 @@ export default function EditClipScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.game} numberOfLines={2}>
-          {formatGameShort(clip.game)}
+    <KeyboardSafeScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.game} numberOfLines={2}>
+        {formatGameShort(clip.game)}
+      </Text>
+
+      <Text style={styles.label}>Title</Text>
+      <TextInput
+        value={form.title}
+        onChangeText={(v) => setForm((f) => (f ? { ...f, title: v } : f))}
+        placeholder="e.g. 2nd period offside challenge"
+        placeholderTextColor="#666"
+        style={styles.input}
+        maxLength={120}
+        editable={!saving}
+      />
+
+      <Text style={styles.label}>Notes (optional)</Text>
+      <TextInput
+        value={form.notes}
+        onChangeText={(v) => setForm((f) => (f ? { ...f, notes: v } : f))}
+        placeholder="Time in the period, what to look for…"
+        placeholderTextColor="#666"
+        style={[styles.input, styles.notes]}
+        multiline
+        maxLength={1000}
+        editable={!saving}
+      />
+
+      <Text style={styles.label}>Tags {form.tags.length > 0 ? `(${form.tags.length})` : ''}</Text>
+      <TagPicker categories={tagChoices} selected={form.tags} onToggle={toggleTag} />
+
+      <Pressable style={[styles.submit, !canSave && styles.submitDisabled]} onPress={save} disabled={!canSave}>
+        {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Save Changes</Text>}
+      </Pressable>
+      {!saving && changed && !canSave ? (
+        <Text style={styles.hint}>
+          {title ? '' : 'Add a title. '}
+          {form.tags.length ? '' : 'Pick at least one tag.'}
         </Text>
-
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          value={form.title}
-          onChangeText={(v) => setForm((f) => (f ? { ...f, title: v } : f))}
-          placeholder="e.g. 2nd period offside challenge"
-          placeholderTextColor="#666"
-          style={styles.input}
-          maxLength={120}
-          editable={!saving}
-        />
-
-        <Text style={styles.label}>Notes (optional)</Text>
-        <TextInput
-          value={form.notes}
-          onChangeText={(v) => setForm((f) => (f ? { ...f, notes: v } : f))}
-          placeholder="Time in the period, what to look for…"
-          placeholderTextColor="#666"
-          style={[styles.input, styles.notes]}
-          multiline
-          maxLength={1000}
-          editable={!saving}
-        />
-
-        <Text style={styles.label}>Tags {form.tags.length > 0 ? `(${form.tags.length})` : ''}</Text>
-        <TagPicker categories={tagChoices} selected={form.tags} onToggle={toggleTag} />
-
-        <Pressable style={[styles.submit, !canSave && styles.submitDisabled]} onPress={save} disabled={!canSave}>
-          {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Save Changes</Text>}
-        </Pressable>
-        {!saving && changed && !canSave ? (
-          <Text style={styles.hint}>
-            {title ? '' : 'Add a title. '}
-            {form.tags.length ? '' : 'Pick at least one tag.'}
-          </Text>
-        ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      ) : null}
+    </KeyboardSafeScrollView>
   );
 }
 

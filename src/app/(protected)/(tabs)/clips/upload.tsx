@@ -11,16 +11,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import TagPicker from '@/src/components/clips/TagPicker';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 import { Alert } from '@/src/lib/alert';
 import {
   compressVideo,
@@ -40,6 +38,7 @@ import {
   sendClipUploadedNotification,
 } from '@/src/lib/clips';
 import { isWeb } from '@/src/lib/platform';
+import { cleanSingleLine } from '@/src/lib/textInput';
 import { currentSeasonLabel } from '@/src/lib/season';
 import { supabase } from '@/src/lib/supabase';
 import { useClips } from '@/src/providers/ClipsProvider';
@@ -112,7 +111,7 @@ export default function UploadClipScreen() {
   const tooBig = finalSize != null && finalSize > MAX_BYTES;
   const compressing = !!video && !compressed && !compressError;
   const barFraction = (phase === 'compressing' ? compressProgress : progress) ?? 0;
-  const canSubmit = !!video && !tooBig && selectedIndex >= 0 && title.trim().length > 0 && tags.length > 0 && !uploading;
+  const canSubmit = !!video && !tooBig && selectedIndex >= 0 && cleanSingleLine(title).length > 0 && tags.length > 0 && !uploading;
 
   const choose = async () => {
     setPicking(true);
@@ -188,8 +187,8 @@ export default function UploadClipScreen() {
       const clip = await insertClip({
         id: clipId,
         schedule_id: game.id,
-        title: title.trim(),
-        notes: notes.trim() || null,
+        title,
+        notes,
         tags,
         video_path: videoPath,
         thumbnail_path: thumbPath,
@@ -220,160 +219,154 @@ export default function UploadClipScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* 1. Video */}
-        <Text style={styles.label}>Video</Text>
-        <Pressable style={styles.videoPicker} onPress={choose} disabled={picking || uploading}>
-          {video ? (
-            <View style={styles.videoChosen}>
-              {thumbUri ? (
-                <Image source={{ uri: thumbUri }} style={styles.preview} contentFit="cover" />
-              ) : (
-                <View style={[styles.preview, styles.previewEmpty]}>
-                  <Ionicons name="videocam-outline" size={24} color="#666" />
-                </View>
-              )}
-              <View style={styles.flex}>
-                <Text style={styles.videoInfo}>
-                  {[
-                    formatClipDuration(video.durationSeconds),
-                    compressed ? formatMb(compressed.sizeBytes) : formatMb(video.sizeBytes),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || 'Video selected'}
-                </Text>
-                <Text style={styles.change}>
-                  {compressing
-                    ? `Optimizing for upload… ${Math.round((compressProgress ?? 0) * 100)}%`
-                    : compressed && compressed !== video && video.sizeBytes
-                      ? `Optimized from ${formatMb(video.sizeBytes)}`
-                      : uploading
-                        ? ''
-                        : 'Tap to choose a different video'}
-                </Text>
+    <KeyboardSafeScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* 1. Video */}
+      <Text style={styles.label}>Video</Text>
+      <Pressable style={styles.videoPicker} onPress={choose} disabled={picking || uploading}>
+        {video ? (
+          <View style={styles.videoChosen}>
+            {thumbUri ? (
+              <Image source={{ uri: thumbUri }} style={styles.preview} contentFit="cover" />
+            ) : (
+              <View style={[styles.preview, styles.previewEmpty]}>
+                <Ionicons name="videocam-outline" size={24} color="#666" />
               </View>
-            </View>
-          ) : picking ? (
-            <ActivityIndicator color="#ff6600" />
-          ) : (
-            <View style={styles.videoEmpty}>
-              <Ionicons name="film-outline" size={28} color="#ff6600" />
-              <Text style={styles.videoEmptyText}>Choose a video</Text>
-            </View>
-          )}
-        </Pressable>
-        {tooBig ? <Text style={styles.error}>This video is over 500 MB. Trim it and try again.</Text> : null}
-
-        {/* 2. Game */}
-        <Text style={styles.label}>Game</Text>
-        {eligibleGames.length === 0 ? (
-          <Text style={styles.muted}>No games this season yet. Clips can be added to this season’s games from today or earlier.</Text>
-        ) : (
-          <View style={styles.games}>
-            {visibleGames.map((g) => {
-              const on = g.id === scheduleId;
-              return (
-                <Pressable
-                  key={g.id}
-                  style={[styles.gameRow, on && styles.gameRowOn]}
-                  onPress={() => setScheduleId(g.id)}
-                  disabled={uploading}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={18} color={on ? '#ff6600' : '#555'} />
-                  <View style={styles.flex}>
-                    <Text style={styles.gameMatchup}>
-                      {g.awayteam} @ {g.hometeam} <Text style={styles.gameNum}>· Game {g.gameid}</Text>
-                    </Text>
-                    <Text style={styles.gameDate}>{formatGameDate(g.gamedate)}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-            {visibleGames.length < eligibleGames.length ? (
-              <Pressable onPress={() => setShowAllGames(true)} style={styles.moreGames}>
-                <Text style={styles.moreGamesText}>Show {eligibleGames.length - visibleGames.length} earlier games</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        )}
-
-        {/* 3. Details */}
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="e.g. 2nd period offside challenge"
-          placeholderTextColor="#666"
-          style={styles.input}
-          maxLength={120}
-          editable={!uploading}
-        />
-        <Text style={styles.label}>Notes (optional)</Text>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Time in the period, what to look for…"
-          placeholderTextColor="#666"
-          style={[styles.input, styles.notes]}
-          multiline
-          maxLength={1000}
-          editable={!uploading}
-        />
-
-        {/* 4. Tags */}
-        <Text style={styles.label}>Tags {tags.length > 0 ? `(${tags.length})` : ''}</Text>
-        <TagPicker categories={CLIP_TAG_CATEGORIES} selected={tags} onToggle={uploading ? () => {} : toggleTag} />
-
-        {uploading ? (
-          <View style={styles.progressBox}>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.round(barFraction * 100)}%` }]} />
-            </View>
-            <View style={styles.progressRow}>
-              <Text style={styles.progressText}>
-                {phase === 'compressing'
-                  ? `Optimizing video… ${Math.round(barFraction * 100)}%`
-                  : progress !== null && progress >= 1
-                    ? 'Saving…'
-                    : `Uploading… ${Math.round(barFraction * 100)}%`}
+            )}
+            <View style={styles.flex}>
+              <Text style={styles.videoInfo}>
+                {[
+                  formatClipDuration(video.durationSeconds),
+                  compressed ? formatMb(compressed.sizeBytes) : formatMb(video.sizeBytes),
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Video selected'}
               </Text>
-              <Pressable
-                onPress={() => {
-                  submitCancelledRef.current = true;
-                  uploadRef.current?.cancel();
-                }}
-                hitSlop={8}
-              >
-                <Text style={styles.cancel}>Cancel</Text>
-              </Pressable>
+              <Text style={styles.change}>
+                {compressing
+                  ? `Optimizing for upload… ${Math.round((compressProgress ?? 0) * 100)}%`
+                  : compressed && compressed !== video && video.sizeBytes
+                    ? `Optimized from ${formatMb(video.sizeBytes)}`
+                    : uploading
+                      ? ''
+                      : 'Tap to choose a different video'}
+              </Text>
             </View>
           </View>
+        ) : picking ? (
+          <ActivityIndicator color="#ff6600" />
         ) : (
-          <Pressable style={[styles.submit, !canSubmit && styles.submitDisabled]} onPress={submit} disabled={!canSubmit}>
-            <Text style={styles.submitText}>Upload Clip</Text>
-          </Pressable>
+          <View style={styles.videoEmpty}>
+            <Ionicons name="film-outline" size={28} color="#ff6600" />
+            <Text style={styles.videoEmptyText}>Choose a video</Text>
+          </View>
         )}
-        {!uploading && video && !canSubmit && !tooBig ? (
-          <Text style={styles.hint}>
-            {selectedIndex < 0 ? 'Pick a game. ' : ''}
-            {title.trim() ? '' : 'Add a title. '}
-            {tags.length ? '' : 'Pick at least one tag.'}
-          </Text>
-        ) : null}
-        {uploading ? (
-          <Text style={styles.hint}>
-            {isAhlAdmin ? 'The game’s crew' : 'Your crew'} will be notified when the upload finishes.
-          </Text>
-        ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </Pressable>
+      {tooBig ? <Text style={styles.error}>This video is over 500 MB. Trim it and try again.</Text> : null}
+
+      {/* 2. Game */}
+      <Text style={styles.label}>Game</Text>
+      {eligibleGames.length === 0 ? (
+        <Text style={styles.muted}>No games this season yet. Clips can be added to this season’s games from today or earlier.</Text>
+      ) : (
+        <View style={styles.games}>
+          {visibleGames.map((g) => {
+            const on = g.id === scheduleId;
+            return (
+              <Pressable
+                key={g.id}
+                style={[styles.gameRow, on && styles.gameRowOn]}
+                onPress={() => setScheduleId(g.id)}
+                disabled={uploading}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+              >
+                <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={18} color={on ? '#ff6600' : '#555'} />
+                <View style={styles.flex}>
+                  <Text style={styles.gameMatchup}>
+                    {g.awayteam} @ {g.hometeam} <Text style={styles.gameNum}>· Game {g.gameid}</Text>
+                  </Text>
+                  <Text style={styles.gameDate}>{formatGameDate(g.gamedate)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+          {visibleGames.length < eligibleGames.length ? (
+            <Pressable onPress={() => setShowAllGames(true)} style={styles.moreGames}>
+              <Text style={styles.moreGamesText}>Show {eligibleGames.length - visibleGames.length} earlier games</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+
+      {/* 3. Details */}
+      <Text style={styles.label}>Title</Text>
+      <TextInput
+        value={title}
+        onChangeText={setTitle}
+        placeholder="e.g. 2nd period offside challenge"
+        placeholderTextColor="#666"
+        style={styles.input}
+        maxLength={120}
+        editable={!uploading}
+      />
+      <Text style={styles.label}>Notes (optional)</Text>
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Time in the period, what to look for…"
+        placeholderTextColor="#666"
+        style={[styles.input, styles.notes]}
+        multiline
+        maxLength={1000}
+        editable={!uploading}
+      />
+
+      {/* 4. Tags */}
+      <Text style={styles.label}>Tags {tags.length > 0 ? `(${tags.length})` : ''}</Text>
+      <TagPicker categories={CLIP_TAG_CATEGORIES} selected={tags} onToggle={uploading ? () => {} : toggleTag} />
+
+      {uploading ? (
+        <View style={styles.progressBox}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(barFraction * 100)}%` }]} />
+          </View>
+          <View style={styles.progressRow}>
+            <Text style={styles.progressText}>
+              {phase === 'compressing'
+                ? `Optimizing video… ${Math.round(barFraction * 100)}%`
+                : progress !== null && progress >= 1
+                  ? 'Saving…'
+                  : `Uploading… ${Math.round(barFraction * 100)}%`}
+            </Text>
+            <Pressable
+              onPress={() => {
+                submitCancelledRef.current = true;
+                uploadRef.current?.cancel();
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.cancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable style={[styles.submit, !canSubmit && styles.submitDisabled]} onPress={submit} disabled={!canSubmit}>
+          <Text style={styles.submitText}>Upload Clip</Text>
+        </Pressable>
+      )}
+      {!uploading && video && !canSubmit && !tooBig ? (
+        <Text style={styles.hint}>
+          {selectedIndex < 0 ? 'Pick a game. ' : ''}
+          {cleanSingleLine(title) ? '' : 'Add a title. '}
+          {tags.length ? '' : 'Pick at least one tag.'}
+        </Text>
+      ) : null}
+      {uploading ? (
+        <Text style={styles.hint}>
+          {isAhlAdmin ? 'The game’s crew' : 'Your crew'} will be notified when the upload finishes.
+        </Text>
+      ) : null}
+    </KeyboardSafeScrollView>
   );
 }
 

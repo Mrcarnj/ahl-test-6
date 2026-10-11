@@ -6,6 +6,7 @@
 // Uploading lives in clipUpload.ts / clipUpload.web.ts.
 
 import { supabase } from './supabase';
+import { cleanMultiLine, cleanSingleLine } from './textInput';
 
 export const CLIPS_BUCKET = 'clips';
 
@@ -159,10 +160,17 @@ export type NewClip = {
   size_bytes: number | null;
 };
 
+/** Title/notes as they will be stored. */
+function cleanClipText<T extends { title: string; notes: string | null }>(clip: T): T {
+  return { ...clip, title: cleanSingleLine(clip.title), notes: cleanMultiLine(clip.notes ?? '') || null };
+}
+
 export async function insertClip(clip: NewClip): Promise<Clip> {
+  // A new clip can only carry the current preset tags.
+  const tags = clip.tags.filter((t) => (CLIP_TAGS as readonly string[]).includes(t));
   const { data, error } = await supabase
     .from('clips')
-    .insert(clip)
+    .insert(cleanClipText({ ...clip, tags }))
     .select(CLIP_SELECT)
     .single();
   if (error) throw toError(error);
@@ -184,7 +192,7 @@ export type ClipEdit = {
 export async function updateClip(id: string, changes: ClipEdit): Promise<Clip> {
   const { data, error } = await supabase
     .from('clips')
-    .update(changes)
+    .update(cleanClipText(changes))
     .eq('id', id)
     .select(CLIP_SELECT)
     .single();

@@ -156,6 +156,7 @@ export default function ClipsScreen() {
           autoCapitalize="none"
           clearButtonMode="while-editing"
           returnKeyType="search"
+          maxLength={100}
         />
       </View>
 
@@ -193,6 +194,8 @@ export default function ClipsScreen() {
           initialNumToRender={12}
           windowSize={7}
           keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#ff6600" colors={['#ff6600']} />
           }

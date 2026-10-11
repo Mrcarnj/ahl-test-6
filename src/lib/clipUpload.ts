@@ -38,11 +38,13 @@ export async function pickVideo(): Promise<PickedVideo | null> {
     mediaTypes: ['videos'],
     // iOS: the trim editor, so officials can cut a clip down before it uploads.
     allowsEditing: true,
-    // Hand over the original (trimmed at full quality); compressVideo does the
-    // real compression. The picker's own presets were tried first and are a
-    // poor fit: "640x480" fits *inside* 640x480, so a portrait clip came out
-    // 296 px wide, and it still ran ~3.5 Mbps at 60 fps (15 MB per 30 s).
-    videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+    // Full resolution, trimmed; compressVideo does the real compression. Not
+    // Passthrough: with that preset expo-image-picker copies the original
+    // file straight from Photos and drops the trim (MediaHandler.handleVideo's
+    // PHAsset fast path). The sized presets are a poor fit too: "640x480" fits
+    // *inside* 640x480, so a portrait clip came out 296 px wide, and it still
+    // ran ~3.5 Mbps at 60 fps (15 MB per 30 s).
+    videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
     videoQuality: ImagePicker.UIImagePickerControllerQualityType.High,
     quality: 1,
   });

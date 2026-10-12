@@ -28,13 +28,13 @@ import SideDrawer from '@/src/components/SideDrawer';
  *
  * START must be a MONDAY, the first day of a report period: every period is a
  * whole number of 14-day steps from it. 2026-27 periods: Sept 14-27 (due
- * Fri Oct 2), Sept 28-Oct 11 (due Fri Oct 16), and so on. 2025-26 instead
- * had reports due the Monday right after each period ended.
+ * Mon Sept 28), Sept 28-Oct 11 (due Mon Oct 12), and so on: each report is
+ * due the Monday right after its period ends.
  */
 const EXPENSE_SEASON_START = new Date(2026, 8, 14); // Monday, September 14, 2026
 const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
-// Sunday period end -> due the Friday after.
-const EXPENSE_DUE_DAYS_AFTER_PERIOD = 5;
+// Sunday period end -> due the Monday after.
+const EXPENSE_DUE_DAYS_AFTER_PERIOD = 1;
 
 
 const TestScheduleScreen = () => {

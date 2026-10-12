@@ -224,9 +224,9 @@ Current season is **2026-27 = HockeyTech season_id 94**.
 When the season rolls over, update `PLAYER_ROSTER_SYNC_SEASON_ID` in `src/lib/rosterStatsTable.ts`, the API URLs in `src/lib/playerStatsSync.ts` (and the matching `fetch_*.py` scripts), `PLAYOFF_BRACKET_SEASON_ID` in `src/lib/playoffBracket.ts`, and `EXPENSE_SEASON_START` / `EXPENSE_SEASON_END` in `src/app/(protected)/(tabs)/home/index.tsx`, then bump `SEASON_ID` / `SEASON_LABEL` in `seed_schedule.py` and run it.
 `EXPENSE_SEASON_START` **must be a Monday**, the first day of a report period.
 Each report covers 14 days (Monday through the second Sunday) and is due
-`EXPENSE_DUE_DAYS_AFTER_PERIOD` days later — the Friday after, in 2026-27
-(Sept 28–Oct 11 is due Oct 16). Get the anchor from the league's actual
-calendar, not last year's date: 2026-27 first shipped a week off with Monday
+`EXPENSE_DUE_DAYS_AFTER_PERIOD` days later — the Monday right after
+(Sept 28–Oct 11 is due Mon Oct 12). Get the anchor from the league's actual
+calendar, not last year's date: 2026-27 first shipped a week off, then with Friday
 due dates.
 
 Those last two do double duty: they drive the 14-day expense-report cycle *and*

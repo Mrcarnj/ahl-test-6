@@ -11,6 +11,11 @@ import { isWeb } from '../lib/platform';
 type AuthContextType = {
     session: Session | null;
     user: User | null;
+    // True while the forgot-password screen is mid-reset. Verifying the
+    // emailed code signs the user in; this keeps the root layout on (auth)
+    // until the new password is saved, instead of dropping them into the app.
+    recoveringPassword: boolean;
+    setRecoveringPassword: (recovering: boolean) => void;
 };
 
 // Where this provider used to keep its own copy of the session. Read once,
@@ -20,10 +25,13 @@ const LEGACY_SESSION_KEY = 'session';
 const AuthContext = createContext<AuthContextType>({
     session: null,
     user: null,
+    recoveringPassword: false,
+    setRecoveringPassword: () => {},
 });
 
 export default function AuthProvider({ children }: PropsWithChildren) {
     const [session, setSession] = useState<Session | null>(null);
+    const [recoveringPassword, setRecoveringPassword] = useState(false);
     const [lastForegroundSyncAt, setLastForegroundSyncAt] = useState<number>(0);
     const startupSyncTriggeredRef = useRef(false);
     const lastBackgroundAtRef = useRef<number | null>(null);
@@ -157,8 +165,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     return (
         <AuthContext.Provider value={{ 
-            session, 
-            user: session?.user ?? null
+            session,
+            user: session?.user ?? null,
+            recoveringPassword,
+            setRecoveringPassword,
         }}>
             {children}
         </AuthContext.Provider>

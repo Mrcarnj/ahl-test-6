@@ -349,6 +349,18 @@ There is deliberately no CAPTCHA: Supabase's CAPTCHA setting is project-wide
 and would put a challenge on the iOS login too. Sign-ups are disabled;
 accounts are created by an admin.
 
+**Password reset** (`(auth)/forgot-password.tsx`, linked from login) emails a
+one-time code, not a link. It first checks the email exists
+(`email_has_account` RPC, callable signed out,
+`sql/2026-10-12_email_has_account.sql`, applied 2026-10-12) and points a wrong one at the
+official's HorizonWebRef email; then `resetPasswordForEmail`, then `verifyOtp({ type:
+'recovery' })` + `updateUser`. No deep link, same on every platform. The
+Supabase "Reset Password" email template must show `{{ .Token }}` or there is
+no code to type. Verifying signs the user in, so AuthProvider's
+`recoveringPassword` holds the root layout on `(auth)` until the new password
+is saved. Auth emails go out through custom SMTP (Authentication → Emails →
+SMTP Settings) so they come from ZebraCal, not Supabase.
+
 **Web shell** lives in `public/` (copied to the export root): `index.html`
 template (meta/OG tags, https guard), favicons, `og-image.png`, `robots.txt`,
 `sitemap.xml`, the support page `support.html` (the App Store Support URL), and

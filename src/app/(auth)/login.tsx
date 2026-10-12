@@ -172,6 +172,14 @@ export default function Auth() {
           <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
 
+        <Text
+          style={styles.forgotLink}
+          accessibilityRole="link"
+          onPress={() => router.push({ pathname: '/(auth)/forgot-password', params: { email } })}
+        >
+          Forgot password?
+        </Text>
+
         <View style={styles.legalLinks}>
           <Text style={styles.legalLink} accessibilityRole="link" onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
             Privacy Policy
@@ -231,6 +239,13 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 10,
     alignItems: 'center',
+  },
+  forgotLink: {
+    color: '#ff6600',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 8,
+    marginTop: 12,
   },
   legalLinks: {
     flexDirection: 'row',

@@ -33,7 +33,7 @@ const back = (label: string) =>
 
 export default function ClipsLayout() {
   return (
-    <Stack screenOptions={{ contentStyle: { backgroundColor: '#000000' } }}>
+    <Stack screenOptions={{ headerTitleAlign: 'center', contentStyle: { backgroundColor: '#000000' } }}>
       <Stack.Screen
         name="index"
         options={{

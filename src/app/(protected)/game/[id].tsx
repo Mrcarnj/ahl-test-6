@@ -34,7 +34,7 @@ import {
   View,
 } from "react-native";
 import { Alert } from "@/src/lib/alert";
-import { isPad } from "@/src/lib/platform";
+import { isPad, isWeb } from "@/src/lib/platform";
 import { currentSeasonLabel } from "@/src/lib/season";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
@@ -310,7 +310,8 @@ function EmptyRosterRow() {
 
 /**
  * Narrowest window that shows away roster, crew and home roster side by side
- * (iPad only). Each column then gets ~330pt, enough for the roster tables and
+ * (iPad and web; the game screen has no web sidebar, so it gets the whole
+ * window). Each column then gets ~330pt, enough for the roster tables and
  * the crew's 2x2 photos. Narrower windows (portrait, Stage Manager) keep the
  * phone's Crew / Away / Home tabs.
  */
@@ -323,7 +324,7 @@ const GameDetails = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("crew");
   const { width } = useWindowDimensions();
-  const threeColumns = isPad && width >= THREE_COLUMN_MIN_WIDTH;
+  const threeColumns = (isPad || isWeb) && width >= THREE_COLUMN_MIN_WIDTH;
 
   // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
   // one definition with the sync that writes `schedule.season`.

@@ -6,7 +6,7 @@ export default function RosterLayout() {
     return (
       // contentStyle: without it the stack paints its default (light) card
       // background, which flashed white before the screen's first frame.
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#000000' } }}>
+      <Stack screenOptions={{ headerShown: false, headerTitleAlign: 'center', contentStyle: { backgroundColor: '#000000' } }}>
           <Stack.Screen 
             name="index" 
             options={{

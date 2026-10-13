@@ -27,8 +27,15 @@ export const TABLET_MIN_WIDTH = 900;
  */
 export const SIDEBAR_BREAKPOINT = 900;
 
-/** Keeps page content readable instead of stretching across an ultrawide monitor. */
-export const CONTENT_MAX_WIDTH = 1100;
+/** Width of the web build's permanent sidebar (`components/nav/SideNav`). */
+export const SIDEBAR_WIDTH = 220;
+
+/**
+ * Keeps page content from stretching across an ultrawide monitor. Wide enough
+ * for the iPad layouts at a 13" iPad's landscape width (1366pt), which the web
+ * build draws too.
+ */
+export const CONTENT_MAX_WIDTH = 1366;
 
 /**
  * Max width for a centred form column (login, change password, iCal setup).
@@ -50,11 +57,16 @@ export type Responsive = {
 
 /**
  * True when a screen should draw its iPad layout (home's four-sector view).
- * Re-renders on window resize, so a narrowed window falls back to the phone
- * layout.
+ * The web build draws it too, once the content column beside the sidebar is as
+ * wide as an iPad's window would need to be. Re-renders on window resize, so a
+ * narrowed window falls back to the phone layout.
  */
 export function useTabletLayout(): boolean {
   const { width } = useWindowDimensions();
+  if (isWeb) {
+    const content = width >= SIDEBAR_BREAKPOINT ? width - SIDEBAR_WIDTH : width;
+    return Math.min(content, CONTENT_MAX_WIDTH) >= TABLET_MIN_WIDTH;
+  }
   return isPad && width >= TABLET_MIN_WIDTH;
 }
 

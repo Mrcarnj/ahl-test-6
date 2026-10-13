@@ -4,7 +4,7 @@ import HeaderBackButton from '@/src/components/HeaderBackButton';
 
 export default function HomeLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, headerTitleAlign: 'center' }}>
         <Stack.Screen 
           name="index" 
           options={{

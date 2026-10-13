@@ -279,6 +279,14 @@ expo-router derives route names from filenames without stripping a `.web`
 suffix, so such a file would register as a route, not as the layout. Platform
 siblings are fine everywhere outside `src/app/`.
 
+**Screens use the iPad layouts.** `useTabletLayout()` is also true on web once
+the content column beside the sidebar is at least `TABLET_MIN_WIDTH` (900) wide
+(a window of about 1120px), so the split home screen, the roster drawer, the
+three-across clips and the logo calendar cells appear on web too. The game
+screen's three columns follow the window width (it has no sidebar). Only the
+navigation differs from iPad. `CONTENT_MAX_WIDTH` is 1366, the width of a 13"
+iPad in landscape.
+
 **Rulebook / Situation Book** are now top-level routes
 (`(tabs)/rulebook.tsx`, `(tabs)/situation-book.tsx`) re-exporting
 `src/screens/`. They are `href: null` on native and reached from the home

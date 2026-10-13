@@ -27,7 +27,8 @@ export default function ProtectedLayout() {
             empty default context and no reminder was ever scheduled.
           */}
           <NotificationProvider>
-            <Stack>
+            {/* iOS centres header titles by default; web (and Android) don't. */}
+            <Stack screenOptions={{ headerTitleAlign: 'center' }}>
               <Stack.Screen 
                 name="(tabs)" 
                 options={{ headerShown: false }} 

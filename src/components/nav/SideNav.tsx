@@ -11,12 +11,13 @@ import { usePathname, useRouter } from 'expo-router';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useAppRefresh } from '@/src/hooks/useAppRefresh';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
+import { SIDEBAR_WIDTH } from '@/src/lib/platform';
 import { WEB_NAV_ITEMS, type NavItem } from './navItems';
 
 // Sized to the widest content: the "Situation Book" menu row (icon + gap +
 // label + padding) and the "AHL Officials" brand row. Anything wider is just
-// dead space.
-export const SIDEBAR_WIDTH = 220;
+// dead space. Defined in lib/platform so the iPad-layout check can subtract it.
+export { SIDEBAR_WIDTH };
 
 type SideNavProps = {
   /** Called after a menu item is chosen, so the drawer can dismiss itself. */

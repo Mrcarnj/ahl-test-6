@@ -285,6 +285,12 @@ export default function CalendarScreen() {
                         <Text style={styles.logoGameTime}>{marking.gameTime}</Text>
                       )}
                     </View>
+                  ) : isWeb && (marking?.count ?? 0) > 1 ? (
+                    // On web the "N games" sat off-centre under the date;
+                    // centre it in the rest of the cell, as the logos are.
+                    <View style={styles.webGameCount}>
+                      <Text style={[styles.gameInfo, compactText && styles.gameInfoCompact, styles.gameCount]}>{marking?.text}</Text>
+                    </View>
                   ) : marking?.text && (
                     <>
                       <Text style={[styles.gameInfo, compactText && styles.gameInfoCompact, (marking.count ?? 0) > 1 && styles.gameCount]}>{marking.text}</Text>
@@ -386,6 +392,14 @@ const styles = StyleSheet.create({
   },
   gameCount: {
     fontWeight: '700',
+  },
+  webGameCount: {
+    flex: 1,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // A little above true centre, where the logos sit.
+    marginTop: -8,
   },
   gameTime: {
     fontSize: 10,

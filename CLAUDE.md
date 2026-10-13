@@ -107,7 +107,9 @@ HockeyTech once per season (insert-only: existing rows and their crews are
 never touched), so admins see every game before anyone is assigned. Seeded
 rows have no officials, which makes an assignment an *update* from empty: the
 officials newly on the game get a "New Game Added" push, the rest of the crew
-"Game Updated". Unassigned games aren't refreshed afterwards, so a postponed
+"Game Updated". No push goes out for a game dated before today, so an
+official whose app syncs after a gap isn't told about games already played.
+Unassigned games aren't refreshed afterwards, so a postponed
 game nobody works yet keeps its seeded date until a crew's iCal sync fixes it.
 
 A **Supabase Realtime** subscription on `schedule` also triggers instant UI updates + push notifications when a game changes.

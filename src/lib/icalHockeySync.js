@@ -3,6 +3,7 @@
 // Converts to Supabase format with proper timezone handling
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format } from 'date-fns';
 import { sendGameChangeNotification } from './notificationService';
 import { supabase } from './supabase';
 import { buildIcalRequest } from './icalFeed';
@@ -954,6 +955,15 @@ function normalizeFieldValue(value) {
 // Notification helper for game changes
 async function sendNotificationsForGameChange(newGame, existingGame, changedFields) {
   try {
+    // A game already played isn't news. The season is seeded with every game,
+    // so an official whose app hasn't synced in a while fills in the crews of
+    // games they've already worked, and each would otherwise push "New Game
+    // Added". The row is still updated; only the push is skipped.
+    if (newGame.gamedate < format(new Date(), 'yyyy-MM-dd')) {
+      console.log(`📱 Game ${newGame.gameid} is in the past, skipping notifications`);
+      return;
+    }
+
     // Send notifications for official assignment changes AND game time changes
     const notificationFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2', 'gametime'];
     const notificationChanges = changedFields.filter(field => 

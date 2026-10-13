@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AHL Officials",
+    "name": "ZebraCal",
     "slug": "ahl-test-6",
     "version": "1.2.2",
     "orientation": "portrait",
@@ -8,7 +8,7 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/images/splash-2-stripes.png",
       "resizeMode": "cover",
       "backgroundColor": "#000000"
     },

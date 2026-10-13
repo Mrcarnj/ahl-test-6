@@ -8,6 +8,7 @@ import React, { useCallback } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
+import { supabase } from '@/src/lib/supabase';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useAppRefresh } from '@/src/hooks/useAppRefresh';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
@@ -121,6 +122,18 @@ export default function SideNav({ onNavigate }: SideNavProps) {
         <Text style={styles.lastSync} numberOfLines={1}>
           {lastSync === 'Never synced' ? 'Never synced' : `Synced ${lastSync}`}
         </Text>
+        <Pressable
+          onPress={() => supabase.auth.signOut()}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          style={({ hovered, pressed }) => [
+            styles.refreshButton,
+            (hovered || pressed) && styles.itemHovered,
+          ]}
+        >
+          <FontAwesome name="sign-out" size={16} color="#ff6600" />
+          <Text style={styles.refreshLabel}>Sign Out</Text>
+        </Pressable>
       </View>
     </View>
   );

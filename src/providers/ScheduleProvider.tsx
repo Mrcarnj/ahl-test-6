@@ -380,6 +380,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             return { success: false, error: 'No roster data available' };
         }
     
+        // AuthProvider keeps an official signed in while a token refresh that
+        // failed at launch is retried, but until it succeeds the client has
+        // no session and queries go out as anon. RLS answers those with zero
+        // games, which would wipe the list and pop up every game as removed.
+        // Keep what's on screen; TOKEN_REFRESHED starts the sync that reloads.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            console.log('⏭️ SCHEDULE: No session yet; keeping the games on screen');
+            return { success: false, error: 'Not signed in yet' };
+        }
+
         const seq = ++fetchSeqRef.current;
         const userKey = roster.auth_id;
         // An ahlAdmin sees the whole league, not a schedule of their own, so

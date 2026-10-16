@@ -84,6 +84,14 @@ RosterProvider
 (AuthProvider wraps all of it from the root layout.)
 
 - **AuthProvider** — Supabase session, persists to AsyncStorage, emits `APP_REFRESH_EVENT` on startup and foreground-return (debounced: 5 min gap, 10 min min-background).
+  Sign-in is permanent: only a `SIGNED_OUT` from the client (a refresh the
+  server refused, or the user signing out) goes to login. A launch whose token
+  refresh fails for a passing reason keeps the stored session on screen while
+  auto-refresh retries; `fetchSchedule` skips while there is no live session.
+  To force everyone to sign in again with an update, bump `AUTH_EPOCH` in
+  `AuthProvider.tsx`. The client uses `processLock` on native
+  (`src/lib/supabase.ts`); without it concurrent startup refreshes reuse a
+  rotated refresh token and the server ends the session.
 - **RosterProvider** — fetches the current official's row from `roster` table + all officials; 5-min AsyncStorage cache keyed by `rosterCache_<userId>`.
 - **ScheduleProvider** — the central data hub. Listens for `APP_REFRESH_EVENT` and orchestrates the full sync pipeline (see below). Exposes `allGames`, `myGames`, `teamRostersRegularSeason`, sync status flags. (`teamRosters` and `playoffBracket` are still on the context but stay empty/null while playoffs are hidden.)
 - **ClipsProvider** — every clip the official can see; AsyncStorage cache, refetch on `APP_REFRESH_EVENT`, Realtime on `clips`. Emits `CLIPS_UPLOADED_EVENT` for new crew clips (see Clips below).

@@ -1,14 +1,18 @@
 // One game's clips. The "New Clip" alert and push land here, as does the
-// Clips button on a game's detail page.
+// Clips button on a game's detail page. A Penalties view lists the game's
+// penalties from HockeyTech, each able to start a prefilled upload.
 
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ClipCard from '@/src/components/clips/ClipCard';
+import GamePenaltyList, { penaltyClipTitle } from '@/src/components/clips/GamePenaltyList';
 import { useThumbnailUrls } from '@/src/components/clips/useThumbnailUrls';
-import { type Clip, type ClipGame, displayName, formatGameShort } from '@/src/lib/clips';
+import { type Clip, type ClipGame, displayName, formatGameShort, penaltyTag } from '@/src/lib/clips';
+import { fetchGameSummary, type GameSummary, type SummaryPenalty } from '@/src/lib/gameSummary';
+import { isWeb } from '@/src/lib/platform';
 import { currentSeasonLabel } from '@/src/lib/season';
 import { supabase } from '@/src/lib/supabase';
 import { useClips } from '@/src/providers/ClipsProvider';
@@ -60,6 +64,52 @@ export default function GameClipsScreen() {
     game.season === currentSeasonLabel() &&
     game.gamedate <= format(new Date(), 'yyyy-MM-dd');
 
+  // HockeyTech sends no CORS headers, and hockeyTechGameId() only maps this
+  // season's game numbers.
+  const showPenalties = !isWeb && !!game && game.season === currentSeasonLabel();
+  const gameNumber = game?.gameid;
+  const [view, setView] = useState<'clips' | 'penalties'>('clips');
+  const [summary, setSummary] = useState<GameSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryRequest, setSummaryRequest] = useState(0);
+
+  // Loaded the first time the Penalties view opens, and again on refresh.
+  const wantSummary = view === 'penalties' && showPenalties;
+  const loadedRequest = useRef(-1);
+  useEffect(() => {
+    if (!wantSummary || !gameNumber || loadedRequest.current === summaryRequest) return;
+    let cancelled = false;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    fetchGameSummary(gameNumber)
+      .then((s) => {
+        if (cancelled) return;
+        loadedRequest.current = summaryRequest;
+        setSummary(s);
+      })
+      .catch((e) => {
+        console.error('Game clips: game summary failed', e);
+        if (!cancelled) setSummaryError("Couldn't load this game's penalties.");
+      })
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [wantSummary, gameNumber, summaryRequest]);
+
+  const addPenaltyClip = useCallback(
+    (p: SummaryPenalty) => {
+      if (!summary) return;
+      const tag = penaltyTag(p.offence);
+      router.push({
+        pathname: '/(protected)/(tabs)/clips/upload',
+        params: { scheduleId: String(id), title: penaltyClipTitle(summary, p), ...(tag ? { tag } : {}) },
+      });
+    },
+    [summary, id],
+  );
+
   const openClip = useCallback((clip: Clip) => {
     router.push({ pathname: '/(protected)/(tabs)/clips/[clipId]', params: { clipId: clip.id } });
   }, []);
@@ -95,9 +145,32 @@ export default function GameClipsScreen() {
           </Pressable>
         ) : null}
       </View>
-      <Text style={styles.count}>
-        {gameClips.length} {gameClips.length === 1 ? 'clip' : 'clips'}
-      </Text>
+      {showPenalties ? (
+        <View style={styles.toggle}>
+          {(['clips', 'penalties'] as const).map((v) => {
+            const count = v === 'clips' ? gameClips.length : summary?.penalties.length;
+            return (
+              <Pressable
+                key={v}
+                onPress={() => setView(v)}
+                style={[styles.toggleBtn, view === v && styles.toggleBtnOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: view === v }}
+              >
+                <Text style={[styles.toggleText, view === v && styles.toggleTextOn]}>
+                  {v === 'clips' ? 'Clips' : 'Penalties'}
+                  {count != null ? ` (${count})` : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+      {view === 'clips' ? (
+        <Text style={styles.count}>
+          {gameClips.length} {gameClips.length === 1 ? 'clip' : 'clips'}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -106,6 +179,32 @@ export default function GameClipsScreen() {
       <View style={styles.center}>
         <ActivityIndicator color="#ff6600" />
       </View>
+    );
+  }
+
+  if (view === 'penalties') {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={summaryLoading && !!summary}
+            onRefresh={() => setSummaryRequest((n) => n + 1)}
+            tintColor="#ff6600"
+            colors={['#ff6600']}
+          />
+        }
+      >
+        {header}
+        {summary ? (
+          <GamePenaltyList summary={summary} onAddClip={canUpload ? addPenaltyClip : undefined} />
+        ) : summaryError ? (
+          <Text style={styles.empty}>{summaryError}</Text>
+        ) : (
+          <ActivityIndicator color="#ff6600" style={styles.spinner} />
+        )}
+      </ScrollView>
     );
   }
 
@@ -192,6 +291,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  toggle: {
+    flexDirection: 'row',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  toggleBtnOn: {
+    backgroundColor: '#ff6600',
+  },
+  toggleText: {
+    color: '#ccc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  toggleTextOn: {
+    color: '#000',
+    fontWeight: '700',
+  },
+  spinner: {
+    marginTop: 32,
   },
   count: {
     color: '#ff6600',

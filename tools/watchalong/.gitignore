@@ -1,0 +1,4 @@
+# Built locally: swiftc -O watchalong.swift -o watchalong
+/watchalong
+# Recorded sessions and their analysis
+/sessions/

@@ -79,6 +79,20 @@ export const CLIP_TAGS = CLIP_TAG_CATEGORIES.flatMap((c) => c.tags);
 
 export type ClipTag = (typeof CLIP_TAG_CATEGORIES)[number]['tags'][number];
 
+const normalizeTag = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * The Penalty tag for a HockeyTech infraction ("Cross-checking" ->
+ * "Cross-Checking"), or null when none matches. A qualifier after " - " is
+ * dropped ("Delay of game - Bench minor (...)"), but nothing is guessed:
+ * "Holding the stick" isn't "Holding".
+ */
+export function penaltyTag(offence: string): ClipTag | null {
+  const key = normalizeTag(offence.split(' - ')[0]);
+  const penalties = CLIP_TAG_CATEGORIES.find((c) => c.name === 'Penalty')?.tags ?? [];
+  return (penalties.find((t) => normalizeTag(t) === key) as ClipTag | undefined) ?? null;
+}
+
 export type ClipGame = {
   id: number;
   gameid: string;

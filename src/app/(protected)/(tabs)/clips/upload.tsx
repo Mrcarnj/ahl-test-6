@@ -54,7 +54,8 @@ function formatMb(bytes: number | null): string | null {
 }
 
 export default function UploadClipScreen() {
-  const params = useLocalSearchParams<{ scheduleId?: string }>();
+  // `tag` and `title` prefill the form from a game's penalty list.
+  const params = useLocalSearchParams<{ scheduleId?: string; tag?: string; title?: string }>();
   // For an ahlAdmin, myGames is every game in the league.
   const { myGames } = useSchedule();
   const { isAhlAdmin } = useRoster();
@@ -65,9 +66,9 @@ export default function UploadClipScreen() {
   const [picking, setPicking] = useState(false);
   const [scheduleId, setScheduleId] = useState<number | null>(params.scheduleId ? Number(params.scheduleId) : null);
   const [showAllGames, setShowAllGames] = useState(false);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(params.title ?? '');
   const [notes, setNotes] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>(params.tag ? [params.tag] : []);
   const [progress, setProgress] = useState<number | null>(null);
   // Submit runs in two phases: wait for compression (if still going), then upload.
   const [phase, setPhase] = useState<'compressing' | 'uploading'>('uploading');

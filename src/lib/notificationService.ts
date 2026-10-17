@@ -1,9 +1,11 @@
 import { parse } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { enUS } from 'date-fns/locale/en-US';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Alert, Linking, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { supabase } from '../lib/supabase';
 import { Schedule } from '../providers/ScheduleProvider';
 // Import background task handler to register it
@@ -22,12 +24,17 @@ Notifications.setNotificationHandler({
       console.log('🔄 Game change notification detected in handler');
     }
     
-    // Always show notification, even in background
+    // A game change that arrives while the app is open is shown as a blocking
+    // in-app pop-up (NotificationProvider), so skip the OS banner for it.
+    // When the app is closed or backgrounded this handler is not consulted and
+    // the OS shows its normal banner; tapping it opens the game.
+    // Same for a crew member's new clip.
+    const isGameChange = data?.type === 'game_change' || data?.type === 'clip_uploaded';
     return {
       shouldPlaySound: true,
       shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowAlert: true,
+      shouldShowBanner: !isGameChange,
+      shouldShowAlert: !isGameChange,
       shouldShowList: true,
     };
   },
@@ -35,6 +42,8 @@ Notifications.setNotificationHandler({
 
 // Set up notification categories for iOS and channels for Android
 async function setupNotificationCategories() {
+  // Categories/channels are native-only; on web the call just throws.
+  if (Platform.OS === 'web') return;
   try {
     // Define notification category for game changes (iOS)
     await Notifications.setNotificationCategoryAsync('GAME_CHANGE', [
@@ -138,6 +147,25 @@ export async function registerForPushNotificationsAsync(authId: string) {
   }
 }
 
+/**
+ * "7:00 PM CDT" in the home arena's time zone. `gametime` carries a numeric
+ * offset (`19:00:00-05`), which alone can't tell CDT from EST, so resolve the
+ * real start instant and name the zone from `teams.timezone`.
+ */
+function formatGameDayTime(game: Schedule): string {
+  const m = game.gametime?.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?([+-]\d{2})(?::?(\d{2}))?$/);
+  if (!m) return game.gametime;
+  const [, h, min, sec = '00', offH, offM = '00'] = m;
+  const start = new Date(`${game.gamedate}T${h.padStart(2, '0')}:${min}:${sec}${offH}:${offM}`);
+  if (Number.isNaN(start.getTime())) return game.gametime;
+  const zone = game.homeTeamData?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try {
+    return formatInTimeZone(start, zone, 'h:mm a zzz', { locale: enUS });
+  } catch {
+    return game.gametime;
+  }
+}
+
 export async function scheduleGameDayNotification(game: Schedule) {
   try {
     // Parse game date and time
@@ -157,8 +185,14 @@ export async function scheduleGameDayNotification(game: Schedule) {
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "🏒 IT'S GAMEDAY! 🏒",
-        body: `${game.gametime} \n${game.awayTeamData?.city} @ ${game.homeTeamData?.city}\n${game.homeTeamData?.arenaname}`,
-        data: { gameId: game.gameid },
+        body: [
+          formatGameDayTime(game),
+          `${game.awayTeamData?.city ?? game.awayteam} @ ${game.homeTeamData?.city ?? game.hometeam}`,
+          game.homeTeamData?.arenaname,
+        ].filter(Boolean).join('\n'),
+        // `type` keeps NotificationProvider from treating it as a game change
+        // (which would kick off an iCal sync); tapping still opens the game.
+        data: { gameId: game.gameid, type: 'game_day' },
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: localNotificationDate },
     });
@@ -179,7 +213,10 @@ export async function sendGameChangeNotification(
     gametime: string;
   },
   changes: string[],
-  replacedPerson?: string
+  replacedPerson?: string,
+  // Officials who weren't on the game before this change. They get "New Game
+  // Added"; the rest of the crew gets "Game Updated".
+  newlyAssigned: string[] = []
 ) {
   try {
     console.log(`📱 Sending game change notification for ${gameId}...`);
@@ -202,16 +239,18 @@ export async function sendGameChangeNotification(
     // Format time as readable format with timezone
     const formattedTime = formatGameTime(gameData.gametime);
     
-    let title: string;
-    let body: string;
-    
     // Prepare changes text for all scenarios
     const changesText = changes.join(', ');
-    
+    const gameInfo = `${gameData.awayteam} @ ${gameData.hometeam}`;
+
+    const added = {
+      kind: 'added' as const,
+      title: '🏒 New Game Added',
+      body: `${gameInfo} ${formattedDate} ${formattedTime} (Game ${gameId}) has been added to your schedule.`,
+    };
+
+    let updatedBody: string;
     if (isTimeChange) {
-      // Special format for time changes
-      title = "🚨 Game Time Change 🚨";
-      
       // Extract old and new times from the change string
       const timeChange = timeChanges[0]; // Take the first time change
       const timeMatch = timeChange.match(/gametime: "([^"]+)" → "([^"]+)"/);
@@ -219,27 +258,36 @@ export async function sendGameChangeNotification(
       if (timeMatch) {
         const oldTime = formatGameTime(timeMatch[1]);
         const newTime = formatGameTime(timeMatch[2]);
-        const gameInfo = `${gameData.awayteam} @ ${gameData.hometeam}`;
-        
-        body = `The game time for ${formattedDate} ${gameId} ${gameInfo} has changed from ${oldTime} to ${newTime}`;
+        updatedBody = `The game time for ${formattedDate} ${gameId} ${gameInfo} has changed from ${oldTime} to ${newTime}`;
       } else {
         // Fallback if parsing fails
-        body = `The game time for ${formattedDate} ${gameId} (${gameData.awayteam} @ ${gameData.hometeam}) has changed. ${timeChanges.join(', ')}`;
+        updatedBody = `The game time for ${formattedDate} ${gameId} (${gameInfo}) has changed. ${timeChanges.join(', ')}`;
       }
     } else {
-      // Standard format for official changes
-      title = "🏒 Game Assignment Change";
-      const gameInfo = `${gameData.awayteam} @ ${gameData.hometeam}`;
-      
-      body = `One of your teammates has changed on game ${gameId} (${gameInfo}) ${formattedDate} ${formattedTime}. ${changesText}`;
+      updatedBody = `One of your teammates has changed on game ${gameId} (${gameInfo}) ${formattedDate} ${formattedTime}. ${changesText}`;
     }
-    
-    console.log(`📱 Notification: ${title} - ${body}`);
+    const updated = { kind: 'updated' as const, title: '🚨 Game Updated', body: updatedBody };
+
+    const newIds = new Set(
+      assignedPeople.filter(person => newlyAssigned.includes(person.lastfirstfullname)).map(person => person.auth_id)
+    );
+    const messageFor = (authId: string) => (newIds.has(authId) ? added : updated);
+
+    const dataFor = (message: typeof added | typeof updated) => ({
+      gameId,
+      type: 'game_change',
+      kind: message.kind,
+      changes: changesText,
+      fullMessage: message.body, // Store full message for expansion
+      isTimeChange: isTimeChange.toString(),
+    });
+
+    console.log(`📱 Notification for game ${gameId}: ${newIds.size} new to the game, ${assignedPeople.length - newIds.size} updated`);
     
     // Get push tokens for all assigned people
     const { data: pushTokens, error } = await supabase
       .from('user_push_tokens')
-      .select('push_token')
+      .select('auth_id, push_token')
       .in('auth_id', assignedPeople.map(person => person.auth_id));
     
     if (error) {
@@ -251,12 +299,13 @@ export async function sendGameChangeNotification(
     if (!pushTokens || pushTokens.length === 0) {
       console.log(`📱 No push tokens found for assigned people on game ${gameId}`);
       console.log(`📱 Sending local notification for testing...`);
+      const local = newIds.size === assignedPeople.length ? added : updated;
       
       // Send local notification for testing with expandable content
       await Notifications.scheduleNotificationAsync({
         content: {
-          title,
-          body,
+          title: local.title,
+          body: local.body,
           // iOS category for expandable notifications
           categoryIdentifier: 'GAME_CHANGE',
           // Android channel
@@ -266,12 +315,7 @@ export async function sendGameChangeNotification(
               priority: Notifications.AndroidNotificationPriority.HIGH,
             },
           }),
-          data: { 
-            gameId, 
-            type: 'game_change',
-            changes: changesText,
-            fullMessage: body, // Store full message for expansion
-          },
+          data: dataFor(local),
         },
         trigger: null, // Show immediately
       });
@@ -282,37 +326,36 @@ export async function sendGameChangeNotification(
     
     // Send push notifications with expandable content
     // Format according to Expo Push API: https://docs.expo.dev/push-notifications/sending-notifications/
-    const messages = pushTokens.map(token => ({
-      to: token.push_token,
-      sound: 'default',
-      title,
-      body,
-      // iOS-specific: category for expandable notifications
-      categoryId: 'GAME_CHANGE',
-      // Ensure notification appears even when app is in background
-      priority: 'high',
-      // iOS: content-available wakes the app in background to process the notification
-      // This allows the app to sync data when notification is received
-      'content-available': 1,
-      // Android-specific configuration
-      android: {
-        channelId: 'game_changes',
-        priority: 'high',
-        // BigTextStyle for expandable notifications on Android
-        // Note: Expo handles this automatically when body is long enough
+    const messages = pushTokens.map(token => {
+      const message = messageFor(token.auth_id);
+      return {
+        to: token.push_token,
         sound: 'default',
-        vibrate: [0, 250, 250, 250],
-      },
-      data: { 
-        gameId, 
-        type: 'game_change',
-        changes: changesText,
-        fullMessage: body, // Store full message for expansion
-        isTimeChange: isTimeChange.toString(),
-        // Include task name to trigger background sync
-        taskName: 'background-notification-sync',
-      },
-    }));
+        title: message.title,
+        body: message.body,
+        // iOS-specific: category for expandable notifications
+        categoryId: 'GAME_CHANGE',
+        // Ensure notification appears even when app is in background
+        priority: 'high',
+        // iOS: content-available wakes the app in background to process the notification
+        // This allows the app to sync data when notification is received
+        'content-available': 1,
+        // Android-specific configuration
+        android: {
+          channelId: 'game_changes',
+          priority: 'high',
+          // BigTextStyle for expandable notifications on Android
+          // Note: Expo handles this automatically when body is long enough
+          sound: 'default',
+          vibrate: [0, 250, 250, 250],
+        },
+        data: {
+          ...dataFor(message),
+          // Include task name to trigger background sync
+          taskName: 'background-notification-sync',
+        },
+      };
+    });
     
     // Send via Expo Push API
     const response = await fetch('https://exp.host/--/api/v2/push/send', {

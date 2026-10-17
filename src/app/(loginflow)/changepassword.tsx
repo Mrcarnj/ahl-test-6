@@ -4,11 +4,16 @@ import { useRoster } from '@/src/providers/RosterProvider';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert } from '@/src/lib/alert';
+import { FORM_MAX_WIDTH } from '@/src/lib/platform';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 
 const validatePassword = (password: string): boolean => {
  // Check for common attack patterns and invalid characters
- const invalidPatterns = /[<>{}()'"`;]/g;
+ // No /g: a global regex keeps lastIndex between .test() calls, so the same
+ // password could pass one keystroke and fail the next.
+ const invalidPatterns = /[<>{}()'"`;]/;
  if (invalidPatterns.test(password)) {
    return false;
  }
@@ -148,79 +153,92 @@ export default function ChangePassword() {
  };
 
  return (
-   <View style={styles.container}>
-     <Text style={styles.title}>Change Password</Text>
-     <Text style={styles.subtitle}>Please set a new password for your account</Text>
+   <KeyboardSafeScrollView style={styles.screen} contentContainerStyle={styles.container}>
+     <View style={styles.card}>
+       <Text style={styles.title}>Change Password</Text>
+       <Text style={styles.subtitle}>Please set a new password for your account</Text>
      
-     <TextInput
-       style={styles.input}
-       value={newPassword}
-       onChangeText={handleNewPassword}
-       placeholder="New Password"
-       placeholderTextColor="#666"
-       secureTextEntry
-       autoCapitalize="none"
-       maxLength={64}
-       returnKeyType="done"
-       blurOnSubmit={true}
-       enablesReturnKeyAutomatically
-     />
+       <TextInput
+         style={styles.input}
+         value={newPassword}
+         onChangeText={handleNewPassword}
+         placeholder="New Password"
+         placeholderTextColor="#666"
+         secureTextEntry
+         autoCapitalize="none"
+         maxLength={64}
+         returnKeyType="done"
+         blurOnSubmit={true}
+         enablesReturnKeyAutomatically
+       />
      
-     <TextInput
-       style={styles.input}
-       value={confirmPassword}
-       onChangeText={handleConfirmPassword}
-       placeholder="Confirm New Password"
-       placeholderTextColor="#666"
-       secureTextEntry
-       autoCapitalize="none"
-       maxLength={64}
-       returnKeyType="done"
-       blurOnSubmit={true}
-       enablesReturnKeyAutomatically
-     />
+       <TextInput
+         style={styles.input}
+         value={confirmPassword}
+         onChangeText={handleConfirmPassword}
+         placeholder="Confirm New Password"
+         placeholderTextColor="#666"
+         secureTextEntry
+         autoCapitalize="none"
+         maxLength={64}
+         returnKeyType="done"
+         blurOnSubmit={true}
+         enablesReturnKeyAutomatically
+       />
 
-     <View style={styles.validationContainer}>
-       <ValidationItem 
-         passed={validations.length} 
-         text="At least 6 characters long" 
-       />
-       <ValidationItem 
-         passed={validations.uppercase} 
-         text="Contains uppercase letter" 
-       />
-       <ValidationItem 
-         passed={validations.number} 
-         text="Contains number" 
-       />
-       <ValidationItem 
-         passed={validations.matching} 
-         text="Passwords match" 
-       />
+       <View style={styles.validationContainer}>
+         <ValidationItem 
+           passed={validations.length} 
+           text="At least 6 characters long" 
+         />
+         <ValidationItem 
+           passed={validations.uppercase} 
+           text="Contains uppercase letter" 
+         />
+         <ValidationItem 
+           passed={validations.number} 
+           text="Contains number" 
+         />
+         <ValidationItem 
+           passed={validations.matching} 
+           text="Passwords match" 
+         />
+       </View>
+
+       <TouchableOpacity
+         style={[
+           styles.button, 
+           (!allValidationsPassed || loading) && styles.buttonDisabled
+         ]}
+         onPress={handleChangePassword}
+         disabled={!allValidationsPassed || loading}
+       >
+         <Text style={styles.buttonText}>
+           {loading ? 'Updating...' : 'Update Password'}
+         </Text>
+       </TouchableOpacity>
      </View>
-
-     <TouchableOpacity
-       style={[
-         styles.button, 
-         (!allValidationsPassed || loading) && styles.buttonDisabled
-       ]}
-       onPress={handleChangePassword}
-       disabled={!allValidationsPassed || loading}
-     >
-       <Text style={styles.buttonText}>
-         {loading ? 'Updating...' : 'Update Password'}
-       </Text>
-     </TouchableOpacity>
-   </View>
+   </KeyboardSafeScrollView>
  );
 }
 
 const styles = StyleSheet.create({
- container: {
+ screen: {
    flex: 1,
+   backgroundColor: '#000',
+ },
+ container: {
+   flexGrow: 1,
    padding: 20,
    justifyContent: 'center',
+   alignItems: 'center',
    backgroundColor: '#000',
+ },
+ // Centred form column. Below FORM_MAX_WIDTH this is full-bleed, so phones
+ // look exactly as before; it only stops the form stretching on a wide screen.
+ card: {
+   width: '100%',
+   maxWidth: FORM_MAX_WIDTH,
  },
  title: {
    fontSize: 24,
@@ -231,7 +249,7 @@ const styles = StyleSheet.create({
  },
  subtitle: {
    fontSize: 16,
-   color: '#666',
+   color: '#999',
    marginBottom: 30,
    textAlign: 'center',
  },
@@ -270,7 +288,7 @@ const styles = StyleSheet.create({
    opacity: 0.7,
  },
  buttonText: {
-   color: '#fff',
+   color: '#000',
    fontSize: 16,
    fontWeight: 'bold',
  },

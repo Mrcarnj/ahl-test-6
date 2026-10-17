@@ -3,20 +3,56 @@
 
 import { fetchAllTeamRosterRows } from './fetchAllTeamRosterRows';
 import { PLAYER_ROSTER_STATS_TABLE, PLAYER_ROSTER_SYNC_SEASON_ID } from './rosterStatsTable';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { supabase } from './supabase';
 
-const SYNC_INTERVAL_HOURS = 24; // Sync once per day
+// Stats, rosters and standings refresh once a night. A sync is due when the last
+// one ran before the most recent 5:00 AM Eastern, by which point every game from
+// the night before (Pacific puck drops included) is final in HockeyTech.
+//
+// This replaced a rolling 24 h window, which drifted: the clock restarted at
+// whatever time someone opened the app, so a sync at 11 PM blocked the next one
+// until 11 PM the following day, and a 4 PM sync missed that night's games until
+// 4 PM the day after. The timestamp is shared by every official through the DB.
+const NIGHTLY_SYNC_TIMEZONE = 'America/New_York';
+const NIGHTLY_SYNC_HOUR = 5;
 
-// API endpoints (playoffs season 92)
-const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=92&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
-const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=92&key=ccb91f29d6744675&client_code=ahl&fmt=json";
-const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=90&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+/** The most recent nightly cutoff at or before `now`. */
+function mostRecentNightlyCutoff(now: Date = new Date()): Date {
+  const cutoffOn = (day: Date) => {
+    const ymd = formatInTimeZone(day, NIGHTLY_SYNC_TIMEZONE, 'yyyy-MM-dd');
+    const hh = String(NIGHTLY_SYNC_HOUR).padStart(2, '0');
+    return fromZonedTime(`${ymd}T${hh}:00:00`, NIGHTLY_SYNC_TIMEZONE);
+  };
+  const today = cutoffOn(now);
+  return today <= now ? today : cutoffOn(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+}
+
+/** True when `lastSynced` predates the most recent nightly cutoff. */
+function isDueForNightlySync(lastSynced: string): boolean {
+  const last = new Date(lastSynced);
+  if (Number.isNaN(last.getTime())) return true;
+  return last < mostRecentNightlyCutoff();
+}
+
+// Coaching staff (teams.headcoachname / assistantcoach1 / assistantcoach2) comes
+// out of the same roster feed, but it only changes at the season rollover — so it
+// is off here and does not run with the daily roster sync. Flip to true, run the
+// roster sync once, then flip back. (Same job as UPDATE_COACHING_STAFF in
+// fetch_player_roster.py, which can do it without shipping a build.)
+const SYNC_COACHING_STAFF = false;
+
+// API endpoints (2026-27 regular season, HockeyTech season_id 94)
+const PLAYER_STATS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=statviewfeed&view=players&season=94&team=all&position=skaters&rookies=0&statsType=standard&league_id=4&limit=2000&sort=points&lang=en&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
+const ROSTER_API_BASE_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=roster&team_id={}&season_id=94&key=ccb91f29d6744675&client_code=ahl&fmt=json";
+const TEAM_STANDINGS_API_URL = "https://lscluster.hockeytech.com/feed/index.php?feed=modulekit&view=statviewtype&stat=division&type=standings&season_id=94&league_id=4&key=ccb91f29d6744675&client_code=ahl&callback=myCallback";
 
 // All AHL team IDs
+// (BRI/Bridgeport 317 left the league after 2025-26; HAM/Hamilton 457 joined for 2026-27.)
 const TEAM_IDS = [
-  440, 402, 413, 317, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
+  440, 402, 413, 444, 384, 330, 373, 445, 419, 328, 307, 437, 319,
   389, 415, 313, 321, 327, 403, 309, 323, 372, 404, 405, 411, 324, 380,
-  335, 412, 390, 316
+  335, 412, 390, 316, 457
 ];
 
 // Team code mapping (API code -> database abbreviation)
@@ -59,66 +95,86 @@ function toInt(value: any, defaultValue: number | null = null): number | null {
 }
 
 /**
- * Check if player stats sync is needed (24 hours since last sync)
- * Checks the lastSynced column in playoffStats table
+ * Check if player stats sync is needed (not yet synced since the last nightly cutoff)
+ *
+ * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
+ * row of the season we are about to write. An unscoped check reads the newest
+ * `lastSynced` in the whole table, so right after a season rollover the
+ * previous season's freshly-synced rows look like the new season is already up
+ * to date and suppress the first sync for a full day.
  */
 export async function shouldSyncPlayerStats(): Promise<boolean> {
   try {
-    // Get the most recent lastSynced timestamp from any player
-    // If all lastSynced are NULL, this will return no rows and we'll sync
+    // Most recent lastSynced among the active season's players.
+    // No such row (rollover, or all NULL) means sync now.
     const { data, error } = await supabase
       .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
+      .eq('season_id', PLAYER_ROSTER_SYNC_SEASON_ID)
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check player stats sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player stats sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 
 /**
- * Check if player roster sync is needed (24 hours since last sync)
- * Checks the lastSynced column in playoffStats table
+ * Check if player roster sync is needed (not yet synced since the last nightly cutoff)
+ *
+ * Scoped to `PLAYER_ROSTER_SYNC_SEASON_ID`: the timestamp has to come from a
+ * row of the season we are about to write. An unscoped check reads the newest
+ * `lastSynced` in the whole table, so right after a season rollover the
+ * previous season's freshly-synced rows look like the new season is already up
+ * to date and suppress the first sync for a full day.
  */
 export async function shouldSyncPlayerRoster(): Promise<boolean> {
   try {
-    // Get the most recent lastSynced timestamp from any player
-    // If all lastSynced are NULL, this will return no rows and we'll sync
+    // Most recent lastSynced among the active season's players.
+    // No such row (rollover, or all NULL) means sync now.
     const { data, error } = await supabase
       .from(PLAYER_ROSTER_STATS_TABLE)
       .select('lastSynced')
+      .eq('season_id', PLAYER_ROSTER_SYNC_SEASON_ID)
       .not('lastSynced', 'is', null)
       .order('lastSynced', { ascending: false })
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check player roster sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking player roster sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 
@@ -384,7 +440,9 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
   const roster = apiData.SiteKit.Roster;
   
   for (const item of roster) {
-    // Skip if item is not a dict (e.g., staff/coaches arrays)
+    // The feed ends with a nested array holding the team's coaching staff
+    // (GM, coaches, video coordinator) — those entries carry `role`/`person_id`
+    // instead of player fields. Skip them; they are not players.
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
     }
@@ -445,9 +503,128 @@ function transformRosterData(apiData: any, teamAbbrev: string): any[] {
   return players;
 }
 
+type CoachingStaff = {
+  headcoachname: string | null;
+  assistantcoach1: string | null;
+  assistantcoach2: string | null;
+};
+
+/**
+ * Pull the head coach and (at most) the first two assistant coaches out of the
+ * roster feed's staff block — a nested array at the end of `SiteKit.Roster`
+ * whose entries carry `role`/`person_id` instead of player fields.
+ *
+ * Fewer than two assistants leaves the remaining column(s) null; more than two
+ * keeps the first two in feed order.
+ */
+function extractCoachingStaff(apiData: any): CoachingStaff {
+  const staff: CoachingStaff = {
+    headcoachname: null,
+    assistantcoach1: null,
+    assistantcoach2: null,
+  };
+
+  const roster = apiData?.SiteKit?.Roster;
+  if (!Array.isArray(roster)) {
+    return staff;
+  }
+
+  const staffName = (entry: any): string | null => {
+    const rawName = entry.name != null ? String(entry.name).trim() : '';
+    if (rawName) return rawName;
+    const fn = entry.first_name != null ? String(entry.first_name).trim() : '';
+    const ln = entry.last_name != null ? String(entry.last_name).trim() : '';
+    return `${fn} ${ln}`.trim() || null;
+  };
+
+  // Staff rows live in the nested array(s); tolerate a flat one too.
+  const entries: any[] = [];
+  for (const item of roster) {
+    if (Array.isArray(item)) {
+      entries.push(...item);
+    } else if (item && typeof item === 'object' && item.role) {
+      entries.push(item);
+    }
+  }
+
+  const assistants: string[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const role = entry.role != null ? String(entry.role).trim().toLowerCase() : '';
+    const roleId = toInt(entry.role_id);
+    const name = staffName(entry);
+    if (!name) continue;
+
+    if (!staff.headcoachname && (roleId === 2 || role === 'head coach')) {
+      staff.headcoachname = name;
+    } else if (roleId === 3 || role === 'assistant coach') {
+      if (assistants.length < 2 && !assistants.includes(name)) {
+        assistants.push(name);
+      }
+    }
+  }
+
+  staff.assistantcoach1 = assistants[0] ?? null;
+  staff.assistantcoach2 = assistants[1] ?? null;
+
+  return staff;
+}
+
+/**
+ * Write a team's coaching staff to `teams`, skipping the write when nothing changed.
+ * `headcoachname` is NOT NULL in the schema, so it is only written when the feed has one.
+ */
+async function updateTeamCoachingStaff(teamAbbrev: string, staff: CoachingStaff): Promise<boolean> {
+  const update: Record<string, string | null> = {
+    assistantcoach1: staff.assistantcoach1,
+    assistantcoach2: staff.assistantcoach2,
+  };
+  if (staff.headcoachname) {
+    update.headcoachname = staff.headcoachname;
+  }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('teams')
+    .select('headcoachname, assistantcoach1, assistantcoach2')
+    .eq('abbreviation', teamAbbrev)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error(`  ❌ PLAYER ROSTER: Error reading coaching staff for ${teamAbbrev}:`, fetchError);
+    return false;
+  }
+  if (!existing) {
+    console.warn(`  ⚠️ PLAYER ROSTER: No teams row for ${teamAbbrev} — skipping coaching staff`);
+    return false;
+  }
+
+  const changed = Object.keys(update).filter(
+    (key) => (update[key] ?? null) !== ((existing as any)[key] ?? null)
+  );
+  if (changed.length === 0) {
+    return false;
+  }
+
+  const { error: updateError } = await supabase
+    .from('teams')
+    .update(update)
+    .eq('abbreviation', teamAbbrev);
+
+  if (updateError) {
+    console.error(`  ❌ PLAYER ROSTER: Error updating coaching staff for ${teamAbbrev}:`, updateError);
+    return false;
+  }
+
+  const summary = changed
+    .map((key) => `${key}: "${(existing as any)[key] ?? null}" → "${update[key] ?? null}"`)
+    .join(', ');
+  console.log(`  🔄 PLAYER ROSTER: ${teamAbbrev} coaching staff — ${summary}`);
+  return true;
+}
+
 /**
  * Sync player roster data (jersey numbers, rookie status, veteran status).
- * Inserts rows for anyone on the API roster who is not yet in playoffStats (stats sync can fill in later).
+ * Inserts rows for anyone on the API roster who is not yet in the roster stats table (stats sync can fill in later).
  */
 export async function syncPlayerRoster(): Promise<{ success: boolean; error?: string; updated?: number; inserted?: number }> {
   try {
@@ -457,6 +634,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     let totalInserted = 0;
     let totalProcessed = 0;
     let teamsProcessed = 0;
+    let coachingStaffUpdated = 0;
     const allProcessedPlayerIds: number[] = [];
     const currentTime = new Date().toISOString();
 
@@ -497,6 +675,14 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
       const apiData = await fetchTeamRoster(teamId);
       if (!apiData) {
         continue;
+      }
+
+      // Coaching staff first: it comes from the same payload and has to land
+      // even for a team whose player list is empty.
+      if (SYNC_COACHING_STAFF) {
+        if (await updateTeamCoachingStaff(teamAbbrev, extractCoachingStaff(apiData))) {
+          coachingStaffUpdated++;
+        }
       }
 
       const players = transformRosterData(apiData, teamAbbrev);
@@ -661,7 +847,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
     }
     
     console.log(
-      `✅ PLAYER ROSTER: Sync complete — inserted: ${totalInserted}, updated: ${totalUpdated}, roster rows seen: ${totalProcessed}, teams: ${teamsProcessed}`
+      `✅ PLAYER ROSTER: Sync complete — inserted: ${totalInserted}, updated: ${totalUpdated}, roster rows seen: ${totalProcessed}, teams: ${teamsProcessed}, coaching staff updated: ${coachingStaffUpdated}`
     );
     
     return { success: true, updated: totalUpdated, inserted: totalInserted };
@@ -675,7 +861,7 @@ export async function syncPlayerRoster(): Promise<{ success: boolean; error?: st
 }
 
 /**
- * Check if team standings sync is needed (24 hours since last sync)
+ * Check if team standings sync is needed (not yet synced since the last nightly cutoff)
  * Checks the lastSynced column in teams table
  */
 export async function shouldSyncTeamStandings(): Promise<boolean> {
@@ -690,19 +876,23 @@ export async function shouldSyncTeamStandings(): Promise<boolean> {
       .limit(1)
       .maybeSingle();
     
-    // If error, no data, or all lastSynced are NULL, sync now
-    if (error || !data || !data.lastSynced) {
+    // A failed check is not a due sync. It usually means the network or the
+    // session isn't back yet on a return to the app; failing open put up the
+    // "Updating…" banner on every resume and then ran a sync that failed too.
+    // The next resume checks again.
+    if (error) {
+      console.warn('Could not check team standings sync status:', error.message);
+      return false;
+    }
+    // No synced row for this season yet (rollover, or all NULL): sync now.
+    if (!data || !data.lastSynced) {
       return true;
     }
 
-    const lastSync = new Date(data.lastSynced);
-    const now = new Date();
-    const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceSync >= SYNC_INTERVAL_HOURS;
+    return isDueForNightlySync(data.lastSynced);
   } catch (error) {
     console.error('Error checking team standings sync status:', error);
-    return true; // On error, sync to be safe
+    return false;
   }
 }
 

@@ -1,0 +1,13 @@
+name = "ahl-ical-proxy"
+main = "index.js"
+compatibility_date = "2026-09-29"
+
+# No cron and no secrets: this Worker only relays the HorizonWebRef iCal feed
+# so the browser build can read it. It never touches Supabase.
+
+[vars]
+# Origins allowed to call /ical, comma-separated.
+# http://localhost:8081 and http://localhost:19006 are always allowed, so this
+# only needs the deployed web app. An entry like `https://*.expo.app` matches
+# any subdomain, which is what you want for EAS Hosting preview URLs.
+ICAL_ALLOWED_ORIGINS = "https://*.expo.app"

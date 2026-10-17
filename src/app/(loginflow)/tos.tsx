@@ -1,5 +1,6 @@
 // app/(auth)/tos.tsx
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
@@ -7,6 +8,8 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { READING_MAX_WIDTH } from '@/src/lib/platform';
+import { fetchMyIcalUrl } from '@/src/lib/rosterColumns';
 
 export default function TermsOfService() {
   const { user } = useAuth();
@@ -77,7 +80,7 @@ export default function TermsOfService() {
           tos_accepted_at: new Date().toISOString()
         })
         .eq('auth_id', user.id)
-        .select();
+        .select('accepted_tos, tos_accepted_at');
 
       if (error) {
         console.error('❌ TOS acceptance update failed:', error);
@@ -101,7 +104,7 @@ export default function TermsOfService() {
       try {
         const { data: verifyData, error: verifyError } = await supabase
           .from('roster')
-          .select('accepted_tos, tos_accepted_at, ical_url')
+          .select('accepted_tos, tos_accepted_at, "ahlAdmin"')
           .eq('auth_id', user.id)
           .single();
         
@@ -109,6 +112,8 @@ export default function TermsOfService() {
           console.error('❌ Verification failed:', verifyError);
         } else {
           console.log('✅ Verification result:', verifyData);
+          // An ahlAdmin sees every game straight from the DB and has no iCal feed.
+          const needsIcal = !verifyData.ahlAdmin && !(await fetchMyIcalUrl());
           
           // Reset loading state before navigation
           setLoading(false);
@@ -116,7 +121,7 @@ export default function TermsOfService() {
           // Navigate based on iCal URL status
           console.log('🔄 Checking iCal URL status...');
           setTimeout(() => {
-            if (!verifyData.ical_url) {
+            if (needsIcal) {
               console.log('🔄 Navigating to iCal setup...');
               router.replace('/(loginflow)/ical-setup');
             } else {
@@ -212,7 +217,7 @@ export default function TermsOfService() {
 
         <Text style={styles.sectionTitle}>8. Updates to the App</Text>
         <Text style={styles.text}>
-          {`The App is provided "as is" and may be updated or modified at any time without notice. Dan Flynn is not obligated to maintain or support the App.`}
+          {`The App is provided "as is" and may be updated or modified at any time without notice. The developer is not obligated to maintain or support the App.`}
         </Text>
 
         <Text style={styles.sectionTitle}>9. Termination</Text>
@@ -250,7 +255,7 @@ export default function TermsOfService() {
           onPress={handleAcceptTOS}
           disabled={!hasReachedBottom || loading}
         >
-          <Text style={styles.buttonText}>
+          <Text style={[styles.buttonText, styles.acceptButtonText]}>
             {loading ? 'Accepting...' : 'I Accept'}
           </Text>
         </TouchableOpacity>
@@ -287,6 +292,11 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     padding: 20,
+    // Keeps the terms readable rather than running the full width of a
+    // monitor. A no-op below READING_MAX_WIDTH, so phones are unchanged.
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
   },
   sectionTitle: {
     fontSize: 18,
@@ -320,6 +330,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#333',
     gap: 10,
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
   },
   button: {
     padding: 15,
@@ -335,6 +348,9 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
     backgroundColor: '#666',
+  },
+  acceptButtonText: {
+    color: '#000',
   },
   buttonText: {
     color: '#fff',

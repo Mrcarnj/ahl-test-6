@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "AHL Officials",
+    "name": "ZebraCal",
     "slug": "ahl-test-6",
-    "version": "1.0.2",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash_playoffs.png",
+      "image": "./assets/images/splash-2-stripes.png",
       "resizeMode": "cover",
       "backgroundColor": "#000000"
     },
@@ -27,8 +27,14 @@
           "background-fetch",
           "background-fetch"
         ],
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      },
+      "requireFullScreen": true,
+      "runtimeVersion": "1.0.1"
     },
     "android": {
       "package": "com.dieter15.ahltest6",
@@ -39,12 +45,20 @@
         "WAKE_LOCK",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK"
-      ]
+      ],
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "name": "AHL Officials",
+      "shortName": "AHL Officials",
+      "backgroundColor": "#000000",
+      "themeColor": "#000000",
+      "description": "Schedules, team rosters and standings for American Hockey League officials.",
+      "lang": "en"
     },
     "plugins": [
       "expo-router",
@@ -65,7 +79,17 @@
       ],
       "expo-contacts",
       "expo-background-fetch",
-      "expo-task-manager"
+      "expo-task-manager",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow AHL Officials to access your videos so you can upload game clips for your crew.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "react-native-compressor"
     ],
     "experiments": {
       "typedRoutes": true
@@ -74,6 +98,9 @@
       "eas": {
         "projectId": "d1103638-3c9e-4c41-8846-38a4a1486029"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d1103638-3c9e-4c41-8846-38a4a1486029"
     }
   }
 }

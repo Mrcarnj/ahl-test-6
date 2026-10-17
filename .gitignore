@@ -43,3 +43,20 @@ app-example
 /android
 
 .env
+
+# Cloudflare Worker local secrets
+cloudflare-worker/.dev.vars
+cloudflare-worker/node_modules
+cloudflare-worker/.wrangler
+
+# Python bytecode from the fetch_*.py scripts
+__pycache__/
+
+# graphify knowledge graph — regenerated locally by `graphify update .`
+graphify-out/
+
+# Supabase CLI link state (supabase link)
+supabase/.temp/
+
+# /brag launch-video output (brag-output/ and timestamped brag-output-*/)
+brag-output*/

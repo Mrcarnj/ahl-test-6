@@ -5,26 +5,59 @@ import { formatGameTime, useSchedule } from '@/src/providers/ScheduleProvider';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDays, isToday as checkIsToday, differenceInDays, format, parse } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
-import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, AppState, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHockeySync } from '@/src/hooks/useHockeySync';
 import SyncBannerHost from '@/src/components/SyncBannerHost';
+import { isWeb, useTabletLayout } from '@/src/lib/platform';
+import AllGamesList from '@/src/components/AllGamesList';
+import MiniCalendar from '@/src/components/MiniCalendar';
+import ClipsFeed from '@/src/components/ClipsFeed';
+import SideDrawer from '@/src/components/SideDrawer';
+
+/**
+ * The season the expense-report cycle covers. Each report covers a 14-day
+ * period, Monday through Sunday two weeks later, starting from the start
+ * date; it is due EXPENSE_DUE_DAYS_AFTER_PERIOD days after the period's last
+ * day. Just as importantly, only games inside this window belong on a report.
+ *
+ * Officials' `myGames` still contains last season's games (including its
+ * playoffs), so without this bound they leak onto the current season's first
+ * reports. Bump both when the season rolls over.
+ *
+ * START must be a MONDAY, the first day of a report period: every period is a
+ * whole number of 14-day steps from it. 2026-27 periods: Sept 14-27 (due
+ * Mon Sept 28), Sept 28-Oct 11 (due Mon Oct 12), and so on: each report is
+ * due the Monday right after its period ends.
+ */
+const EXPENSE_SEASON_START = new Date(2026, 8, 14); // Monday, September 14, 2026
+const EXPENSE_SEASON_END = new Date(2027, 5, 30);   // June 30, 2027
+// Sunday period end -> due the Monday after.
+const EXPENSE_DUE_DAYS_AFTER_PERIOD = 1;
 
 
 const TestScheduleScreen = () => {
     const router = useRouter();
-    const { myGames } = useSchedule();
-    const { roster } = useRoster();
-    const { syncStatus } = useHockeySync();
+    const { myGames, playoffBracket, scheduleLoaded, scheduleSyncStatus } = useSchedule();
+    const { roster, isAhlAdmin } = useRoster();
+    const { syncStatus, refreshSyncStatus } = useHockeySync();
+    // On iPad the home screen is split: these sections on the left, the
+    // calendar and clips on the right, and All Games opens over the right side.
+    const isTablet = useTabletLayout();
+    const [allGamesOpen, setAllGamesOpen] = useState(false);
+
+    // "Last refresh" is read from storage once on mount; re-read it whenever a
+    // schedule sync finishes so it reflects pull-to-refresh and foreground syncs.
+    useEffect(() => {
+        if (scheduleSyncStatus.status === 'success') void refreshSyncStatus();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scheduleSyncStatus.finishedAt]);
 
     const externalLinks = [
-        { title: 'Rulebook', screenName: "/(protected)/home/rulebook" },
-        { title: 'Situation Book', screenName: "/(protected)/home/SituationBook" },
-        { title: 'Rule Genie', screenName: "/(protected)/home/RuleGenie" },
-        { title: 'Incident Report', url: 'https://bit.ly/ahlincidentreport' },
-        { title: 'Video Review Report', url: 'https://bit.ly/ahlvideoreview' },
-        { title: 'AHL Google Drive', url: 'https://bit.ly/AHLOfficialsGoogleDrive24-25' },
+        { title: 'Rulebook', screenName: "/(protected)/(tabs)/rulebook" },
+        { title: 'Situation Book', screenName: "/(protected)/(tabs)/situation-book" },
+        { title: 'AHL Google Drive', url: 'https://drive.google.com/drive/folders/1AIzYzQHyOxXqt1kHhKYbsHEORgjS9lVz' },
     ];
 
     const openLink = useCallback(async (link: typeof externalLinks[number]) => {
@@ -40,7 +73,9 @@ const TestScheduleScreen = () => {
         }
     }, [router]);
 
-    const ruleLinks = externalLinks.filter(link => link.screenName);
+    // On web these two live in the left-hand menu, so the home screen does not
+    // repeat them as buttons.
+    const ruleLinks = isWeb ? [] : externalLinks.filter(link => link.screenName);
     const externalUrlLinks = externalLinks.filter(link => link.url);
 
 
@@ -54,9 +89,11 @@ const TestScheduleScreen = () => {
         });
     };
 
-    const todayEvent = useMemo(() => {
+    // An official has at most one; an ahlAdmin's myGames is the whole league,
+    // so this is every game being played today.
+    const todayEvents = useMemo(() => {
         const today = format(new Date(), 'yyyy-MM-dd');
-        return myGames.find(game => game.gamedate === today);
+        return myGames.filter(game => game.gamedate === today);
     }, [myGames]);
 
     const upcomingEvents = useMemo(() => {
@@ -81,28 +118,37 @@ const TestScheduleScreen = () => {
         return format(date, 'EEEE, MMMM d, yyyy');
     };
 
+    // Today's date, refreshed on every return to the app, so the due date
+    // rolls over ("TOMORROW" -> "TODAY") without a restart. The home tab stays
+    // mounted for the life of the app, so computing it once on mount went stale
+    // overnight.
+    const [todayKey, setTodayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') setTodayKey(format(new Date(), 'yyyy-MM-dd'));
+        });
+        return () => sub.remove();
+    }, []);
+
     const expenseReportData = useMemo(() => {
-        const startDate = new Date(2025, 8, 22); // September 22, 2025
-        const endDate = new Date(2026, 5, 30);   // June 30, 2026
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);  // Set to start of day for accurate comparison
-        let nextDueDate = startDate;
+        const endDate = EXPENSE_SEASON_END;
+        const today = parse(todayKey, 'yyyy-MM-dd', new Date()); // local midnight
+        // Copy, so the loop below can never advance the shared constant.
+        let periodStart = new Date(EXPENSE_SEASON_START);
     
-        while (nextDueDate <= endDate) {
-            // Create date objects for comparison that are set to start of day
-            const currentDueDate = new Date(nextDueDate);
-            currentDueDate.setHours(0, 0, 0, 0);
+        while (periodStart <= endDate) {
+            // Last day of the period (inclusive) and the day the report is due.
+            const rangeStartDate = new Date(periodStart);
+            rangeStartDate.setHours(0, 0, 0, 0);
+            const rangeEndDate = addDays(rangeStartDate, 13);
+            const currentDueDate = addDays(rangeEndDate, EXPENSE_DUE_DAYS_AFTER_PERIOD);
             
             // Create a copy for tomorrow comparison
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
     
             if (currentDueDate >= today) {
-                const rangeEndDate = new Date(currentDueDate);
-                const rangeStartDate = new Date(rangeEndDate);
-                rangeStartDate.setDate(rangeStartDate.getDate() - 14);
-    
-                const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(addDays(rangeEndDate, -1), 'MMMM d')}`;
+                const dateRange = `${format(rangeStartDate, 'MMMM d')} - ${format(rangeEndDate, 'MMMM d')}`;
     
                 // Check if it's due today
                 if (currentDueDate.getTime() === today.getTime()) {
@@ -139,7 +185,7 @@ const TestScheduleScreen = () => {
                     rangeEndDate 
                 };
             }
-            nextDueDate = addDays(nextDueDate, 14);
+            periodStart = addDays(periodStart, 14);
         }
         
         return { 
@@ -150,98 +196,243 @@ const TestScheduleScreen = () => {
             rangeStartDate: null, 
             rangeEndDate: null 
         };
-    }, []);
+    }, [todayKey]);
 
-    const getGamesInDateRange = useCallback((dateRange: string) => {
-        if (!dateRange) return [];
-
+    const gamesOnExpenseReport = useMemo(() => {
         const { rangeStartDate, rangeEndDate } = expenseReportData;
         if (!rangeStartDate || !rangeEndDate) return [];
+
+        // Only this season's games can appear on this season's expense reports.
+        // `myGames` keeps prior seasons, and the playoff branch below ignores
+        // dates entirely, so without this bound last season's playoff games
+        // (e.g. M2, O3 from May) show up on the first report of the new season.
+        // gamedate is 'yyyy-MM-dd', so string comparison is chronological.
+        const seasonStartStr = format(EXPENSE_SEASON_START, 'yyyy-MM-dd');
+        const seasonEndStr = format(EXPENSE_SEASON_END, 'yyyy-MM-dd');
+        const seasonGames = myGames.filter(
+            (game) => game.gamedate >= seasonStartStr && game.gamedate <= seasonEndStr,
+        );
+
+        const getPlayoffCode = (game: typeof myGames[number]): string => {
+            const rawGameId = String(game.gameid || '').trim().toUpperCase();
+            const rawGameCode = String(game.gamecode || '').trim().toUpperCase();
+
+            const hasSeriesPattern = (value: string): boolean => /[A-Z]\d+/.test(value);
+
+            // Prefer whichever field actually contains the playoff series/game token (e.g., M2, O3).
+            if (hasSeriesPattern(rawGameId)) return rawGameId.match(/[A-Z]\d+/)?.[0] ?? rawGameId;
+            if (hasSeriesPattern(rawGameCode)) return rawGameCode.match(/[A-Z]\d+/)?.[0] ?? rawGameCode;
+            return '';
+        };
+
+        const numericGameId = (game: typeof myGames[number]): string | null => {
+            const raw = String(game.gameid ?? '').trim();
+            if (!raw) return null;
+            return /^\d+$/.test(raw) ? raw : null;
+        };
+
+        const isPlayoffGame = (game: typeof myGames[number]): boolean => {
+            const id = getPlayoffCode(game);
+            if (!id) return false;
+            if (id.startsWith('EX')) return false;
+            return /^[A-Z]\d+$/.test(id);
+        };
+
+        const seriesLetterFromCode = (gameCode: string): string | null => {
+            const normalized = gameCode.trim().toUpperCase();
+            const startMatch = normalized.match(/^([A-Z])/);
+            if (startMatch) return startMatch[1];
+            const embeddedMatch = normalized.match(/([A-Z])\d+/);
+            if (embeddedMatch) return embeddedMatch[1];
+            const alphaMatch = normalized.match(/([A-Z])/);
+            if (alphaMatch && alphaMatch[1] !== 'E') return alphaMatch[1];
+            return null;
+        };
+
+        const fallbackRoundFromSeriesLetter = (seriesLetter: string | null): number | undefined => {
+            if (!seriesLetter) return undefined;
+            const letter = seriesLetter.toUpperCase().charCodeAt(0);
+            if (!Number.isFinite(letter)) return undefined;
+            // HockeyTech fallback buckets when bracket mapping is temporarily unavailable.
+            // Keeps known behavior: G => R1, M/O => R2.
+            if (letter >= 65 && letter <= 76) return 1; // A-L
+            if (letter >= 77 && letter <= 82) return 2; // M-R
+            if (letter >= 83 && letter <= 85) return 3; // S-U
+            if (letter >= 86 && letter <= 90) return 4; // V-Z
+            return undefined;
+        };
+
+        const displayCodeForGame = (game: typeof myGames[number]): string => {
+            const playoffCode = getPlayoffCode(game);
+            if (!playoffCode) return '';
+            const normalized = playoffCode.match(/[A-Z]\d+/);
+            return normalized ? normalized[0] : playoffCode;
+        };
+
+        const gameIdSort = (a: string, b: string): number => {
+            const aMatch = a.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+            const bMatch = b.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+            if (aMatch && bMatch) {
+                if (aMatch[1] !== bMatch[1]) return aMatch[1].localeCompare(bMatch[1]);
+                return Number(aMatch[2]) - Number(bMatch[2]);
+            }
+            const aNum = Number(a);
+            const bNum = Number(b);
+            if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+            return a.localeCompare(b);
+        };
+
+        const playoffRoundBySeries = new Map<string, number>();
+        const playoffRoundByGameId = new Map<string, number>();
+        const openPlayoffRounds = new Set<number>();
+
+        playoffBracket?.rounds.forEach((round) => {
+            const roundNum = Number(round.round);
+            if (!Number.isFinite(roundNum)) return;
+
+            let roundStillOpen = false;
+            round.matchups.forEach((matchup) => {
+                const seriesLetter = String(matchup.series_letter ?? '').trim().toUpperCase();
+                if (!seriesLetter) return;
+                playoffRoundBySeries.set(seriesLetter, roundNum);
+
+                (matchup.games ?? []).forEach((bracketGame) => {
+                    const bracketGameId = String(bracketGame.game_id ?? '').trim();
+                    if (bracketGameId) {
+                        playoffRoundByGameId.set(bracketGameId, roundNum);
+                    }
+                });
+
+                const isActive = String(matchup.active ?? '').toLowerCase();
+                const winner = String(matchup.winner ?? '').trim();
+                const hasWinner = winner !== '' && winner !== '0';
+                if (isActive === '1' || isActive === 'true' || isActive === 'yes' || !hasWinner) {
+                    roundStillOpen = true;
+                }
+            });
+
+            if (roundStillOpen) {
+                openPlayoffRounds.add(roundNum);
+            }
+        });
+
+        const playoffGamesWithRound = seasonGames
+            .filter((game) => isPlayoffGame(game))
+            .map((game) => {
+                const byGameIdRound = numericGameId(game)
+                    ? playoffRoundByGameId.get(numericGameId(game)!)
+                    : undefined;
+                if (Number.isFinite(byGameIdRound)) {
+                    return { game, round: byGameIdRound as number };
+                }
+
+                const seriesLetter = seriesLetterFromCode(getPlayoffCode(game));
+                const bySeriesRound = seriesLetter ? playoffRoundBySeries.get(seriesLetter) : undefined;
+                const fallbackRound = fallbackRoundFromSeriesLetter(seriesLetter);
+                return { game, round: bySeriesRound ?? fallbackRound };
+            })
+            .filter((entry): entry is { game: typeof myGames[number]; round: number } => Number.isFinite(entry.round));
+
+        if (playoffGamesWithRound.length > 0) {
+            const myOpenRounds = playoffGamesWithRound
+                .map(({ round }) => round)
+                .filter((round) => openPlayoffRounds.has(round));
+
+            const currentRound = myOpenRounds.length > 0
+                ? Math.min(...myOpenRounds)
+                : Math.max(...playoffGamesWithRound.map(({ round }) => round));
+
+            return playoffGamesWithRound
+                .filter(({ round }) => round === currentRound)
+                .map(({ game }) => displayCodeForGame(game))
+                .filter((code) => Boolean(code))
+                .sort(gameIdSort);
+        }
 
         const startDateStr = format(rangeStartDate, 'yyyy-MM-dd');
         const endDateStr = format(rangeEndDate, 'yyyy-MM-dd');
 
-        return myGames
+        return seasonGames
             .filter(game => game.gamedate >= startDateStr && game.gamedate <= endDateStr)
             .map(game => game.gameid)
-            .sort((a, b) => Number(a) - Number(b));
-    }, [myGames, expenseReportData]);
+            .sort(gameIdSort);
+    }, [myGames, expenseReportData, playoffBracket]);
 
     const { text, isToday, isTomorrow, dateRange } = expenseReportData;
 
-    // Banner is now global (SyncBannerHost in protected layout)
+    const header = (
+        <View style={[styles.header, isTablet && tabletStyles.header]}>
+            <Image
+                source={require('../../../../../assets/images/ahlLogo.png')}
+                style={[styles.leagueLogo, isTablet && tabletStyles.leagueLogo]}
+            />
+            <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
+        </View>
+    );
 
-    return (
-        <SafeAreaView style={styles.container}
-            edges={['left', 'right', 'top']}>
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.contentContainer}
-                refreshControl={<AppRefreshControl />}
-            >
-                <SyncBannerHost />
-                <View style={styles.header}>
-                    <Image
-                        source={require('../../../../../assets/images/ahlLogo.png')}
-                        style={styles.leagueLogo}
-                    />
-                    <Text style={styles.headerText}>Welcome, {roster?.firstname}  <MaterialCommunityIcons name="whistle" style={styles.headericon} /></Text>
-                </View>
-                {todayEvent && (
-                    <>
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Today</Text>
-                            <TouchableOpacity
-                                style={styles.gameCardToday}
-                                onPress={() => handleGamePress(todayEvent.gameid)}
-                                activeOpacity={0.7}
-                            >
-                                <View style={styles.gameContent}>
-                                    <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
-                                    <Text style={styles.matchup}>
-                                        {todayEvent.awayteam} @ {todayEvent.hometeam}
-                                    </Text>
-                                    <Text style={styles.gameDetails}>
-                                        {`${formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // ${todayEvent.homeTeamData?.arenaname ?? ''}`}
-                                    </Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                            </TouchableOpacity>
-                        </View>
-                    </>
-                )}
-
-                <View style={styles.separator} />
-
+    const sections = (
+        <>
+            {todayEvents.length > 0 && (
                 <View style={styles.section}>
-                    <View style={styles.expenseReportContainer}>
-                        <Text style={styles.reportTitle}>Expense Report Due: </Text>
-                        <Text style={[
-                            styles.expenseReportText,
-                            isToday && styles.expenseReportToday,
-                            isTomorrow && styles.expenseReportTomorrow
-                        ]}>
-                            {text}
-                        </Text>
-                    </View>
+                    <Text style={styles.sectionTitle}>Today</Text>
+                    {todayEvents.map((todayEvent, i) => (
+                        <TouchableOpacity
+                            key={todayEvent.id}
+                            style={[styles.gameCardToday, i > 0 && styles.gameCardTodaySpaced]}
+                            onPress={() => handleGamePress(todayEvent.gameid)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.gameContent}>
+                                <Text style={styles.gameId}>{formatGameDate(todayEvent.gamedate)}</Text>
+                                <Text style={styles.matchup}>
+                                    {todayEvent.awayteam} @ {todayEvent.hometeam}
+                                </Text>
+                                <Text style={styles.gameDetails}>
+                                    {`${formatGameTime(todayEvent.gametime, todayEvent.gamedate)} // ${todayEvent.homeTeamData?.arenaname ?? ''}`}
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
 
-                    {dateRange && (
-                        <>
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                <View style={styles.expenseReportContainer}>
+                    <Text style={styles.reportTitle}>Expense Report Due: </Text>
+                    <Text style={[
+                        styles.expenseReportText,
+                        isToday && styles.expenseReportToday,
+                        isTomorrow && styles.expenseReportTomorrow
+                    ]}>
+                        {text}
+                    </Text>
+                </View>
+
+                {dateRange && (
+                    <>
                             <Text style={styles.dateRangeText}>
                                 Date Range Due: {dateRange}
                             </Text>
-                            <Text style={styles.dateRangeText}>
-                                Games on Report: {getGamesInDateRange(dateRange).length > 0
-                                    ? getGamesInDateRange(dateRange).join(', ')
-                                    : 'No games in this period'}
-                            </Text>
-                        </>
-                    )}
-                </View>
+                            {/* An ahlAdmin files no report of their own games. */}
+                            {!isAhlAdmin && <Text style={styles.dateRangeText}>
+                                Games on Report: {gamesOnExpenseReport.length > 0
+                                    ? gamesOnExpenseReport.join(', ')
+                                    : scheduleLoaded ? 'No games in this period' : '…'}
+                            </Text>}
+                    </>
+                )}
+            </View>
 
-                <View style={styles.separator} />
+            <View style={styles.separator} />
 
-                <View style={styles.section}>
+            <View style={styles.section}>
+                {/* An ahlAdmin's next few league games say little; they
+                    have Today, the calendar and View All Games. */}
+                {!isAhlAdmin && (
+                    <>
                     <Text style={styles.sectionTitle}>Upcoming Games</Text>
                     {upcomingEvents.length > 0 ? (
                         upcomingEvents.map(game => (
@@ -263,56 +454,118 @@ const TestScheduleScreen = () => {
                                 <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                             </TouchableOpacity>
                         ))
-                    ) : (
+                    ) : scheduleLoaded ? (
                         <Text style={styles.noGamesText}>No upcoming games</Text>
+                    ) : (
+                        // First load of the schedule from the DB is still in flight.
+                        <ActivityIndicator color="#ff6600" style={styles.gamesLoading} />
                     )}
+                    </>
+                )}
+                <TouchableOpacity
+                    style={[styles.gameCard, isTablet && allGamesOpen && tabletStyles.activeCard]}
+                    onPress={() => isTablet
+                        ? setAllGamesOpen(open => !open)
+                        : router.push("/(protected)/(tabs)/home/AllGames")}
+                >
+                    <Text style={styles.link}>View All Games</Text>
+                    <Ionicons name="chevron-forward" size={24} color="#ff6600" />
+                </TouchableOpacity>
+            </View>
+            {ruleLinks.length > 0 && (
+              <>
+            <View style={styles.separator} />
+
+            <View style={styles.section}>
+                {ruleLinks.map((link) => (
                     <TouchableOpacity
+                        key={link.title}
+                        onPress={() => openLink(link)}
                         style={styles.gameCard}
-                        onPress={() => router.push("/(protected)/(tabs)/home/AllGames")}
                     >
-                        <Text style={styles.link}>View All Games</Text>
+                        <View style={styles.linkTitleContainer}>
+                            <Text style={styles.link}>{link.title}</Text>
+                            {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
+                            {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
+                        </View>
                         <Ionicons name="chevron-forward" size={24} color="#ff6600" />
                     </TouchableOpacity>
-                </View>
-                <View style={styles.separator} />
+                ))}
+            </View>
+              </>
+            )}
 
-                <View style={styles.section}>
-                    {ruleLinks.map((link) => (
-                        <TouchableOpacity
-                            key={link.title}
-                            onPress={() => openLink(link)}
-                            style={styles.gameCard}
-                        >
-                            <View style={styles.linkTitleContainer}>
-                                <Text style={styles.link}>{link.title}</Text>
-                                {link.title === 'Rulebook' && <Entypo name="book" size={20} color="#fff" style={styles.bookIcon} />}
-                                {link.title === 'Situation Book' && <MaterialCommunityIcons name="head-question-outline" size={24} color="#fff" style={styles.bookIcon} />}
-                                {link.title === 'Rule Genie' && <MaterialCommunityIcons name="robot-happy-outline" size={24} color="#fff" style={styles.bookIcon} />}
-                            </View>
-                            <Ionicons name="chevron-forward" size={24} color="#ff6600" />
-                        </TouchableOpacity>
-                    ))}
-                </View>
+            <View style={styles.separator} />
 
-                <View style={styles.separator} />
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>External Links</Text>
+                {externalUrlLinks.map((link) => (
+                    <TouchableOpacity
+                        key={link.title}
+                        onPress={() => openLink(link)}
+                        style={styles.linkButton}
+                    >
+                        <Text style={styles.link}>{link.title}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+            <View style={styles.lastSyncRow}>
+                <Text style={styles.lastSyncText}>
+                    Last refresh: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
+                </Text>
+            </View>
+        </>
+    );
 
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>External Links</Text>
-                    {externalUrlLinks.map((link) => (
-                        <TouchableOpacity
-                            key={link.title}
-                            onPress={() => openLink(link)}
-                            style={styles.linkButton}
-                        >
-                            <Text style={styles.link}>{link.title}</Text>
-                        </TouchableOpacity>
-                    ))}
+    if (isTablet) {
+        return (
+            <SafeAreaView style={styles.container} edges={['left', 'right', 'top']}>
+                <SyncBannerHost />
+                {header}
+                <View style={tabletStyles.body}>
+                    {/* Left half: everything the phone's home screen shows. */}
+                    <ScrollView
+                        style={tabletStyles.leftColumn}
+                        refreshControl={<AppRefreshControl />}
+                    >
+                        {sections}
+                    </ScrollView>
+                    <View style={tabletStyles.rightColumn}>
+                        <View style={tabletStyles.sector}>
+                            <MiniCalendar />
+                        </View>
+                        <View style={tabletStyles.sector}>
+                            <ClipsFeed />
+                        </View>
+                        {/* Slides over both right sectors, which stay mounted
+                            underneath so the calendar keeps its month. */}
+                        {allGamesOpen && (
+                            <SideDrawer
+                                title="All Games"
+                                onClose={() => setAllGamesOpen(false)}
+                                style={tabletStyles.panel}
+                            >
+                                <AllGamesList />
+                            </SideDrawer>
+                        )}
+                    </View>
                 </View>
-                <View style={styles.lastSyncRow}>
-                    <Text style={styles.lastSyncText}>
-                        Last refresh: {syncStatus.lastSyncTime ? syncStatus.lastSyncTime.toLocaleString() : 'Never'}
-                    </Text>
-                </View>
+            </SafeAreaView>
+        );
+    }
+
+    return (
+        <SafeAreaView style={styles.container}
+            edges={['left', 'right', 'top']}>
+            {/* Outside the ScrollView so it stays pinned while a sync runs. */}
+            <SyncBannerHost />
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.contentContainer}
+                refreshControl={<AppRefreshControl />}
+            >
+                {header}
+                {sections}
             </ScrollView>
         </SafeAreaView>
     );
@@ -373,6 +626,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
+    gameCardTodaySpaced: {
+        marginTop: 12,
+    },
     gameContent: {
         flex: 1,
     },
@@ -421,12 +677,15 @@ const styles = StyleSheet.create({
         color: '#ffa500',
     },
     dateRangeText: {
-        color: '#888',
+        color: '#aaa',
         fontSize: 14,
         marginTop: 10,
     },
+    gamesLoading: {
+        marginVertical: 12,
+    },
     noGamesText: {
-        color: '#666',
+        color: '#999',
         fontSize: 16,
         fontStyle: 'italic',
         textAlign: 'center',
@@ -464,6 +723,55 @@ const styles = StyleSheet.create({
         height: 80,
         resizeMode: 'contain',
         marginBottom: 10,
+    },
+});
+
+const SECTOR_GAP = 16;
+
+const tabletStyles = StyleSheet.create({
+    header: {
+        marginBottom: 8,
+    },
+    leagueLogo: {
+        width: 64,
+        height: 64,
+        marginBottom: 6,
+    },
+    body: {
+        flex: 1,
+        flexDirection: 'row',
+    },
+    leftColumn: {
+        flex: 1,
+    },
+    rightColumn: {
+        flex: 1,
+        padding: SECTOR_GAP,
+        gap: SECTOR_GAP,
+        // Clips the panel while it slides in and out.
+        overflow: 'hidden',
+    },
+    sector: {
+        flex: 1,
+        backgroundColor: '#111',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#222',
+        padding: 12,
+    },
+    panel: {
+        position: 'absolute',
+        top: SECTOR_GAP,
+        bottom: SECTOR_GAP,
+        left: SECTOR_GAP,
+        right: SECTOR_GAP,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    activeCard: {
+        borderWidth: 1,
+        borderColor: '#ff6600',
     },
 });
 

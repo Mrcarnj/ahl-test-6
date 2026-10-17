@@ -6,6 +6,7 @@ export default function PlayoffsLayout() {
     <Stack
       screenOptions={{
         headerShown: true,
+        headerTitleAlign: 'center',
         headerStyle: { backgroundColor: '#000000' },
         headerTintColor: '#ff6600',
         headerTitleStyle: { color: '#fff', fontWeight: 'bold' },

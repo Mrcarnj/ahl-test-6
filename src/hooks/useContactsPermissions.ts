@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 import * as Device from 'expo-device';
+import { isWeb } from '@/src/lib/platform';
 
 export const useContactsPermissions = () => {
-    const [hasPermission, setHasPermission] = useState(false);
+    // The web build hands the user a .vcf download rather than writing to an
+    // address book, so there is no permission to ask for.
+    const [hasPermission, setHasPermission] = useState(isWeb);
 
-    const requestPermissions = async () => {
+    const requestPermissions = useCallback(async () => {
+        if (isWeb) return true;
+
         try {
             const { status } = await Contacts.requestPermissionsAsync();
             setHasPermission(status === 'granted');
@@ -15,13 +20,13 @@ export const useContactsPermissions = () => {
             setHasPermission(false);
             return false;
         }
-    };
+    }, []);
 
     useEffect(() => {
-        if (Device.isDevice) {
+        if (!isWeb && Device.isDevice) {
             requestPermissions();
         }
-    }, []);
+    }, [requestPermissions]);
 
     return { hasPermission, requestPermissions };
 };

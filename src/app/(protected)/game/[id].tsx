@@ -1,4 +1,6 @@
 // app/(protected)/game/[id].tsx
+import { buildVideoReviewUrl } from "@/src/lib/reportForms";
+import { useAuth } from "@/src/providers/AuthProvider";
 import { useRoster } from "@/src/providers/RosterProvider";
 import {
     formatGameDate2,
@@ -6,6 +8,7 @@ import {
     getTeamCoach,
     getTeamLogo,
     Schedule,
+    Team,
     TeamRoster,
     useSchedule,
 } from "@/src/providers/ScheduleProvider";
@@ -14,26 +17,46 @@ import {
     FontAwesome,
     FontAwesome5,
     Ionicons,
+    MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Image,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
+import { Alert } from "@/src/lib/alert";
+import { isPad, isWeb } from "@/src/lib/platform";
+import { currentSeasonLabel } from "@/src/lib/season";
 
 /** Treat null/undefined DB stats as 0 so sort is stable (roster-only inserts before stats sync). */
 function rosterNum(value: number | null | undefined): number {
   if (value == null || Number.isNaN(Number(value))) return 0;
   return Number(value);
+}
+
+/**
+ * Keep skaters with numeric GP above placeholder GP values (e.g. "-").
+ * HockeyTech roster rows can arrive as null (roster insert before the stats
+ * sync) or as a placeholder string, so this takes the wider runtime shape
+ * rather than the column's declared type.
+ */
+function gpSortGroup(
+  value: number | string | null | undefined,
+): number {
+  if (typeof value === "number" && Number.isFinite(value)) return 0;
+  if (typeof value === "string" && value.trim() !== "" && value.trim() !== "-") {
+    return Number.isFinite(Number(value)) ? 0 : 1;
+  }
+  return 1;
 }
 
 /** Full roster for one club: match `teams.abbreviation` + sort for display. */
@@ -45,6 +68,9 @@ function rosterPlayersForTeam(
   return teamRosters
     .filter((player) => player.team === teamAbbrev)
     .sort((a, b) => {
+      const gpGroupDiff = gpSortGroup(a.games_played) - gpSortGroup(b.games_played);
+      if (gpGroupDiff !== 0) return gpGroupDiff;
+
       if (rosterNum(b.points) !== rosterNum(a.points)) {
         return rosterNum(b.points) - rosterNum(a.points);
       }
@@ -63,13 +89,40 @@ function formatRosterStat(value: number | null | undefined): string {
   return String(value);
 }
 
+/**
+ * Standings for one club, or null when the DB has none.
+ *
+ * `teams` holds a single seasonless set of standings columns, so a club that is
+ * not in the active season's standings feed keeps whatever was last written
+ * (e.g. BRI, which left the league after 2025-26). Returning null for empty
+ * columns keeps the UI from dressing missing data up as a real 0-0-0-0 record.
+ */
+function teamStandings(team: Team | null | undefined) {
+  if (!team) return null;
+  const has = (value: string | null) => value != null && value !== "";
+  if (!has(team.games_played) && !has(team.points)) return null;
+  return {
+    record: `GP: ${team.games_played ?? "0"}, ${team.wins ?? "0"}-${team.losses ?? "0"}-${team.otl ?? "0"}-${team.sol ?? "0"} // Pts: ${team.points ?? "0"}`,
+    rank: has(team.division_rank)
+      ? `${team.division ?? "N/A"} #${team.division_rank} // Overall #${team.overall_rank ?? "N/A"}`
+      : null,
+  };
+}
+
 function formatRosterPlayerName(
   player: Pick<TeamRoster, "player_name">,
 ): string {
   return (player.player_name ?? "").replace(/\s\+-\s*$/, "");
 }
 
-/** Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`. */
+/**
+ * Points / PIM / full roster — markup aligned with pre–playoff/RS `game/[id].tsx`.
+ *
+ * Always rendered, even before a club has published its roster: the sections
+ * then show their headers and a "No players listed yet" row, and fill in as
+ * the daily roster/stats sync picks players up. Stats read "–" until a player
+ * has games.
+ */
 function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
   const pointsLeaders = [...teamRoster]
     .sort((a, b) => {
@@ -137,6 +190,7 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </Text>
           </View>
         ))}
+        {pointsLeaders.length === 0 && <EmptyRosterRow />}
       </View>
 
       <View style={styles.rosterContainer}>
@@ -167,6 +221,7 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </Text>
           </View>
         ))}
+        {pimLeaders.length === 0 && <EmptyRosterRow />}
       </View>
 
       <View style={styles.rosterContainer}>
@@ -232,74 +287,48 @@ function TeamRosterStatsTables({ teamRoster }: { teamRoster: TeamRoster[] }) {
             </View>
           );
         })}
+        {teamRoster.length === 0 && <EmptyRosterRow />}
       </View>
     </>
   );
 }
 
-function TeamSeasonRosterPager({
-  playoffRoster,
-  regularSeasonRoster,
-}: {
-  playoffRoster: TeamRoster[];
-  regularSeasonRoster: TeamRoster[];
-}) {
-  const [seasonPage, setSeasonPage] = useState(0);
-
+function EmptyRosterRow() {
   return (
-    <View>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "center",
-          marginBottom: 10,
-        }}
-      >
-        <TouchableOpacity
-          style={[styles.tab, seasonPage === 0 && styles.activeTab]}
-          onPress={() => setSeasonPage(0)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              seasonPage === 0 && styles.activeTabText,
-            ]}
-          >
-            Playoffs
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, seasonPage === 1 && styles.activeTab]}
-          onPress={() => setSeasonPage(1)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              seasonPage === 1 && styles.activeTabText,
-            ]}
-          >
-            Regular Season
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TeamRosterStatsTables
-        teamRoster={seasonPage === 0 ? playoffRoster : regularSeasonRoster}
-      />
+    <View style={styles.playerRow}>
+      <Text style={styles.playerText}>No players listed yet</Text>
     </View>
   );
 }
 
+/*
+ * Playoffs are hidden for 2026-27. `TeamSeasonRosterPager` (the
+ * Playoffs / Regular Season toggle) lived here — restore it from git history
+ * when playoff stats come back. For now the team tabs render the current
+ * regular season roster directly via `TeamRosterStatsTables`.
+ */
+
+/**
+ * Narrowest window that shows away roster, crew and home roster side by side
+ * (iPad and web; the game screen has no web sidebar, so it gets the whole
+ * window). Each column then gets ~330pt, enough for the roster tables and
+ * the crew's 2x2 photos. Narrower windows (portrait, Stage Manager) keep the
+ * phone's Crew / Away / Home tabs.
+ */
+const THREE_COLUMN_MIN_WIDTH = 1000;
+
 const GameDetails = () => {
   const { id } = useLocalSearchParams<{ id: string; source: string }>();
   const { myGames } = useSchedule();
-  const { allRosters } = useRoster();
+  const { allRosters, roster } = useRoster();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("crew");
+  const { width } = useWindowDimensions();
+  const threeColumns = (isPad || isWeb) && width >= THREE_COLUMN_MIN_WIDTH;
 
-  // Current season constant
-  const CURRENT_SEASON = "2025-26";
+  // Derived, not hardcoded, so it doesn't go stale at season rollover. Shares
+  // one definition with the sync that writes `schedule.season`.
+  const CURRENT_SEASON = currentSeasonLabel();
 
   const game = myGames.find(
     (g) => g.gameid === id && g.season === CURRENT_SEASON,
@@ -310,7 +339,7 @@ const GameDetails = () => {
   }
 
   const generateUrl = (gameId: any, isGamesheet = false) => {
-    const baseNumericID = 1027774;
+    const baseNumericID = 1029071;
     const numericID = baseNumericID + parseInt(gameId) - 1;
 
     if (isGamesheet) {
@@ -487,7 +516,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageRef}
+              style={[styles.profileImageRef, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.referee1)}{" "}
@@ -516,7 +545,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageRef}
+              style={[styles.profileImageRef, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.referee2)}{" "}
@@ -549,7 +578,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageLines}
+              style={[styles.profileImageLines, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.linesperson1)}{" "}
@@ -579,7 +608,7 @@ const GameDetails = () => {
                     }
                   : require("../../../../assets/images/noPhoto.png")
               }
-              style={styles.profileImageLines}
+              style={[styles.profileImageLines, threeColumns && styles.profileImageColumn]}
             />
             <Text style={styles.refereeText}>
               {getOfficialName(game.linesperson2)}{" "}
@@ -627,9 +656,8 @@ const GameDetails = () => {
   );
 
   const AwayTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters, teamRostersRegularSeason } = useSchedule();
+    const { teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.awayTeamData?.abbreviation;
-    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
     const regularSeasonRoster = rosterPlayersForTeam(
       teamRostersRegularSeason,
       teamAbbrev,
@@ -701,18 +729,14 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <TeamSeasonRosterPager
-          playoffRoster={playoffRoster}
-          regularSeasonRoster={regularSeasonRoster}
-        />
+        <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
     );
   };
 
   const HomeTeamContent = ({ game }: { game: Schedule }) => {
-    const { teamRosters, teamRostersRegularSeason } = useSchedule();
+    const { teamRostersRegularSeason } = useSchedule();
     const teamAbbrev = game.homeTeamData?.abbreviation;
-    const playoffRoster = rosterPlayersForTeam(teamRosters, teamAbbrev);
     const regularSeasonRoster = rosterPlayersForTeam(
       teamRostersRegularSeason,
       teamAbbrev,
@@ -784,10 +808,7 @@ const GameDetails = () => {
 
         <View style={styles.separator} />
 
-        <TeamSeasonRosterPager
-          playoffRoster={playoffRoster}
-          regularSeasonRoster={regularSeasonRoster}
-        />
+        <TeamRosterStatsTables teamRoster={regularSeasonRoster} />
       </ScrollView>
     );
   };
@@ -812,6 +833,16 @@ const GameDetails = () => {
     }
   };
 
+  // Pre-fills the official's details on the league's report forms.
+  const reportOfficial = {
+    firstName: roster?.firstname,
+    lastName: roster?.lastname,
+    email: user?.email ?? roster?.email,
+  };
+
+  const awayStandings = teamStandings(game.awayTeamData);
+  const homeStandings = teamStandings(game.homeTeamData);
+
   return (
     <ScrollView
       style={styles.container}
@@ -830,14 +861,12 @@ const GameDetails = () => {
               }}
               style={styles.teamLogo}
             />
-            {game.awayTeamData && (
+            {awayStandings && (
               <>
-                <Text style={styles.teamStats}>
-                  {`GP: ${game.awayTeamData.games_played || "0"}, ${game.awayTeamData.wins || "0"}-${game.awayTeamData.losses || "0"}-${game.awayTeamData.otl || "0"}-${game.awayTeamData.sol || "0"} // Pts: ${game.awayTeamData.points || "0"}`}
-                </Text>
-                <Text style={styles.teamRank}>
-                  {`${game.awayTeamData.division || "N/A"} #${game.awayTeamData.division_rank || ""} // Overall #${game.awayTeamData.overall_rank || "N/A"}`}
-                </Text>
+                <Text style={styles.teamStats}>{awayStandings.record}</Text>
+                {awayStandings.rank && (
+                  <Text style={styles.teamRank}>{awayStandings.rank}</Text>
+                )}
               </>
             )}
           </View>
@@ -851,14 +880,12 @@ const GameDetails = () => {
               }}
               style={styles.teamLogo}
             />
-            {game.homeTeamData && (
+            {homeStandings && (
               <>
-                <Text style={styles.teamStats}>
-                  {`GP: ${game.homeTeamData.games_played || "0"}, ${game.homeTeamData.wins || "0"}-${game.homeTeamData.losses || "0"}-${game.homeTeamData.otl || "0"}-${game.homeTeamData.sol || "0"} // Pts: ${game.homeTeamData.points || "0"}`}
-                </Text>
-                <Text style={styles.teamRank}>
-                  {`${game.homeTeamData.division || "N/A"} #${game.homeTeamData.division_rank || ""} // Overall #${game.homeTeamData.overall_rank || "N/A"}`}
-                </Text>
+                <Text style={styles.teamStats}>{homeStandings.record}</Text>
+                {homeStandings.rank && (
+                  <Text style={styles.teamRank}>{homeStandings.rank}</Text>
+                )}
               </>
             )}
           </View>
@@ -868,7 +895,10 @@ const GameDetails = () => {
             {formatGameTime(game.gametime, game.gamedate)}
           </Text>
           <View style={styles.arenaContainer}>
-            <TouchableOpacity onPress={() => handleArenaPress(game)}>
+            <TouchableOpacity
+              style={styles.arenaNameButton}
+              onPress={() => handleArenaPress(game)}
+            >
               <Text style={styles.arena}>
                 {game.homeTeamData?.arenaname || "Arena not specified"}
               </Text>
@@ -903,43 +933,112 @@ const GameDetails = () => {
             <Text style={styles.buttonText}>Gamesheet</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.floatingButtonsContainerBottom}>
+          <TouchableOpacity
+            style={styles.floatingButtonSmall}
+            onPress={() =>
+              router.push({
+                pathname: "/(protected)/incident-report/[id]",
+                params: { id: game.gameid },
+              })
+            }
+          >
+            <View style={styles.iconContainerSmall}>
+              <MaterialCommunityIcons
+                name="file-document-edit-outline"
+                size={18}
+                color="#ffffff"
+              />
+            </View>
+            <Text style={styles.buttonTextSmall}>Incident Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.floatingButtonSmall}
+            onPress={() =>
+              Linking.openURL(buildVideoReviewUrl(game, reportOfficial))
+            }
+          >
+            <View style={styles.iconContainerSmall}>
+              <Ionicons name="videocam-outline" size={17} color="#ffffff" />
+            </View>
+            <Text style={styles.buttonTextSmall}>Video Review</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <Text style={styles.disclaimer}>
         Note: Gamesheet not available until after completion of the game.
       </Text>
 
-      <View style={styles.tabContainer}>
-        {[
-          "Crew",
-          game.awayTeamData?.abbreviation || "Away",
-          game.homeTeamData?.abbreviation || "Home",
-        ].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
-            style={[
-              styles.tab,
-              activeTab === tab.toLowerCase().replace(" ", "") &&
-                styles.activeTab,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.toLowerCase().replace(" ", "") &&
-                  styles.activeTabText,
-              ]}
-            >
-              {tab}
+      {threeColumns ? (
+        // iPad: everything at once, away | crew | home, no tabs.
+        <View style={styles.columns}>
+          <View style={styles.column}>
+            <Text style={styles.columnTitle}>
+              {game.awayTeamData?.abbreviation || "Away"}
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <AwayTeamContent game={game} />
+          </View>
+          <View style={[styles.column, styles.crewColumn]}>
+            <Text style={styles.columnTitle}>Crew</Text>
+            <CrewContent
+              game={game}
+              allRosters={allRosters}
+              handleOfficialPress={handleOfficialPress}
+              handleGroupChat={handleGroupChat}
+            />
+          </View>
+          <View style={styles.column}>
+            <Text style={styles.columnTitle}>
+              {game.homeTeamData?.abbreviation || "Home"}
+            </Text>
+            <HomeTeamContent game={game} />
+          </View>
+        </View>
+      ) : (
+        <>
+          <View style={styles.tabContainer}>
+            {[
+              "Crew",
+              game.awayTeamData?.abbreviation || "Away",
+              game.homeTeamData?.abbreviation || "Home",
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
+                style={[
+                  styles.tab,
+                  activeTab === tab.toLowerCase().replace(" ", "") &&
+                    styles.activeTab,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab.toLowerCase().replace(" ", "") &&
+                      styles.activeTabText,
+                  ]}
+                >
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <View style={styles.contentContainer}>{renderContent()}</View>
+          <View style={styles.contentContainer}>{renderContent()}</View>
+        </>
+      )}
     </ScrollView>
   );
 };
+
+// The Incident Report / Video Review buttons sit absolutely in the card's
+// bottom corners, so the arena row is padded from these to stay clear of them.
+const CARD_PADDING = 20;
+const BOTTOM_BUTTON_INSET = 10;
+const BOTTOM_BUTTON_WIDTH = 80;
+const ARENA_ROW_INSET =
+  BOTTOM_BUTTON_INSET + BOTTOM_BUTTON_WIDTH + 8 - CARD_PADDING;
 
 const styles = StyleSheet.create({
   container: {
@@ -967,7 +1066,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 10,
-    padding: 20,
+    padding: CARD_PADDING,
     marginBottom: 10,
     shadowColor: "#ffffff",
     shadowOffset: {
@@ -1114,6 +1213,36 @@ const styles = StyleSheet.create({
     borderColor: "#ffffff",
     marginBottom: 10,
   },
+  // iPad three-column layout: 2x2 crew photos have to fit a ~330pt column.
+  profileImageColumn: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  columns: {
+    // Default stretch: equal-height columns, so the crew column's dividers
+    // run the full length of the longer roster beside it.
+    flexDirection: "row",
+  },
+  column: {
+    flex: 1,
+    paddingHorizontal: 8,
+  },
+  crewColumn: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#333",
+  },
+  columnTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    paddingBottom: 8,
+    marginBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "#ff6600",
+  },
   refereeText: {
     fontSize: 16,
     color: "#ffffff",
@@ -1148,11 +1277,38 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
   },
+  floatingButtonsContainerBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    position: "absolute",
+    bottom: 14,
+    left: BOTTOM_BUTTON_INSET,
+    right: BOTTOM_BUTTON_INSET,
+  },
   floatingButton: {
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     borderRadius: 10,
     padding: 10,
+  },
+  floatingButtonSmall: {
+    alignItems: "center",
+    padding: 2,
+    width: BOTTOM_BUTTON_WIDTH,
+  },
+  iconContainerSmall: {
+    backgroundColor: "#ff6600",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 3,
+  },
+  buttonTextSmall: {
+    color: "#000000",
+    fontSize: 10,
+    textAlign: "center",
   },
   iconContainer: {
     backgroundColor: "#ff6600",
@@ -1372,6 +1528,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    // Keeps the row clear of the Incident Report / Video Review buttons in
+    // the card's bottom corners; long arena names wrap instead.
+    paddingHorizontal: ARENA_ROW_INSET,
+  },
+  arenaNameButton: {
+    flexShrink: 1,
   },
   divider: {
     color: "#666666",

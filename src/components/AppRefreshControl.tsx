@@ -1,57 +1,35 @@
-import React, { useState, useCallback } from 'react';
-import { RefreshControl } from 'react-native';
-import { withTimeout } from '@/src/lib/withTimeout';
-import { useRoster } from '@/src/providers/RosterProvider';
-import { useSchedule } from '@/src/providers/ScheduleProvider';
+import React from 'react';
+import { RefreshControl, type RefreshControlProps } from 'react-native';
+import { useAppRefresh } from '@/src/hooks/useAppRefresh';
 
-interface AppRefreshControlProps {
-  colors?: string[];
-  tintColor?: string;
-}
+type AppRefreshControlProps = Partial<RefreshControlProps>;
 
 /**
  * A custom RefreshControl component that performs a real refresh of
- * key app data.
+ * key app data. The web sidebar exposes the same refresh as a button,
+ * since desktop browsers have no pull gesture.
+ *
+ * `rest` must be spread onto the RefreshControl: react-native-web's ScrollView
+ * renders a refreshControl by cloning the element and passing the whole scroll
+ * view as its `children`. A wrapper that drops those children renders an empty
+ * page — which is exactly what happened here before.
  */
-export const AppRefreshControl: React.FC<AppRefreshControlProps> = ({ 
-  colors = ['#ff6600'], 
-  tintColor = '#ff6600' 
+export const AppRefreshControl: React.FC<AppRefreshControlProps> = ({
+  colors = ['#ff6600'],
+  tintColor = '#ff6600',
+  ...rest
 }) => {
-  const [refreshing, setRefreshing] = useState(false);
-  const { refreshRoster } = useRoster();
-  const { syncScheduleFromIcal } = useSchedule();
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      // Manual refresh flow:
-      // 1) Run iCal schedule sync (always)
-      // 2) Refresh roster
-      const syncResult = await withTimeout(syncScheduleFromIcal({ source: 'manual', showInBanner: true }), 65000, 'Schedule sync');
-      const rosterRes = await withTimeout(refreshRoster(), 15000, 'Roster refresh');
-
-      const errors: string[] = [];
-      if (!rosterRes.success) errors.push(rosterRes.error || 'Roster refresh failed');
-      if (!syncResult.success) errors.push(syncResult.error || 'Schedule sync failed');
-
-      if (errors.length > 0) {
-        console.error('Refresh failed:', errors.join(' | '));
-      }
-    } catch (e) {
-      console.error('Refresh failed:', e);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshRoster, syncScheduleFromIcal]);
+  const { refreshing, refresh } = useAppRefresh();
 
   return (
     <RefreshControl
+      {...rest}
       refreshing={refreshing}
-      onRefresh={onRefresh}
+      onRefresh={refresh}
       colors={colors}
       tintColor={tintColor}
     />
   );
 };
 
-export default AppRefreshControl; 
+export default AppRefreshControl;

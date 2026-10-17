@@ -3,7 +3,7 @@ import { format, parse } from "date-fns";
 import { enUS } from "date-fns/locale/en-US";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { DeviceEventEmitter } from "react-native";
+import { AppState, DeviceEventEmitter } from "react-native";
 import {
     shouldSyncPlayerRoster,
     shouldSyncPlayerStats,
@@ -12,22 +12,22 @@ import {
     syncPlayerStats,
     syncTeamStandings,
 } from "../lib/playerStatsSync";
-import { fetchAndParseHockeySchedule } from "../lib/icalHockeySync";
-import { sendGameChangeNotification } from "../lib/notificationService";
-import {
-    fetchAllRegularSeasonTeamRosterRows,
-    fetchAllTeamRosterRows,
-} from "../lib/fetchAllTeamRosterRows";
+import { fetchAndParseHockeySchedule, setLastSyncTime } from "../lib/icalHockeySync";
+import { fetchAllRegularSeasonTeamRosterRows } from "../lib/fetchAllTeamRosterRows";
 import { supabase } from "../lib/supabase";
 import { useRoster } from "./RosterProvider";
-import { APP_REFRESH_EVENT } from "../lib/events";
+import { APP_REFRESH_EVENT, SCHEDULE_CHANGES_EVENT } from "../lib/events";
 import { withTimeout } from "../lib/withTimeout";
+import { currentSeasonLabel } from "../lib/season";
+import { type PlayoffBracketData } from "../lib/playoffBracket";
 import {
-    fetchPlayoffBracketFromDb,
-    shouldSyncPlayoffBracket,
-    syncPlayoffBracketToDb,
-    type PlayoffBracketData,
-} from "../lib/playoffBracket";
+    diffSchedule,
+    hasScheduleChanges,
+    loadScheduleSnapshot,
+    saveScheduleSnapshot,
+    snapshotFromGames,
+    type ScheduleSnapshot,
+} from "../lib/scheduleChanges";
 
 // Import or define interfaces
 export interface Roster {
@@ -99,26 +99,56 @@ export interface TeamRoster {
     team: string;
     player_name: string;
     position: string;
-    games_played: number;
-    goals: number;
-    assists: number;
-    points: number;
-    plusMinus: number;
-    penalty_minutes: number;
-    power_play_goals: number;
+    /**
+     * Skater stats are nullable: `syncPlayerRoster` inserts a player as soon as
+     * they appear on a team's roster, before `syncPlayerStats` has any numbers
+     * for them, and writes these columns as null. The UI renders null as "–".
+     */
+    games_played: number | null;
+    goals: number | null;
+    assists: number | null;
+    points: number | null;
+    plusMinus: number | null;
+    penalty_minutes: number | null;
+    power_play_goals: number | null;
     number: string | null;
     rookie: boolean | null;
     veteran: boolean | null;
 }
 
+type FetchScheduleOptions = {
+    /**
+     * Also (re)load team rosters, in the background. Defaults to only doing so
+     * if they haven't loaded yet.
+     */
+    includeRosters?: boolean;
+    /**
+     * Whether to check the loaded games for changes to alert on. Defaults to
+     * true unless an iCal sync is running: its inserts each fire a realtime
+     * refetch, and the sync's own final reload reports them all together.
+     */
+    detectChanges?: boolean;
+};
+
+export type StatsSyncStatus = {
+    status: 'idle' | 'running' | 'success' | 'error';
+    error?: string;
+    finishedAt?: number;
+};
+
 type ScheduleContextType = {
     allGames: Schedule[];
     myGames: Schedule[];
-    /** Playoff skater stats / roster rows (`playoffStats`, season 92). */
+    /**
+     * Playoff skater stats. Playoffs are hidden for 2026-27, so this is always
+     * empty; kept on the context so the playoff screens still compile.
+     */
     teamRosters: TeamRoster[];
-    /** Regular season snapshot (`teamRosters`, `season_id` 90). */
+    /** Active regular season skater stats (`teamRosters`, `season_id` 94). */
     teamRostersRegularSeason: TeamRoster[];
     loading: boolean;
+    /** False until the first DB load of this official's games lands. */
+    scheduleLoaded: boolean;
     syncingPlayerStats: boolean; // kept for compatibility (stats OR standings)
     syncingSchedule: boolean;
     syncingStats: boolean;
@@ -137,10 +167,11 @@ type ScheduleContextType = {
         error?: string;
         finishedAt?: number;
     };
-    blockingOverlayVisible: boolean;
+    /** Last stats/rosters/standings run, for the sync banner. */
+    statsSyncStatus: StatsSyncStatus;
     error: string | null;
     refreshSchedule: () => Promise<{ success: boolean; error?: string }>;
-    syncScheduleFromIcal: (options?: { blocking?: boolean; source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }) => Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }>;
+    syncScheduleFromIcal: (options?: { source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }) => Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }>;
     realtimeEnabled: boolean;
 };
 
@@ -150,6 +181,7 @@ const ScheduleContext = createContext<ScheduleContextType>({
     teamRosters: [],
     teamRostersRegularSeason: [],
     loading: false,
+    scheduleLoaded: false,
     syncingPlayerStats: false,
     syncingSchedule: false,
     syncingStats: false,
@@ -159,28 +191,73 @@ const ScheduleContext = createContext<ScheduleContextType>({
     syncingPlayoffBracket: false,
     refreshPlayoffBracket: async () => {},
     scheduleSyncStatus: { status: 'idle', source: 'other', showInBanner: false },
-    blockingOverlayVisible: false,
+    statsSyncStatus: { status: 'idle' },
     error: null,
     refreshSchedule: async () => ({ success: false }),
     syncScheduleFromIcal: async () => ({ success: false }),
     realtimeEnabled: false,
 });
 
+// Quiet period before a burst of teamRosters/teams Realtime events reloads.
+const LEAGUE_REALTIME_SETTLE_MS = 3000;
+
+const SCHEDULE_SELECT = `
+    *,
+    homeTeamData:teams!schedule_hometeam_fkey(*),
+    awayTeamData:teams!schedule_awayteam_fkey(*)
+`;
+const SCHEDULE_PAGE = 1000;
+
+/**
+ * Every game of the current season, for an ahlAdmin. Prior seasons are left
+ * out: the table keeps every season ever synced (it only grows), and game
+ * details, clip uploads and the expense cycle all work on this season only.
+ * PostgREST caps a response at 1000 rows and a full league season is more
+ * than that, so this pages; `id` breaks ties so a page boundary can't skip or
+ * repeat a game.
+ */
+async function fetchEveryGame(): Promise<Schedule[]> {
+    const games: Schedule[] = [];
+    const season = currentSeasonLabel();
+    for (let from = 0; ; from += SCHEDULE_PAGE) {
+        const { data, error } = await withTimeout(
+            supabase
+                .from('schedule')
+                .select(SCHEDULE_SELECT)
+                .eq('season', season)
+                .order('gamedate', { ascending: true })
+                .order('gametime', { ascending: true })
+                .order('id', { ascending: true })
+                .range(from, from + SCHEDULE_PAGE - 1),
+            20000,
+            'Schedule fetch (all games this season)'
+        );
+        if (error) throw error;
+        const batch = (data ?? []) as Schedule[];
+        games.push(...batch);
+        if (batch.length < SCHEDULE_PAGE) return games;
+    }
+}
+
 export default function ScheduleProvider({ children }: PropsWithChildren) {
-    const { roster } = useRoster();
+    const { roster, isAhlAdmin } = useRoster();
     const [allGames, setAllGames] = useState<Schedule[]>([]);
     const [myGames, setMyGames] = useState<Schedule[]>([]);
     const [loading, setLoading] = useState(false);
+    const [scheduleLoaded, setScheduleLoaded] = useState(false);
     const [syncingStats, setSyncingStats] = useState(false);
     const [syncingStandings, setSyncingStandings] = useState(false);
-    const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracketData | null>(null);
-    const [playoffBracketError, setPlayoffBracketError] = useState<string | null>(null);
-    const [syncingPlayoffBracket, setSyncingPlayoffBracket] = useState(false);
+    const [statsSyncStatus, setStatsSyncStatus] = useState<StatsSyncStatus>({ status: 'idle' });
+    const statsSyncInFlightRef = useRef(false);
+    // Playoffs hidden for 2026-27 — these stay at their empty values. Restore the
+    // useState versions along with `refreshPlayoffBracket` below.
+    const playoffBracket: PlayoffBracketData | null = null;
+    const playoffBracketError: string | null = null;
+    const syncingPlayoffBracket = false;
     const [scheduleSyncStatus, setScheduleSyncStatus] = useState<ScheduleContextType['scheduleSyncStatus']>({ status: 'idle', source: 'other', showInBanner: false });
-    const [blockingOverlayVisible, setBlockingOverlayVisible] = useState(false);
-    const blockingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([]);
+    // Playoffs hidden for 2026-27 — no playoff stats are fetched. See `teamRosters` on the context type.
+    const teamRosters: TeamRoster[] = [];
     const [teamRostersRegularSeason, setTeamRostersRegularSeason] = useState<TeamRoster[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [realtimeEnabled, setRealtimeEnabled] = useState(false);
@@ -190,14 +267,140 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     const isRefreshingRef = useRef(isRefreshing);
     isRefreshingRef.current = isRefreshing;
     const syncScheduleFromIcalRef = useRef<ScheduleContextType['syncScheduleFromIcal']>(async () => ({ success: false }));
-    const fetchScheduleRef = useRef<() => Promise<{ success: boolean; error?: string }>>(async () => ({ success: false }));
+    const fetchScheduleRef = useRef<(options?: FetchScheduleOptions) => Promise<{ success: boolean; error?: string }>>(async () => ({ success: false }));
+    // Set synchronously so two sync requests in the same tick can't both start.
+    const syncInFlightRef = useRef(false);
+    // True once a roster load has started, cleared again if it fails.
+    const teamRostersRequestedRef = useRef(false);
+    // Schedule and roster fetches can overlap (startup load, post-sync refetch,
+    // realtime refetch). A response is only applied if nothing started later
+    // has been applied already, so older data can't overwrite newer data — or
+    // read as a change.
+    const fetchSeqRef = useRef(0);
+    const appliedScheduleSeqRef = useRef(0);
+    const appliedRostersSeqRef = useRef(0);
+    // The schedule the official last saw, for change alerts. `load` is shared
+    // so callers resume in order, and is replaced when the user changes.
+    const snapshotRef = useRef<{ userKey: string; load: Promise<void>; games: ScheduleSnapshot | null } | null>(null);
+    const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Last applied games, checked for changes when a sync finishes.
+    const lastAppliedGamesRef = useRef<{ userKey: string; games: Schedule[] } | null>(null);
 
-    const fetchSchedule = async (): Promise<{ success: boolean; error?: string }> => {
+    useEffect(() => () => {
+        if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    }, []);
+
+    /**
+     * Debounced: a crewmate's sync writes games one row at a time, each firing
+     * a realtime refetch, and those should add up to one pop-up, not several.
+     */
+    const detectScheduleChanges = (userKey: string, games: Schedule[]) => {
+        if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+        detectTimerRef.current = setTimeout(() => {
+            detectTimerRef.current = null;
+            compareWithLastSeen(userKey, games);
+        }, 1000);
+    };
+
+    /**
+     * Compares a loaded schedule with the one the official last saw and, if
+     * games were added, changed or removed, emits SCHEDULE_CHANGES_EVENT for
+     * NotificationProvider to pop up. The very first load for a user has
+     * nothing to compare against and only records.
+     */
+    const compareWithLastSeen = (userKey: string, games: Schedule[]) => {
+        if (snapshotRef.current?.userKey !== userKey) {
+            const entry: { userKey: string; load: Promise<void>; games: ScheduleSnapshot | null } = {
+                userKey,
+                load: Promise.resolve(),
+                games: null,
+            };
+            entry.load = loadScheduleSnapshot(userKey).then(stored => {
+                entry.games = stored;
+            });
+            snapshotRef.current = entry;
+        }
+        const entry = snapshotRef.current;
+        const current = snapshotFromGames(games);
+        // Chaining on the shared promise keeps overlapping calls in call order.
+        entry.load = entry.load.then(() => {
+            if (snapshotRef.current !== entry) return;
+            const previous = entry.games;
+            entry.games = current;
+            void saveScheduleSnapshot(userKey, current);
+            if (!previous) {
+                console.log('📸 SCHEDULE: No previous schedule snapshot — recorded baseline, no change alerts');
+                return;
+            }
+            const changes = diffSchedule(previous, current);
+            if (hasScheduleChanges(changes)) {
+                console.log(`🔔 SCHEDULE: Changes detected — ${changes.added.length} added, ${changes.updated.length} updated, ${changes.removed.length} removed`);
+                DeviceEventEmitter.emit(SCHEDULE_CHANGES_EVENT, changes);
+            }
+        }).catch(e => {
+            console.error('❌ SCHEDULE: Change detection failed:', e);
+        });
+    };
+
+    /**
+     * Loads every team's regular season roster rows. Kept apart from the
+     * schedule fetch because it is far slower (all rows, paged), and nothing
+     * should wait on it before showing the official their games.
+     */
+    const loadTeamRosters = async () => {
+        const seq = ++fetchSeqRef.current;
+        teamRostersRequestedRef.current = true;
+        const rostersStart = Date.now();
+        try {
+            console.log('👥 SCHEDULE: Fetching regular season team rosters...');
+            const rows = await withTimeout(
+                fetchAllRegularSeasonTeamRosterRows(),
+                60000,
+                'Regular season team rosters fetch'
+            );
+            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (${rows.length} rows)`);
+            if (seq >= appliedRostersSeqRef.current) {
+                appliedRostersSeqRef.current = seq;
+                setTeamRostersRegularSeason(rows as unknown as TeamRoster[]);
+            }
+        } catch (rostersError) {
+            teamRostersRequestedRef.current = false;
+            console.error('❌ SCHEDULE: Team rosters fetch error:', rostersError);
+        }
+    };
+
+    /**
+     * Loads this official's games from the DB, and kicks off a team roster
+     * load if asked to (or if rosters never loaded). Resolves once the games
+     * are applied; it does not wait for rosters.
+     */
+    const fetchSchedule = async (options?: FetchScheduleOptions): Promise<{ success: boolean; error?: string }> => {
         if (!roster?.lastfirstfullname) {
             console.log('❌ SCHEDULE: Fetch aborted - No roster data available');
             return { success: false, error: 'No roster data available' };
         }
     
+        // AuthProvider keeps an official signed in while a token refresh that
+        // failed at launch is retried, but until it succeeds the client has
+        // no session and queries go out as anon. RLS answers those with zero
+        // games, which would wipe the list and pop up every game as removed.
+        // Keep what's on screen; TOKEN_REFRESHED starts the sync that reloads.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            console.log('⏭️ SCHEDULE: No session yet; keeping the games on screen');
+            return { success: false, error: 'Not signed in yet' };
+        }
+
+        const seq = ++fetchSeqRef.current;
+        const userKey = roster.auth_id;
+        // An ahlAdmin sees the whole league, not a schedule of their own, so
+        // there is nothing personal to pop up a change for.
+        const detectChanges = !isAhlAdmin && (options?.detectChanges ?? !syncInFlightRef.current);
+
+        if (options?.includeRosters ?? !teamRostersRequestedRef.current) {
+            void loadTeamRosters();
+        }
+
         try {
             console.log('🔄 SCHEDULE: Starting fetch sequence - ' + new Date().toISOString());
             setLoading(true);
@@ -206,51 +409,48 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             console.log('📅 SCHEDULE: Fetching schedule data with team details...');
             const fetchStart = Date.now();
             
-            // Fetch all games with team data
-            const { data: scheduleData, error: scheduleError } = await withTimeout(
-                supabase
-                    .from('schedule')
-                    .select(`
-                        *,
-                        homeTeamData:teams!schedule_hometeam_fkey(*),
-                        awayTeamData:teams!schedule_awayteam_fkey(*)
-                    `)
-                    .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
-                    .order('gamedate', { ascending: true })
-                    .order('gametime', { ascending: true }),
-                20000,
-                'Schedule fetch'
-            );
-                
-            console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
-    
-            console.log('👥 SCHEDULE: Fetching team rosters (playoffs + regular season)...');
-            const rostersStart = Date.now();
-            
-            const [rostersData, regularSeasonRosters] = await Promise.all([
-                withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff team rosters fetch'),
-                withTimeout(fetchAllRegularSeasonTeamRosterRows(), 60000, 'Regular season team rosters fetch'),
-            ]);
-                
-            console.log(`🕒 SCHEDULE: Team rosters fetch took ${Date.now() - rostersStart}ms (playoffs ${rostersData.length} rows, RS ${regularSeasonRosters.length} rows)`);
-            if (scheduleError) {
-                console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
-                throw scheduleError;
+            let processedGames: Schedule[];
+            if (isAhlAdmin) {
+                processedGames = await fetchEveryGame();
+            } else {
+                // This official's games, with team data
+                const { data: scheduleData, error: scheduleError } = await withTimeout(
+                    supabase
+                        .from('schedule')
+                        .select(SCHEDULE_SELECT)
+                        .or(`referee1.eq."${roster.lastfirstfullname}",referee2.eq."${roster.lastfirstfullname}",linesperson1.eq."${roster.lastfirstfullname}",linesperson2.eq."${roster.lastfirstfullname}"`)
+                        .order('gamedate', { ascending: true })
+                        .order('gametime', { ascending: true }),
+                    20000,
+                    'Schedule fetch'
+                );
+                if (scheduleError) {
+                    console.error('❌ SCHEDULE: Schedule fetch error:', scheduleError);
+                    throw scheduleError;
+                }
+                processedGames = scheduleData || [];
             }
-    
-            console.log('✅ SCHEDULE: Raw data fetched successfully');
-            console.log(`📊 SCHEDULE: Processing ${scheduleData?.length || 0} games...`);
-    
-            // Process and set all games
-            const processedGames = scheduleData || [];
-            setAllGames(processedGames);
-            setTeamRosters(rostersData as unknown as TeamRoster[]);
-            setTeamRostersRegularSeason(regularSeasonRosters as unknown as TeamRoster[]);
-    
-            console.log('🔍 SCHEDULE: Filtering games for official:', roster.lastfirstfullname);
-            // Since we're already filtering at the database level, we can just use the processed games directly
-            setMyGames(processedGames);
-            console.log(`✅ SCHEDULE: Found ${processedGames.length} assigned games`);
+
+            console.log(`🕒 SCHEDULE: Schedule fetch took ${Date.now() - fetchStart}ms`);
+            console.log(`📊 SCHEDULE: Processing ${processedGames.length} games${isAhlAdmin ? ' (all games — ahlAdmin)' : ''}...`);
+
+            if (seq >= appliedScheduleSeqRef.current) {
+                appliedScheduleSeqRef.current = seq;
+                setAllGames(processedGames);
+                // Already filtered at the database level (or, for an ahlAdmin,
+                // deliberately every game), so every screen reading myGames
+                // shows the admin the whole league.
+                setMyGames(processedGames);
+                setScheduleLoaded(true);
+                console.log(`✅ SCHEDULE: Found ${processedGames.length} assigned games`);
+                lastAppliedGamesRef.current = { userKey, games: processedGames };
+                if (detectChanges) {
+                    detectScheduleChanges(userKey, processedGames);
+                }
+            } else {
+                console.log('⏭️ SCHEDULE: Newer schedule already applied — discarding this response');
+            }
+
             console.log('✅ SCHEDULE: Fetch and processing complete - ' + new Date().toISOString());
             return { success: true };
     
@@ -266,6 +466,18 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
     };
     fetchScheduleRef.current = fetchSchedule;
 
+    /**
+     * Playoffs are hidden for the 2026-27 regular season, so this is a no-op and
+     * `playoffBracket` stays null. To restore, delete this stub and un-comment
+     * the implementation below it (plus the post-standings sync in
+     * `runBackgroundSyncs`) once `PLAYOFF_BRACKET_SEASON_ID` points at the new
+     * playoff season.
+     */
+    const refreshPlayoffBracket = useCallback(async (_options?: { force?: boolean }) => {
+        return;
+    }, []);
+
+    /* Playoff bracket refresh — re-enable when playoffs come back.
     const refreshPlayoffBracket = useCallback(async (options?: { force?: boolean }) => {
         setSyncingPlayoffBracket(true);
         setPlayoffBracketError(null);
@@ -290,13 +502,44 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setSyncingPlayoffBracket(false);
         }
     }, []);
+    */
 
+    /**
+     * Stats, rosters and standings from HockeyTech, once a day: each runs only
+     * if nobody has synced it since the last 5 AM Eastern cutoff, so the first
+     * official to open the app after that does it for everyone.
+     */
     const runBackgroundSyncs = async () => {
+        if (statsSyncInFlightRef.current) {
+            console.log('⏭️ SYNC: Stats/standings sync already running');
+            return;
+        }
+        statsSyncInFlightRef.current = true;
+        let started = false;
+        const failures: string[] = [];
         try {
-            const shouldStats = await shouldSyncPlayerStats();
-            const shouldRoster = await shouldSyncPlayerRoster();
-            const shouldStandings = await shouldSyncTeamStandings();
+            // Signed out as far as the client knows (a token refresh that failed
+            // on a return to the app, with the network not back yet): queries
+            // would go out as anon, which RLS answers with zero rows, and zero
+            // rows reads as "never synced". Try again on the next resume.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                console.log('⏭️ SYNC: No session yet; skipping stats/standings check');
+                return;
+            }
 
+            const [shouldStats, shouldRoster, shouldStandings] = await Promise.all([
+                shouldSyncPlayerStats(),
+                shouldSyncPlayerRoster(),
+                shouldSyncTeamStandings(),
+            ]);
+
+            if (!shouldStats && !shouldRoster && !shouldStandings) {
+                console.log('⏭️ SYNC: Stats, rosters and standings already synced since the nightly cutoff');
+                return;
+            }
+            started = true;
+            setStatsSyncStatus({ status: 'running' });
             if (shouldStats || shouldRoster) {
                 setSyncingStats(true);
             }
@@ -306,87 +549,96 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
 
             if (shouldStats) {
                 console.log('🔄 PLAYER SYNC: Running player stats sync...');
-                await syncPlayerStats();
-            } else {
-                console.log('⏭️ PLAYER SYNC: Player stats sync not needed (recent sync found)');
+                const res = await syncPlayerStats();
+                if (!res.success) failures.push(`stats: ${res.error ?? 'failed'}`);
             }
 
             if (shouldRoster) {
                 console.log('🔄 PLAYER SYNC: Running player roster sync...');
-                await syncPlayerRoster();
-            } else {
-                console.log('⏭️ PLAYER SYNC: Player roster sync not needed (recent sync found)');
+                const res = await syncPlayerRoster();
+                if (!res.success) failures.push(`rosters: ${res.error ?? 'failed'}`);
             }
+            setSyncingStats(false);
 
             if (shouldStandings) {
                 console.log('🔄 TEAM SYNC: Running team standings sync...');
-                await syncTeamStandings();
-                console.log('🔄 PLAYOFF BRACKET: Refreshing after standings sync...');
-                try {
-                    const syncResult = await withTimeout(syncPlayoffBracketToDb(), 20000, 'Playoff bracket sync');
-                    if (!syncResult.success) {
-                        throw new Error(syncResult.error || 'Playoff bracket sync failed');
-                    }
-                    const data = await withTimeout(fetchPlayoffBracketFromDb(), 15000, 'Playoff bracket DB fetch');
-                    setPlayoffBracket(data);
-                    setPlayoffBracketError(null);
-                } catch (e) {
-                    const msg = e instanceof Error ? e.message : 'Bracket fetch failed';
-                    setPlayoffBracketError(msg);
-                    console.error('❌ PLAYOFF BRACKET (post-standings):', e);
-                }
-            } else {
-                console.log('⏭️ TEAM SYNC: Team standings sync not needed (recent sync found)');
+                const res = await syncTeamStandings();
+                if (!res.success) failures.push(`standings: ${res.error ?? 'failed'}`);
+                // Playoff bracket sync is off while playoffs are hidden.
             }
 
-            // Player syncs write to `playoffStats` in the DB; refresh in-memory rows so game tabs show everyone.
+            // Player syncs write to `teamRosters` in the DB; refresh in-memory rows so game tabs show everyone.
             if (shouldStats || shouldRoster) {
-                try {
-                    const [rostersAfterSync, rsAfterSync] = await Promise.all([
-                        withTimeout(fetchAllTeamRosterRows(), 60000, 'Playoff rosters refetch after player sync'),
-                        withTimeout(
-                            fetchAllRegularSeasonTeamRosterRows(),
-                            60000,
-                            'Regular season rosters refetch after player sync'
-                        ),
-                    ]);
-                    setTeamRosters(rostersAfterSync as unknown as TeamRoster[]);
-                    setTeamRostersRegularSeason(rsAfterSync as unknown as TeamRoster[]);
-                    console.log(
-                        `✅ SCHEDULE: Team rosters refreshed (playoffs ${rostersAfterSync.length}, RS ${rsAfterSync.length} rows)`
-                    );
-                } catch (rostersRefetchError) {
-                    console.error('❌ SCHEDULE: Post-sync team rosters refetch error:', rostersRefetchError);
-                }
+                await loadTeamRosters();
+            }
+            // Standings live on `teams`, which arrive joined onto the games.
+            if (shouldStandings) {
+                await fetchScheduleRef.current();
             }
         } catch (e) {
             console.error('❌ SYNC: Error performing background syncs:', e);
+            failures.push(e instanceof Error ? e.message : 'Unknown error');
         } finally {
+            statsSyncInFlightRef.current = false;
             setSyncingStats(false);
             setSyncingStandings(false);
+            if (started || failures.length > 0) {
+                if (failures.length > 0) console.error('❌ SYNC:', failures.join(' | '));
+                setStatsSyncStatus(failures.length > 0
+                    ? { status: 'error', error: failures.join(' · '), finishedAt: Date.now() }
+                    : { status: 'success', finishedAt: Date.now() });
+            }
         }
     };
 
-    const syncScheduleFromIcal = async (options?: { blocking?: boolean; source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }): Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }> => {
+    /**
+     * Pulls the official's iCal feed into the DB, then reloads their games.
+     * It never blocks the UI: whatever is already loaded stays usable while it
+     * runs, and anything it changes surfaces through detectScheduleChanges as
+     * a pop-up.
+     */
+    const syncScheduleFromIcal = async (options?: { source?: 'startup' | 'foreground' | 'manual' | 'other'; showInBanner?: boolean }): Promise<{ success: boolean; newGames?: number; updatedGames?: number; skippedGames?: number; error?: string }> => {
         if (!roster?.auth_id) {
             return { success: false, error: 'No user roster/auth_id' };
         }
 
         // If already syncing, don't start another
-        if (scheduleSyncStatus.status === 'running') {
-            return { success: false, error: 'Schedule sync already in progress' };
-        }
-
         const source = options?.source ?? 'other';
         const showInBanner = options?.showInBanner ?? false;
+        // Stats don't depend on the schedule, so they run (once a day) whether
+        // or not the iCal sync succeeds. They used to run only after a
+        // successful one, so a failed or timed-out iCal fetch skipped them.
+        void runBackgroundSyncs();
 
-        if (options?.blocking) {
-            if (blockingHideTimerRef.current) {
-                clearTimeout(blockingHideTimerRef.current);
-                blockingHideTimerRef.current = null;
+        // An ahlAdmin has no iCal feed: "syncing" is just re-reading every game
+        // from the DB. At startup the roster effect has already started that
+        // read. No banner either — there are no new/updated counts to report.
+        if (isAhlAdmin) {
+            if (source === 'manual') void loadTeamRosters();
+            const res: { success: boolean; error?: string } =
+                source === 'startup' ? { success: true } : await fetchSchedule();
+            if (!res.success) {
+                const msg = res.error ?? 'Schedule load failed';
+                setScheduleSyncStatus({ status: 'error', source, showInBanner, error: msg, finishedAt: Date.now() });
+                return { success: false, error: msg };
             }
-            setBlockingOverlayVisible(true);
+            setScheduleSyncStatus({ status: 'success', source, showInBanner: false, finishedAt: Date.now() });
+            void setLastSyncTime();
+            return { success: true, newGames: 0, updatedGames: 0, skippedGames: 0 };
         }
+
+        // Pull-to-refresh shows the latest stats and standings from the DB
+        // straight away, whatever the iCal sync below does. (It used to reload
+        // only the games, and only after a successful iCal sync; rosters were
+        // never reloaded, so someone else's sync stayed invisible until a
+        // restart.)
+        if (source === 'manual') reloadLeagueDataRef.current();
+
+        if (syncInFlightRef.current) {
+            return { success: false, error: 'Schedule sync already in progress' };
+        }
+        syncInFlightRef.current = true;
+
         setScheduleSyncStatus({ status: 'running', source, showInBanner });
 
         try {
@@ -404,7 +656,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             }
 
             // 2) Refresh schedule rows so UI shows latest DB state
-            await withTimeout(fetchSchedule(), 20000, 'Schedule fetch after iCal sync');
+            await withTimeout(fetchSchedule({ detectChanges: true }), 20000, 'Schedule fetch after iCal sync');
 
             const summary = {
                 status: 'success' as const,
@@ -416,9 +668,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                 finishedAt: Date.now(),
             };
             setScheduleSyncStatus(summary);
-
-            // 3) Stats/standings sync (24h gated), non-blocking
-            void runBackgroundSyncs();
+            void setLastSyncTime();
 
             return { success: true, ...summary };
         } catch (e) {
@@ -426,17 +676,115 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             setScheduleSyncStatus({ status: 'error', source, showInBanner, error: msg, finishedAt: Date.now() });
             return { success: false, error: msg };
         } finally {
-            if (options?.blocking) {
-                // Keep the blocking overlay up briefly after completion so users see the result,
-                // then dismiss everything at once.
-                blockingHideTimerRef.current = setTimeout(() => {
-                    setBlockingOverlayVisible(false);
-                    blockingHideTimerRef.current = null;
-                }, 5000);
+            syncInFlightRef.current = false;
+            // Loads that landed during the sync skipped change detection, and
+            // the reload above may have been superseded by one of them (or the
+            // sync failed before it). Check whatever is showing now; this is
+            // debounced with the reload's own check and a no-op if it already
+            // ran, so it never doubles an alert.
+            const latest = lastAppliedGamesRef.current;
+            if (latest && latest.userKey === roster.auth_id) {
+                detectScheduleChanges(latest.userKey, latest.games);
             }
         }
     };
     syncScheduleFromIcalRef.current = syncScheduleFromIcal;
+    const runBackgroundSyncsRef = useRef(runBackgroundSyncs);
+    runBackgroundSyncsRef.current = runBackgroundSyncs;
+
+    /**
+     * Re-reads player stats/rosters (`teamRosters`) and standings (`teams`,
+     * joined onto the games) from the DB. The nightly sync is run by whichever
+     * official opens the app first, so everyone else picks the numbers up here
+     * or through the Realtime subscription below.
+     */
+    const lastLeagueReloadAtRef = useRef(0);
+    const reloadLeagueData = (options?: { minIntervalMs?: number }) => {
+        const now = Date.now();
+        if (options?.minIntervalMs && now - lastLeagueReloadAtRef.current < options.minIntervalMs) return;
+        lastLeagueReloadAtRef.current = now;
+        void loadTeamRosters();
+        void fetchScheduleRef.current();
+    };
+    const reloadLeagueDataRef = useRef(reloadLeagueData);
+    reloadLeagueDataRef.current = reloadLeagueData;
+
+    // On every return to the app:
+    //  * check the daily stats sync. The foreground schedule sync
+    //    (APP_REFRESH_EVENT) only fires after 10+ minutes in the background and
+    //    is skipped while a load runs, so an official who opened the app at
+    //    4:58 and again at 5:05 would otherwise miss the morning sync. The
+    //    check is three one-row queries; the sync itself runs once a day.
+    //  * reload stats and standings, since the Realtime socket is usually
+    //    dropped while backgrounded and misses whatever changed meanwhile.
+    //    At most once a minute, so dismissing the photo picker or a system
+    //    sheet doesn't refetch ~1,600 rows.
+    useEffect(() => {
+        if (!roster?.auth_id) return;
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next !== 'active') return;
+            void runBackgroundSyncsRef.current();
+            reloadLeagueDataRef.current({ minIntervalMs: 60 * 1000 });
+        });
+        return () => sub.remove();
+    }, [roster?.auth_id]);
+
+    // Live stats and standings while the app is open. The nightly sync writes
+    // every row, so one sync is ~1,600 events: reload once they've been quiet
+    // for a few seconds, and leave this device's own sync to reload at its end.
+    const loadTeamRostersRef = useRef(loadTeamRosters);
+    loadTeamRostersRef.current = loadTeamRosters;
+    useEffect(() => {
+        if (!roster?.auth_id) return;
+        const timers: Record<'rosters' | 'standings', ReturnType<typeof setTimeout> | null> = {
+            rosters: null,
+            standings: null,
+        };
+        const settle = (which: 'rosters' | 'standings') => {
+            const fire = () => {
+                if (statsSyncInFlightRef.current) {
+                    timers[which] = setTimeout(fire, LEAGUE_REALTIME_SETTLE_MS);
+                    return;
+                }
+                timers[which] = null;
+                if (which === 'rosters') void loadTeamRostersRef.current();
+                else void fetchScheduleRef.current();
+            };
+            if (timers[which]) clearTimeout(timers[which]!);
+            timers[which] = setTimeout(fire, LEAGUE_REALTIME_SETTLE_MS);
+        };
+        const channel = supabase
+            .channel('league-data-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'teamRosters' }, () => settle('rosters'))
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams' }, () => settle('standings'))
+            .subscribe();
+        return () => {
+            if (timers.rosters) clearTimeout(timers.rosters);
+            if (timers.standings) clearTimeout(timers.standings);
+            void supabase.removeChannel(channel);
+        };
+    }, [roster?.auth_id]);
+
+    /**
+     * Realtime fires once per changed row, and an iCal sync that touches 20
+     * games echoes 20 events back. Reloading on each one meant 20 back-to-back
+     * schedule fetches and full re-renders, which is what made the app feel
+     * locked while a sync ran. Coalesce them into one trailing reload, and
+     * hold it while this device's own sync runs (that sync reloads at its end).
+     */
+    const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scheduleRealtimeRefresh = useCallback(() => {
+        const fire = () => {
+            if (syncInFlightRef.current) {
+                realtimeRefreshTimerRef.current = setTimeout(fire, 1500);
+                return;
+            }
+            realtimeRefreshTimerRef.current = null;
+            void fetchScheduleRef.current();
+        };
+        if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = setTimeout(fire, 1500);
+    }, []);
 
     // Setup real-time subscription to schedule table
     useEffect(() => {
@@ -460,7 +808,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     schema: 'public',
                     table: 'schedule',
                 }, async (payload) => {
-                    console.log('🔄 Real-time update received:', payload);
+                    console.log(`🔄 Real-time ${payload.eventType} on schedule`);
                     
                     // Check if the change is relevant to the current user
                     const newData = payload.new as Schedule;
@@ -474,75 +822,17 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                                data.linesperson2 === roster.lastfirstfullname;
                     };
                     
-                    // If the change affects the current user's games
-                    if (isRelevantToUser(newData) || isRelevantToUser(oldData)) {
+                    // If the change affects the current user's games (an
+                    // ahlAdmin's "games" are all of them)
+                    if (isAhlAdmin || isRelevantToUser(newData) || isRelevantToUser(oldData)) {
                         console.log('🔄 Change affects current user, processing...');
                         
-                        // Detect what changed and send notification if needed
-                        if (oldData && newData && payload.eventType === 'UPDATE') {
-                            // Helper function to normalize field values for comparison
-                            const normalizeValue = (value: any): string | null => {
-                                if (value === null || value === undefined) return null;
-                                let normalized = String(value).trim();
-                                // Normalize timezone formats
-                                normalized = normalized.replace(/([+-]\d{2}):(\d{2})$/, '$1');
-                                return normalized;
-                            };
-                            
-                            // Fields that trigger notifications
-                            const notificationFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2', 'gametime'];
-                            const changedFields: string[] = [];
-                            
-                            for (const field of notificationFields) {
-                                const oldValue = normalizeValue(oldData[field as keyof Schedule]);
-                                const newValue = normalizeValue(newData[field as keyof Schedule]);
-                                
-                                if (oldValue !== newValue) {
-                                    changedFields.push(`${field}: "${oldValue}" → "${newValue}"`);
-                                }
-                            }
-                            
-                            // Send notification if there are notification-worthy changes
-                            if (changedFields.length > 0) {
-                                console.log(`📱 Real-time change detected: ${changedFields.join(', ')}`);
-                                
-                                // Determine who was replaced (if any)
-                                let replacedPerson: string | undefined = undefined;
-                                const officialFields = ['referee1', 'referee2', 'linesperson1', 'linesperson2'];
-                                for (const change of changedFields) {
-                                    if (officialFields.some(field => change.startsWith(field))) {
-                                        const oldValueBeforeMatch = change.match(/"([^"]+)" →/);
-                                        if (oldValueBeforeMatch && oldValueBeforeMatch[1] !== 'null') {
-                                            replacedPerson = oldValueBeforeMatch[1];
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                // Send notification
-                                try {
-                                    await sendGameChangeNotification(
-                                        newData.gameid,
-                                        newData.season,
-                                        {
-                                            awayteam: newData.awayteam,
-                                            hometeam: newData.hometeam,
-                                            gamedate: newData.gamedate,
-                                            gametime: newData.gametime,
-                                        },
-                                        changedFields,
-                                        replacedPerson
-                                    );
-                                    console.log('✅ Notification sent for real-time change');
-                                } catch (error) {
-                                    console.error('❌ Error sending notification for real-time change:', error);
-                                }
-                            }
-                        }
-                        
-                        // Refresh the schedule to update the UI
-                        console.log('🔄 Refreshing schedule...');
-                        await fetchScheduleRef.current();
+                        // Notifications are sent by the device whose iCal sync wrote the change
+                        // (icalHockeySync). Sending again here meant every crew member with the
+                        // app open re-broadcast the same change to the whole crew.
+
+                        // Refresh the schedule to update the UI (coalesced)
+                        scheduleRealtimeRefresh();
                     } else {
                         console.log('ℹ️ Change does not affect current user, skipping refresh');
                     }
@@ -563,22 +853,28 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
         // Cleanup subscription when component unmounts or roster changes
         return () => {
             console.log('🧹 Cleaning up schedule subscription...');
+            if (realtimeRefreshTimerRef.current) {
+                clearTimeout(realtimeRefreshTimerRef.current);
+                realtimeRefreshTimerRef.current = null;
+            }
             if (subscriptionRef.current) {
                 subscriptionRef.current.unsubscribe();
                 subscriptionRef.current = null;
             }
             setRealtimeEnabled(false);
         };
-    }, [roster?.lastfirstfullname]);
+    }, [roster?.lastfirstfullname, isAhlAdmin, scheduleRealtimeRefresh]);
 
     // Fetch schedule when roster data changes
     useEffect(() => {
         if (roster?.lastfirstfullname && !loadingRef.current && !isRefreshingRef.current) {
             console.log('👤 Roster data changed, triggering schedule fetch...');
             console.log('📋 Current state - loading:', loadingRef.current, 'refreshing:', isRefreshingRef.current);
-            // IMPORTANT:
-            // Run iCal sync first, then fetch schedule, so initial UI reflects newly inserted games.
-            void syncScheduleFromIcalRef.current({ blocking: true, source: 'startup', showInBanner: false });
+            // Show what's already in the DB straight away so the app is usable,
+            // and run the iCal sync behind it. The sync reloads the games when
+            // it finishes; anything it added or changed pops up as an alert.
+            void fetchScheduleRef.current({ includeRosters: true });
+            void syncScheduleFromIcalRef.current({ source: 'startup', showInBanner: false });
         } else {
             console.log('⏳ Skipping schedule fetch:', {
                 hasRoster: !!roster?.lastfirstfullname,
@@ -608,7 +904,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
                     );
                     
                     // Attempt to refresh with timeout protection
-                    await Promise.race([syncScheduleFromIcalRef.current({ blocking: !!data?.blocking, source: data?.source ? 'foreground' : 'other', showInBanner: false }), timeoutPromise])
+                    await Promise.race([syncScheduleFromIcalRef.current({ source: data?.source ? 'foreground' : 'other', showInBanner: false }), timeoutPromise])
                         .catch(error => {
                             console.error('❌ SCHEDULE: Background refresh timed out or failed:', error);
                         });
@@ -653,11 +949,11 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             );
             
             // Attempt to fetch with timeout protection
-            const result = await Promise.race([fetchSchedule(), timeoutPromise]) as { success: boolean; error?: string };
+            const result = await Promise.race([fetchSchedule({ includeRosters: true }), timeoutPromise]) as { success: boolean; error?: string };
                 
             console.log('✅ SCHEDULE: Manual refresh complete');
 
-            // After schedule refresh, run stats/standings syncs (24h gated).
+            // After schedule refresh, run stats/standings syncs (nightly gated).
             // Do NOT block the UI on these; they can take time.
             if (result?.success) {
                 void runBackgroundSyncs();
@@ -681,6 +977,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             teamRosters,
             teamRostersRegularSeason,
             loading: loading || isRefreshing,
+            scheduleLoaded,
             syncingPlayerStats: syncingStats || syncingStandings,
             syncingSchedule: loading || isRefreshing || scheduleSyncStatus.status === 'running',
             syncingStats,
@@ -690,7 +987,7 @@ export default function ScheduleProvider({ children }: PropsWithChildren) {
             syncingPlayoffBracket,
             refreshPlayoffBracket,
             scheduleSyncStatus,
-            blockingOverlayVisible,
+            statsSyncStatus,
             error,
             refreshSchedule,
             syncScheduleFromIcal,

@@ -6,7 +6,7 @@ import { View, ActivityIndicator } from "react-native";
 import { useEffect, useState } from "react";
 
 export default function Index() {
-    const { session } = useAuth();
+    const { session, initializing } = useAuth();
     const { roster } = useRoster();
     const [isInitializing, setIsInitializing] = useState(true);
 
@@ -18,7 +18,7 @@ export default function Index() {
         return () => clearTimeout(initTimeout);
     }, []);
 
-    if (isInitializing) {
+    if (isInitializing || initializing) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
                 <ActivityIndicator size="large" color="#ff6600" />
@@ -36,8 +36,9 @@ export default function Index() {
         return <Redirect href="/(loginflow)/tos" />;
     }
 
-    // Check if user needs to set up iCal URL
-    if (roster && roster.accepted_tos && !roster.ical_url) {
+    // Check if user needs to set up iCal URL (an ahlAdmin never does: they
+    // see every game straight from the DB)
+    if (roster && roster.accepted_tos && !roster.ahlAdmin && !roster.ical_url) {
         return <Redirect href="/(loginflow)/ical-setup" />;
     }
 

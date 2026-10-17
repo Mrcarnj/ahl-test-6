@@ -4,6 +4,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus } from 'react-native';
 import { getLastSyncTime, performAutoSync, shouldAutoSync } from './icalHockeySync';
+import { isWeb } from './platform';
 
 export class BackgroundSyncService {
   private static instance: BackgroundSyncService;
@@ -26,8 +27,14 @@ export class BackgroundSyncService {
 
     console.log('Initializing background sync service...');
     
-    // Set up app state listener
-    this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
+    // Set up app state listener (native only).
+    // On web, RN Web derives AppState from document visibility, so 'active'
+    // arrives on every browser-tab switch back and would auto-sync the schedule
+    // each time. The web build syncs on login/page load and on the manual
+    // refresh button only; forceSync() still works from either platform.
+    if (!isWeb) {
+      this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
+    }
 
     // NOTE:
     // We intentionally do NOT perform an immediate sync here.

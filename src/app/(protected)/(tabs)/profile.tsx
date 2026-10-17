@@ -5,13 +5,24 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useRoster } from '@/src/providers/RosterProvider';
 import { useSchedule } from '@/src/providers/ScheduleProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_OF_SERVICE_URL } from '@/src/lib/legal';
+import { Alert } from '@/src/lib/alert';
+import { useTabletLayout } from '@/src/lib/platform';
+import { isValidIcalUrl } from '@/src/lib/textInput';
+import KeyboardSafeScrollView from '@/src/components/KeyboardSafeScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 const Profile = () => {
     const { user } = useAuth();
-    const { roster, refreshRoster } = useRoster();
+    const router = useRouter();
+    // An ahlAdmin's myGames is the whole league and they have no iCal feed,
+    // so neither the game count nor the iCal section applies to them.
+    const { roster, refreshRoster, isAhlAdmin } = useRoster();
     const { myGames } = useSchedule();
+    // iPad puts Email/Phone, and the three legal links, on one line each.
+    const isTablet = useTabletLayout();
 
     // State for collapsible sections
     const [expandedSeasons, setExpandedSeasons] = useState<Set<string>>(new Set());
@@ -82,12 +93,18 @@ const Profile = () => {
             return;
         }
 
+        const url = icalUrlValue.trim();
+        if (url && !isValidIcalUrl(url)) {
+            Alert.alert('Invalid URL', 'Please enter a valid iCal URL that starts with "https://www.horizonwebref.com/syncICS"');
+            return;
+        }
+
         try {
             setSavingIcalUrl(true);
-            
+
             const { error } = await supabase
                 .from('roster')
-                .update({ ical_url: icalUrlValue.trim() || null })
+                .update({ ical_url: url || null })
                 .eq('auth_id', roster.auth_id);
 
             if (error) {
@@ -218,7 +235,7 @@ const Profile = () => {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView 
+            <KeyboardSafeScrollView
                 style={styles.scrollView} 
                 contentContainerStyle={styles.container}
             >
@@ -231,94 +248,143 @@ const Profile = () => {
                 />
                 <Text style={styles.name}>{profileData.name}</Text>
                 
-                {/* Total Games Count */}
-                <View style={styles.totalGamesContainer}>
-                    <Text style={styles.totalGamesText}>
-                        Total Games: {profileData.gameCount}
-                    </Text>
-                </View>
+                {!isAhlAdmin && (
+                    <>
+                        {/* Total Games Count */}
+                        <View style={styles.totalGamesContainer}>
+                            <Text style={styles.totalGamesText}>
+                                Total Games: {profileData.gameCount}
+                            </Text>
+                        </View>
 
-                {/* Collapsible Game Breakdown */}
-                <View style={styles.breakdownContainer}>
-                    <Text style={styles.breakdownTitle}>Game Breakdown</Text>
-                    <FlatList
-                        data={profileData.seasonsBreakdown}
-                        renderItem={renderSeasonSection}
-                        keyExtractor={(season) => season.season}
-                        scrollEnabled={false}
-                    />
-                </View>
-                <View style={styles.infoSection}>
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Email</Text>
-                        <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{profileData.email}</Text>
+                        <TouchableOpacity
+                            style={styles.statsButton}
+                            onPress={() => router.push('/(protected)/season-stats')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.statsButtonText}>📊 This Year&apos;s Stats</Text>
+                        </TouchableOpacity>
+
+                        {/* Collapsible Game Breakdown */}
+                        <View style={styles.breakdownContainer}>
+                            <Text style={styles.breakdownTitle}>Game Breakdown</Text>
+                            <FlatList
+                                data={profileData.seasonsBreakdown}
+                                renderItem={renderSeasonSection}
+                                keyExtractor={(season) => season.season}
+                                scrollEnabled={false}
+                            />
+                        </View>
+                    </>
+                )}
+                <View style={[styles.infoSection, isTablet && styles.infoSectionTablet]}>
+                    <View style={isTablet && styles.fieldRow}>
+                        <View style={[styles.fieldContainer, isTablet && styles.fieldInRow]}>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>Email</Text>
+                            <View style={styles.valueContainer}>
+                                <Text style={[styles.value, isTablet && styles.centerText]}>{profileData.email}</Text>
+                            </View>
+                        </View>
+
+                        <View style={[styles.fieldContainer, isTablet && styles.fieldInRow]}>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>Phone</Text>
+                            <View style={styles.valueContainer}>
+                                <Text style={[styles.value, isTablet && styles.centerText]}>{profileData.phone}</Text>
+                            </View>
                         </View>
                     </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Phone</Text>
-                        <View style={styles.valueContainer}>
-                            <Text style={styles.value}>{profileData.phone}</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>iCal URL</Text>
-                        {isEditingIcalUrl ? (
-                            <View style={styles.editContainer}>
-                                <TextInput
-                                    style={styles.icalUrlInput}
-                                    value={icalUrlValue}
-                                    onChangeText={setIcalUrlValue}
-                                    placeholder="Enter iCal URL..."
-                                    placeholderTextColor="#666"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    keyboardType="url"
-                                />
-                                <View style={styles.editButtons}>
+                    {!isAhlAdmin && (
+                        <View style={styles.fieldContainer}>
+                            <Text style={[styles.label, isTablet && styles.centerText]}>iCal URL</Text>
+                            {isEditingIcalUrl ? (
+                                <View style={styles.editContainer}>
+                                    <TextInput
+                                        style={styles.icalUrlInput}
+                                        value={icalUrlValue}
+                                        onChangeText={setIcalUrlValue}
+                                        placeholder="Enter iCal URL..."
+                                        placeholderTextColor="#666"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        keyboardType="url"
+                                    />
+                                    <View style={styles.editButtons}>
+                                        <TouchableOpacity 
+                                            style={[styles.editButton, styles.saveButton]} 
+                                            onPress={saveIcalUrl}
+                                            disabled={savingIcalUrl}
+                                        >
+                                            <Text style={[styles.editButtonText, styles.saveButtonText]}>
+                                                {savingIcalUrl ? 'Saving...' : 'Save'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity 
+                                            style={[styles.editButton, styles.cancelButton]} 
+                                            onPress={cancelEditIcalUrl}
+                                            disabled={savingIcalUrl}
+                                        >
+                                            <Text style={styles.editButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <View style={styles.valueContainer}>
+                                    <Text style={[styles.value, isTablet && styles.centerText]}>
+                                        {profileData.icalUrl || 'Not set'}
+                                    </Text>
                                     <TouchableOpacity 
-                                        style={[styles.editButton, styles.saveButton]} 
-                                        onPress={saveIcalUrl}
-                                        disabled={savingIcalUrl}
+                                        style={styles.editIconButton} 
+                                        onPress={() => setIsEditingIcalUrl(true)}
                                     >
-                                        <Text style={styles.editButtonText}>
-                                            {savingIcalUrl ? 'Saving...' : 'Save'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={[styles.editButton, styles.cancelButton]} 
-                                        onPress={cancelEditIcalUrl}
-                                        disabled={savingIcalUrl}
-                                    >
-                                        <Text style={styles.editButtonText}>Cancel</Text>
+                                        <Text style={styles.editIcon}>✏️</Text>
                                     </TouchableOpacity>
                                 </View>
-                            </View>
-                        ) : (
-                            <View style={styles.valueContainer}>
-                                <Text style={styles.value}>
-                                    {profileData.icalUrl || 'Not set'}
-                                </Text>
-                                <TouchableOpacity 
-                                    style={styles.editIconButton} 
-                                    onPress={() => setIsEditingIcalUrl(true)}
-                                >
-                                    <Text style={styles.editIcon}>✏️</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
+                            )}
+                        </View>
+                    )}
 
                     {/* Notification Settings */}
                     <TouchableOpacity
-                        style={styles.notificationButton}
+                        style={[styles.notificationButton, isTablet && styles.noSideMargin]}
                         onPress={() => user?.id && requestNotificationPermissions(user.id)}
                         activeOpacity={0.7}
                     >
                         <Text style={styles.notificationButtonText}>🔔 Enable Notifications</Text>
                     </TouchableOpacity>
+
+                    {/* Legal */}
+                    <View style={[styles.legalSection, isTablet && styles.noSideMargin]}>
+                        <Text style={[styles.legalHeading, isTablet && styles.centerText]}>Help & Legal</Text>
+                        <View style={isTablet && styles.legalLinksRow}>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Terms of Service</Text>
+                                {roster?.tos_accepted_at ? (
+                                    <Text style={styles.legalMeta}>
+                                        Accepted {new Date(roster.tos_accepted_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    </Text>
+                                ) : null}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Privacy Policy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL(SUPPORT_URL)}
+                                accessibilityRole="link"
+                                style={[styles.legalRow, isTablet && styles.legalRowInline]}
+                            >
+                                <Text style={styles.legalLink}>Support</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
                     <TouchableOpacity 
                         style={styles.linkButton} 
@@ -327,7 +393,7 @@ const Profile = () => {
                         <Text style={styles.link}>Sign out</Text>
                     </TouchableOpacity>
                 </View>
-            </ScrollView>
+            </KeyboardSafeScrollView>
         </SafeAreaView>
     );
 };
@@ -389,13 +455,30 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         alignItems: 'center',
     },
+    statsButton: {
+        borderColor: '#ff6600',
+        borderWidth: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        marginBottom: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    statsButtonText: {
+        color: '#ff6600',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
     notificationButtonText: {
-        color: '#fff',
+        color: '#000',
         fontSize: 16,
         fontWeight: 'bold',
     },
     breakdownContainer: {
         width: '100%',
+        // Phone width and below it's full-bleed; on iPad/web it stays a
+        // centred column instead of stretching the season rows edge to edge.
+        maxWidth: 560,
         marginBottom: 20,
     },
     breakdownTitle: {
@@ -505,6 +588,51 @@ const styles = StyleSheet.create({
     cancelButton: {
         backgroundColor: '#666',
     },
+    legalSection: {
+        marginHorizontal: 20,
+        marginBottom: 20,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: '#333',
+        paddingTop: 12,
+    },
+    legalHeading: {
+        color: '#aaa',
+        fontSize: 13,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 4,
+    },
+    legalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        minHeight: 44,
+    },
+    legalLinksRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        columnGap: 40,
+    },
+    // In the iPad row the "Accepted" date sits right after its link.
+    legalRowInline: {
+        justifyContent: 'flex-start',
+        gap: 10,
+    },
+    legalLink: {
+        color: '#ff8533',
+        fontSize: 16,
+        textDecorationLine: 'underline',
+    },
+    legalMeta: {
+        color: '#aaa',
+        fontSize: 13,
+    },
+    saveButtonText: {
+        color: '#000',
+    },
     editButtonText: {
         color: '#fff',
         fontWeight: 'bold',
@@ -523,6 +651,23 @@ const styles = StyleSheet.create({
     },
     fieldContainer: {
         marginBottom: 15,
+    },
+    // iPad: everything under the breakdown shares its centred column.
+    infoSectionTablet: {
+        maxWidth: 560,
+    },
+    centerText: {
+        textAlign: 'center',
+    },
+    noSideMargin: {
+        marginHorizontal: 0,
+    },
+    fieldRow: {
+        flexDirection: 'row',
+        gap: 40,
+    },
+    fieldInRow: {
+        flex: 1,
     },
     label: {
         fontSize: 18,
@@ -557,7 +702,7 @@ const styles = StyleSheet.create({
     },
     link: {
         fontSize: 18,
-        color: '#fff',
+        color: '#000',
         fontWeight: 'bold',
     },
     loadingText: {

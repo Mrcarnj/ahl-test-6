@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { Alert } from '@/src/lib/alert';
 import { fetchAndParseHockeySchedule, getLastSyncTime } from '../lib/icalHockeySync';
 
 interface HockeySyncButtonProps {
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   lastSyncText: {
     fontSize: 12,
-    color: '#666',
+    color: '#999',
     marginTop: 4,
     textAlign: 'center',
   },
